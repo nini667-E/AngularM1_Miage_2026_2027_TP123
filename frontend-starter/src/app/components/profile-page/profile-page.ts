@@ -13,6 +13,14 @@ export class ProfilePageComponent {
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
   });
 
+  constructor() {
+    // Arriver sur /profile est la "demande" du profil : on charge
+    // systématiquement une version fraîche via GET /api/users/me, plutôt
+    // que de dépendre du Signal currentUser déjà rempli par ailleurs
+    // (login, ou le rechargement automatique fait par AppComponent).
+    this.load();
+  }
+
   load(): void {
     this.auth.profile().subscribe({
       next: (user) => {

@@ -25,6 +25,11 @@ export class LoginPageComponent {
   });
 
   submit(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+
     const values = this.form.getRawValue();
     this.auth.login(values.email, values.password).subscribe({
       next: () => {
