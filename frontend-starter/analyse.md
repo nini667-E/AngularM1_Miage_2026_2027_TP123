@@ -302,9 +302,21 @@ return next(authorizedRequest).pipe(
 ### 4.2 État réactif du composant
 
 Signals exposés par `TracksPageComponent` :
-`tracks`, `page`, `pages`, `loading`, `audioUrl`, plus un `FormControl`
-`title` et une propriété classique `file?: File` (choix de fichier, pas
-encore un Signal).
+`tracks`, `page`, `pages`, `loading`, `error` (ajouté Mission 2, TP2 — voir
+ci-dessous), `audioUrl`, plus un `FormControl` `title` et une propriété
+classique `file?: File` (choix de fichier, pas encore un Signal).
+
+**Signal `error` (Mission 2, TP2).** Avant, un échec de `GET /api/tracks`
+dans `load()` ne produisait qu'un `console.error`, invisible pour
+l'utilisateur — la liste restait affichée telle quelle, potentiellement
+obsolète, sans explication. `error = signal('')` est désormais remis à
+vide en début de `load()` et rempli (`error.error?.message`, ou un message
+par défaut) dans le callback d'erreur ; affiché dans le template juste
+sous le bouton "Actualiser" (`@if (error())`, classe `.error` déjà
+utilisée en TP1 sur `/login`/`/register`). Comportement volontaire :
+`tracks` n'est modifié que dans le callback `next`, donc la dernière liste
+connue **reste visible** sous le message d'erreur plutôt que de
+disparaître.
 
 ### 4.3 Diagramme de séquence — Pagination
 
@@ -427,7 +439,8 @@ réellement complétée.
 | TP1 · M1 | Chargement de `/api/users/me` à la demande du profil | ✅ Fait (Mission 1, point 8) — corrigé un faux positif : l'affichage dépendait du Signal `currentUser` déjà rempli par ailleurs (login), sans jamais émettre sa propre requête ; `ProfilePageComponent` appelle désormais `load()` dans son constructeur |
 | TP1 · M1 | Gestion d'un 401 → retour `/login` | ✅ Fait (Mission 1, point 10) — `authInterceptor` nettoie l'état et redirige sur un 401 portant un token ; les 401 sans token (login/register) restent gérés localement |
 | TP1 · M1 | Messages d'erreur compréhensibles par champ | ✅ Fait (Mission 1, points 1+2) — message par champ, `minLength(8)` sur le mot de passe à l'inscription, bouton désactivé si formulaire invalide |
-| TP2 · M2 | Pagination serveur avec Signals (`tracks`,`page`,`pages`,`loading`) | ✅ Présent (mais pas de Signal `error` dédié à la liste) |
+| TP2 · M2 | Pagination serveur avec Signals (`tracks`,`page`,`pages`,`loading`) | ✅ Présent (déjà dans le starter) |
+| TP2 · M2 | Signal `error` dédié à la liste, affiché à l'utilisateur | ✅ Fait (Mission 2) — absent du starter, ajouté avec affichage dans `tracks-page.html` |
 | TP2 · M2 | Boutons Préc./Suiv. désactivés aux bornes | ✅ Présent |
 | TP2 · M3 | Validation frontend du fichier (type/taille) avant envoi | ❌ Absent |
 | TP2 · M3 | État de chargement + anti double-soumission pendant l'upload | ❌ Absent (`upload()` n'a pas d'état `uploading`) |
@@ -458,3 +471,7 @@ réellement complétée.
   détecte un token rejeté (`401` sur une requête qui en portait un),
   nettoie l'état et redirige vers `/login` (nouveau §3.6, §2.2, §7).
   **Mission 1 (TP1) complète : 10/10 points.**
+- **24/09** — Mise à jour après Mission 2 (TP2, branche `TP2`) : la
+  pagination serveur était déjà conforme dans le starter ; ajout du Signal
+  `error` (absent) sur `TracksPageComponent`, affiché à l'utilisateur en
+  cas d'échec de `GET /api/tracks` (§4.2, §7).

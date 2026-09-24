@@ -946,5 +946,138 @@ bugs/nuances rencontrés tout au long de la Mission 1 (points 5, 7, 8, 10).
 
 ---
 
-_TP1 clos : Mission 0 et Mission 1 (10/10 points) complètes, compte-rendu,
-Questions du sujet, Checkpoint et Livrables renseignés._
+## TP2 — Bibliothèque Upload et Lecture Audio
+
+> Travail effectué sur la branche Git `TP2` (créée par l'utilisateur),
+> fusionnée dans `main` en fin de TP.
+
+### Entrée 2.1 — Mission 2 : bibliothèque paginée (état des lieux + ajout du Signal `error`)
+
+**Objectif.** Le sujet demande d'"implémenter **ou vérifier**" la
+pagination serveur. Faire l'état des lieux du starter avant de coder quoi
+que ce soit.
+
+**Prompts principaux (recopiés tels quels) :**
+> Bon on attaque le TP2, on procède toujours de la même manière, étape par
+> étape en comprenant tout et en documentant/historisant et gardant à jour
+> tout ce qu'il faut.
+>
+> ok déjà on commence par revoir cette histoire de signals, concrètement
+> c'est quoi ? et comment c'est implémenté ?
+>
+> ok et cette erreur on va la voir où concrètement ?
+>
+> ok tu peux implémenter [...] d'ailleurs je précise pour le TP2 j'ai crée
+> une nouvelle branche "TP2" on va travailler dedans puis on fera un merge
+> à la fin
+
+**Détour pédagogique avant le code.** Explication des Signals (Angular)
+demandée avant de continuer : ce que c'est concrètement (une valeur
+réactive lue via l'appel `signal()`, écrite via `.set()`/`.update()`, qui
+notifie automatiquement Angular sans détection de changement manuelle),
+illustrée directement avec le code déjà présent dans `tracks-page.ts`
+(`tracks`, `page`, `pages`, `loading`). Puis clarification sur
+l'emplacement exact où le futur message d'erreur allait s'afficher
+(card "Mes pistes", sous le bouton "Actualiser"), validée avant codage.
+
+**État des lieux (avant tout changement).** Relecture de
+`track.service.ts`, `tracks-page.ts`, `tracks-page.html` : l'essentiel de
+la Mission 2 était déjà présent dans le starter — `TrackService.list()`
+transmet bien `page`/`limit`, les Signals `tracks`/`page`/`pages`/`loading`
+existent, `@for`/`@empty`/`@if` sont utilisés, les boutons Préc./Suiv. sont
+désactivés aux bornes, et chaque changement de page refait une vraie
+requête HTTP (pas de découpage local). **Seul manquant : un Signal
+`error`** — un échec de `GET /api/tracks` ne faisait qu'un
+`console.error`, invisible pour l'utilisateur.
+
+**Plan validé puis implémenté.** `tracks-page.ts` : Signal
+`error = signal('')`, remis à vide en début de `load()`, rempli avec
+`error.error?.message` (ou message par défaut) dans le callback d'erreur.
+`tracks-page.html` : affichage conditionnel `@if (error())`, même
+emplacement/style que "Chargement…" et que le pattern déjà utilisé en
+TP1 sur `/login`/`/register`.
+
+**Vérifications réalisées.** `npm run build` : succès. Test manuel de
+l'utilisateur : backend coupé volontairement, clic "Actualiser" → message
+"Chargement des pistes impossible" affiché au bon endroit, ancienne liste
+conservée en dessous (comportement cohérent avec le code : `tracks.set()`
+n'est appelé que dans le callback `next`, jamais vidé en cas d'erreur).
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html` ;
+`compte-rendu/TP2.md` (prérequis + Mission 2 cochés, tableau "déjà présent
+vs ajouté", capture) ; `RAPPORT_IA_MODELE.md` (cette entrée) ; 1 capture
+copiée dans `compte-rendu/captures/tp2-mission2-erreur-liste-backend-down.png`.
+`frontend-starter/analyse.md` à mettre à jour dans la foulée (entrée
+suivante).
+
+**Preuve de fonctionnement.** `npm run build` réussi. Capture fournie par
+l'utilisateur montrant le message d'erreur affiché après coupure
+volontaire du backend.
+
+**Ce que je sais expliquer sans l'agent.** Ce qu'est un Signal Angular
+concrètement (création `signal()`, lecture `nom()`, écriture
+`.set()`/`.update()`) et pourquoi il évite la détection de changement
+manuelle ; pourquoi la plupart des exigences de la Mission 2 étaient déjà
+couvertes par le starter (vérifier avant d'implémenter évite de dupliquer
+du code existant) ; pourquoi l'ancienne liste reste affichée sous le
+message d'erreur plutôt que de disparaître (le Signal `tracks` n'est
+modifié que par un succès).
+
+---
+
+### Entrée 2.2 — Vérification concrète : une requête HTTP par changement de page
+
+**Objectif.** L'utilisateur voulait revoir où, précisément, le sujet
+interdisant "récupérer toutes les pistes puis les découper localement" est
+respecté dans le code — puis le constater concrètement dans Network.
+
+**Prompts principaux (recopiés tels quels) :**
+> "Après chaque changement de page, effectuer une nouvelle requête HTTP.
+> [...]" on peut revenir sur ça rapidement tu peux juste me dire où c'est
+> fait ?
+>
+> d'accord mais pour l'instant les boutons sont désactivés, tu peux les
+> activer le temps que je teste et on les désactive après. Passe aussi la
+> limite de tracks par page à 2
+
+**Explication donnée avant de toucher au code.** Repérage des 3 endroits
+du flux : `go()` (déclencheur), `load()` (nouvel appel HTTP à chaque fois,
+pas de cache), `TrackService.list()` (`page`/`limit` en query params,
+filtrage fait côté serveur). Clarifié que les boutons Préc./Suiv.
+n'étaient pas buggés : avec 5 pistes de test et `limit=5` (défaut), tout
+tient sur une seule page, donc les deux boutons restent désactivés en
+permanence — rien à voir avec le code, juste un jeu de données trop petit
+pour observer plusieurs pages. Pas besoin de forcer leur état (ce qui
+aurait contredit l'exigence "désactivés aux bornes", déjà validée) : faire
+passer la limite à 2 suffisait à les débloquer naturellement.
+
+**Changement temporaire.** `tracks-page.ts`, `load()` :
+`this.service.list(this.page())` → `this.service.list(this.page(), 2)`
+avec un commentaire `// TODO` explicite, le temps du test utilisateur.
+`npm run build` : succès. Une fois le test confirmé par l'utilisateur
+(capture Network : 4 requêtes distinctes `tracks?page=1/2/2/3&limit=2`,
+dont un retour en arrière), le changement a été **entièrement annulé**
+(retour à `this.service.list(this.page())`, `npm run build` re-vérifié) —
+aucune trace dans le code final.
+
+**Fichiers effectivement modifiés (net, après annulation du test).**
+`compte-rendu/TP2.md` (nouvelle sous-section "Preuve Network" avec la
+capture) ; `RAPPORT_IA_MODELE.md` (cette entrée) ; capture copiée dans
+`compte-rendu/captures/tp2-mission2-network-pagination.png`. Aucun
+changement net sur `tracks-page.ts` (modifié puis annulé dans le même
+échange).
+
+**Preuve de fonctionnement.** Capture Network fournie par l'utilisateur :
+4 requêtes `GET /api/tracks?page=...&limit=2` distinctes, une par
+navigation de page.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi des boutons
+"désactivés aux bornes" peuvent sembler cassés alors qu'ils sont juste
+correctement bloqués faute de données suffisantes pour avoir plusieurs
+pages ; pourquoi modifier une valeur de test doit être fait de façon
+traçable (commentaire `TODO`) et annulé explicitement plutôt que laissé en
+place "au cas où".
+
+---
+
+_Points suivants du TP2 à compléter au fur et à mesure._

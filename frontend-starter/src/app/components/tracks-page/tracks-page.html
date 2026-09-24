@@ -18,6 +18,9 @@
         <h2>Mes pistes</h2>
         <button type="button" (click)="load()">Actualiser</button>
       </div>
+      @if (error()) {
+        <p class="error">{{ error() }}</p>
+      }
       @if (loading()) {
         <p>Chargement…</p>
       }
