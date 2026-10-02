@@ -1080,4 +1080,471 @@ place "au cas où".
 
 ---
 
+### Entrée 2.3 — Mission 3 : identification du flux upload/lecture (sans code)
+
+**Objectif.** Clôturer formellement la Mission 2, puis démarrer la
+Mission 3 exactement comme le sujet le demande : identifier d'abord dans
+le code (fichiers + méthodes) le flux upload et lecture, avant toute
+implémentation.
+
+**Prompt principal (recopié tel quel) :**
+> parfait on peut cloturer la mission 2, prochain objectif faire la
+> mission 3 et ensuite personnaliser l'app avec les parties facultatives
+> et avancées
+
+**Identification réalisée (lecture seule, aucune modification).**
+7 étapes localisées avec fichier + numéro de ligne : choix du fichier
+(`tracks-page.html:12` → `tracks-page.ts:26-29`), construction du
+`FormData` et appel HTTP d'upload (`track.service.ts:17-21`), récupération
+du `Blob` (`track.service.ts:24-28`), création de l'`ObjectURL` et
+affectation au lecteur (`tracks-page.ts:67-77`, `tracks-page.html:41`),
+révocation — **partielle seulement** : de l'URL précédente à chaque
+lecture, pas encore à la destruction du composant. Contrôles backend
+identifiés (`backend/src/app.js`) : fichier obligatoire, taille max 25 Mo,
+6 types MIME autorisés, vérification de propriété à la lecture, erreurs
+Multer converties en `400` — aucun dupliqué côté frontend.
+
+**Vérification concrète demandée par l'utilisateur avant de continuer**
+(recopiée tel quel) :
+> je vais juste aller vérifier ce point dans mon navigateur et t'envoyer
+> une capture pour le compte-rendu : "Dans l'onglet Network [...] repérez
+> aussi l'intercepteur qui ajoute le JWT à la requête audio."
+
+Deux captures fournies (réponse `200 OK` avec `Content-Type: audio/mpeg`
+et `Accept-Ranges: bytes` ; requête avec header `Authorization: Bearer
+<JWT>` présent). La seconde contenait le JWT en clair — floutée avant
+intégration (même règle qu'en TP1 : jamais de JWT/mot de passe visible
+dans le compte-rendu), en conservant tous les autres en-têtes lisibles
+(`Referer`, `Sec-Ch-Ua`, etc.).
+
+**État des lieux checklist Mission 3**, établi avant tout codage : sur 11
+exigences, 1 déjà faite (formulaire vidé + retour page 1), 1 partielle
+(bouton désactivé mais pas d'anti double-soumission), 1 partielle
+(cards basiques), 8 absentes — contrairement à la Mission 2, cette mission
+demande une vraie quantité d'implémentation.
+
+**Fichiers effectivement modifiés.** `compte-rendu/TP2.md` (identification
+complète de la Mission 3, tableau des contrôles backend, état des lieux
+de la checklist, réponse à "pourquoi la validation frontend ne remplace
+pas le backend", 2 captures) ; `RAPPORT_IA_MODELE.md` (cette entrée) ; 2
+captures copiées dans `compte-rendu/captures/tp2-mission3-audio-*.png`
+(dont une floutée). Aucun code applicatif touché — étape d'identification
+pure, conforme à la consigne du sujet.
+
+**Preuve de fonctionnement.** Captures Network fournies par l'utilisateur
+confirmant la présence du header `Authorization` sur la requête audio.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi la validation
+frontend n'est qu'un confort d'UX et ne remplace jamais la validation
+backend (le frontend est entièrement contournable, ex. via `curl`) ;
+pourquoi l'intercepteur JWT ne peut agir que sur les requêtes passées par
+`HttpClient`, jamais sur une URL directement posée dans un attribut HTML
+comme `src`.
+
+---
+
+### Entrée 2.4 — Mission 3, points 1+2 : validation frontend du fichier + message d'erreur
+
+**Objectif.** Reproduire côté client les mêmes règles que le backend
+(type MIME, taille max 25 Mo) pour donner un retour immédiat, sans
+attendre l'aller-retour réseau — sans jamais remplacer la validation
+backend.
+
+**Prompts principaux (recopiés tels quels) :**
+> oui ça me va fait ça
+>
+> voilà j'ai testé mais il y a juste une petite incohérence dans le
+> message j'ai sélectionnné une image et l'erreur me dit : "format audio
+> non accepté", je pense que ça serait mieux de mettre "format non
+> accepté" de manière plus générique
+>
+> J'ai pas de fichier audio de plus de 25mo
+
+**Plan validé puis implémenté.** `tracks-page.ts` : constantes
+`ALLOWED_AUDIO_TYPES` (mêmes 6 types MIME que `backend/src/app.js`) et
+`MAX_FILE_SIZE` (25 Mo) ; Signal `uploadError` ; `choose()` réécrit pour
+valider type puis taille, ne stocker `this.file` que si les deux passent
+(le bouton "Envoyer" reste désactivé sinon, sans logique
+supplémentaire). `tracks-page.html` : affichage conditionnel de
+`uploadError()` entre le champ fichier et le bouton. `npm run build` :
+succès.
+
+**Erreur trouvée et corrigée pendant le test.** Message initial "Format
+audio non accepté" incohérent pour un fichier qui n'est pas du tout un
+audio (l'utilisateur avait sélectionné une image) — corrigé en "Format
+non accepté", plus générique.
+
+**Test du cas "fichier trop volumineux" sans fichier réel disponible.**
+L'utilisateur n'avait pas de fichier audio de plus de 25 Mo sous la main.
+Un fichier factice de 26 Mo (`fichier-trop-gros-test.mp3`, contenu
+arbitraire, seule la taille et l'extension comptent pour cette
+vérification côté client) a été généré dans le répertoire scratchpad de
+la session, utilisé pour le test, puis supprimé une fois la capture
+obtenue — aucune trace de ce fichier de test dans le dépôt.
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html` ;
+`compte-rendu/TP2.md` (2 cases cochées, section "Implémentation —
+validation frontend + message d'erreur" avec code et 2 captures) ;
+`RAPPORT_IA_MODELE.md` (cette entrée) ; 2 captures copiées dans
+`compte-rendu/captures/tp2-mission3-validation-*.png`.
+
+**Preuve de fonctionnement.** `npm run build` réussi. Deux captures
+fournies par l'utilisateur : fichier non audio → "Format non accepté" ;
+fichier `.mp3` factice de 26 Mo → "Fichier trop volumineux (25 Mo
+maximum)" — bouton "Envoyer" grisé dans les deux cas.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi valider le type ET la
+taille côté client avant d'autoriser l'envoi, en réutilisant exactement
+les mêmes règles que `backend/src/app.js` plutôt que d'en inventer de
+nouvelles ; pourquoi ne pas stocker `this.file` en cas d'échec suffit à
+désactiver le bouton sans dupliquer la condition ; comment fabriquer un
+fichier de test de taille contrôlée sans dépendre d'un vrai fichier audio
+volumineux.
+
+---
+
+### Entrée 2.5 — Mission 3, points 3+4 : état de chargement + anti double-soumission
+
+**Objectif.** Donner un retour visuel pendant l'upload et empêcher un
+second clic sur "Envoyer" tant qu'une requête est déjà en cours.
+
+**Prompts principaux (recopiés tels quels) :**
+> aller on fait comme ça
+>
+> c'est trop rapide génère moi un truc plus gros
+
+**Plan validé puis implémenté.** Signal `uploading` ; garde
+`if (!this.file || this.uploading()) return;` en tête de `upload()` ;
+mis à `true` avant l'appel HTTP, à `false` dans les callbacks `next` et
+`error`. Bouton `[disabled]="!file || uploading()"`, message "Envoi en
+cours…" affiché pendant ce temps. `npm run build` : succès.
+
+**Difficulté de test et solution.** `localhost` a un débit local trop
+élevé pour observer l'état de chargement avec les petits fichiers de
+test existants — l'upload se termine avant même le rendu visuel. Un
+fichier `.mp3` factice de 20 Mo (contenu aléatoire arbitraire, sous la
+limite de 25 Mo pour rester valide) a été généré dans le répertoire
+scratchpad, combiné avec le throttling réseau "Slow 3G" de DevTools pour
+ralentir artificiellement l'envoi et rendre l'état visible. Fichier
+supprimé après le test.
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html` ;
+`compte-rendu/TP2.md` (2 cases cochées, section "Implémentation" avec
+code, méthode de test expliquée, capture) ; `RAPPORT_IA_MODELE.md` (cette
+entrée) ; capture copiée dans
+`compte-rendu/captures/tp2-mission3-upload-envoi-en-cours.png`. Le
+fichier `.mp3` factice de test a réellement été envoyé et a créé une
+piste dans la bibliothèque du compte de test (le backend ne vérifie que
+type/taille, pas le contenu réel) — sans conséquence sur un compte de
+test, pas de suppression possible pour l'instant (fonctionnalité
+facultative non implémentée).
+
+**Preuve de fonctionnement.** `npm run build` réussi. Capture fournie par
+l'utilisateur (throttling 3G actif) : message "Envoi en cours…" et
+bouton "Envoyer" grisé pendant que la requête `tracks` est encore
+"Pending" dans Network.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi la taille d'un
+fichier n'est pas le facteur limitant sur un réseau local (c'est la
+latence et la bande passante qui comptent, très favorables sur
+`localhost`) ; pourquoi combiner un Signal d'état de chargement avec la
+condition de désactivation du bouton dans la **même** garde
+(`if (!this.file || this.uploading())`) évite d'avoir deux logiques
+séparées à synchroniser.
+
+---
+
+### Entrée 2.6 — Mission 3, points 5+6 : message de succès + erreurs serveur (upload), bug "Failed to fetch" corrigé
+
+**Objectif.** Afficher un message de succès après upload et un message
+d'erreur compréhensible en cas d'échec côté serveur — les deux
+regroupés après discussion, car ce sont les deux issues du même
+callback `subscribe()`.
+
+**Prompt principal du cadrage (recopié tel quel) :**
+> Ok faisons le point sur les erreurs serveur et le message de succès et
+> on voit si c'est pertinent de les faire tout les deux en même temps
+
+**Plan validé puis implémenté.** Signal `uploadSuccess` ajouté ;
+`uploadError` réutilisé pour l'erreur serveur (même rôle que pour la
+validation de fichier) ; les deux vidés au début de chaque tentative et
+à chaque nouvelle sélection de fichier.
+
+**Bug trouvé pendant le test (pas une simple question de texte) :**
+> ok c'est fonctionnel mais on va faire une modif, "failed to fetch"
+> c'est pas lisible pour un utilisateur remplace par "échec de l'envoi"
+> et pour le message de succés met le en vert par opposition au rouge du
+> message d'erreur et met "ajouté avec succès"
+
+Le code faisait confiance à `error.error?.message` dans tous les cas.
+Diagnostic : `error.status === 0` signifie qu'aucune réponse n'est venue
+du serveur (backend coupé) — dans ce cas `error.error` est une erreur
+technique du navigateur (`TypeError: Failed to fetch`), pas le JSON
+applicatif du backend. Correction : fonction `serverErrorMessage(error,
+fallback)`, qui n'utilise le message du backend que si `error.status > 0`,
+sinon un message de repli fixe. **Appliquée aussi à `load()`** (Mission 2)
+qui avait la même faille latente, non encore visible mais bien réelle —
+pas seulement à l'endroit signalé par l'utilisateur.
+
+**Ajustements de forme.** Message "Échec de l'envoi" en repli ; message
+de succès accordé au féminin ("« titre » ajoutée avec succès.",
+correction de l'accord par rapport à la demande initiale "ajouté", pour
+s'accorder avec "piste") ; nouvelle classe CSS `.success` (même vert que
+le reste de l'app) en symétrie de `.error`.
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html`,
+`styles.css` ; `compte-rendu/TP2.md` (2 cases cochées, section
+"Implémentation" avec code, diagnostic du bug, 3 captures) ;
+`RAPPORT_IA_MODELE.md` (cette entrée) ; 3 captures copiées dans
+`compte-rendu/captures/tp2-mission3-{erreur-failed-to-fetch-avant,
+succes-avant-couleur, erreur-echec-envoi-apres}.png`.
+
+**Preuve de fonctionnement.** `npm run build` réussi à chaque étape.
+Captures avant/après confirmant la disparition du message technique
+"Failed to fetch", remplacé par "Échec de l'envoi" (upload) et
+"Chargement des pistes impossible" (liste), backend toujours coupé dans
+les deux cas.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `error.status === 0`
+signale une absence totale de réponse serveur (à distinguer d'un vrai
+code d'erreur HTTP) et pourquoi `error.error` n'est alors pas le JSON
+applicatif attendu ; pourquoi corriger ce genre de bug à l'endroit
+signalé ne suffit pas — il faut vérifier si la même faille existe
+ailleurs dans le code (ici, `load()` aussi) plutôt que de se limiter au
+symptôme rapporté.
+
+---
+
+### Entrée 2.7 — Mission 3, point : affichage du morceau en cours de lecture
+
+**Objectif.** Indiquer visuellement quelle piste correspond au lecteur
+`<audio>` affiché après un clic sur ▶.
+
+**Prompts principaux (recopiés tels quels) :**
+> Parfait on passe à l'affichage du morceaua en cours de lecture
+>
+> Dans l'ensemble je suis ok mais je pense qu'on pourrait aussi ajouter
+> le titre de la piste au niveau du lecteur audio qui apparaît
+
+**Plan ajusté en cours de cadrage.** Plan initial : Signal
+`playingTrackId` (juste l'id). Ajusté suite à la demande de
+l'utilisateur pour aussi afficher le titre près du lecteur : stocker la
+**piste entière** (`playingTrack = signal<Track | null>(null)`) plutôt
+que juste son id, pour donner accès au titre à deux endroits (badge dans
+la liste + titre au-dessus du lecteur) sans dupliquer de logique ni
+chercher la piste dans `tracks()` (qui est paginé et pourrait ne plus
+contenir la piste jouée si la page a changé entre-temps).
+
+**Implémentation.** `play()` : `playingTrack.set(track)` dans le
+callback `next` (en même temps que `audioUrl`, donc toujours cohérent),
+remis à `null` sur erreur. Template : badge "▶ En cours de lecture"
+(texte, pas seulement une couleur, pour l'accessibilité) sous le titre de
+la piste active dans le `@for` ; "Lecture : *titre*" au-dessus du lecteur
+`<audio>`. Nouvelle classe CSS `.now-playing`. `npm run build` : succès.
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html`,
+`styles.css` ; `compte-rendu/TP2.md` (case cochée, section
+"Implémentation" avec code et capture) ; `RAPPORT_IA_MODELE.md` (cette
+entrée) ; capture copiée dans
+`compte-rendu/captures/tp2-mission3-piste-en-cours-de-lecture.png`.
+
+**Preuve de fonctionnement.** `npm run build` réussi. Capture fournie
+par l'utilisateur confirmant la cohérence entre le badge dans la liste et
+le titre affiché au-dessus du lecteur, en changeant de piste.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi stocker la piste
+entière plutôt qu'un simple id évite d'avoir à la rechercher dans une
+liste paginée qui peut avoir changé ; pourquoi un indicateur d'état
+(ici "en cours de lecture") doit toujours comporter du texte, pas
+seulement une couleur, pour rester perceptible avec un lecteur d'écran.
+
+---
+
+### Entrée 2.8 — Mission 3, point : erreur audio compréhensible (+ 2 incohérences corrigées)
+
+**Objectif.** Afficher un message compréhensible quand la lecture échoue
+— deux causes distinctes identifiées avant de coder : échec de la
+requête HTTP (déjà catché mais juste loggé) et fichier reçu mais
+illisible par le navigateur (événement natif de l'élément `<audio>`,
+hors du `subscribe()`).
+
+**Prompts principaux (recopiés tels quels) :**
+> parfait on passe à l'erreur de lecture compréhensible
+>
+> parfait on fait comme ça
+>
+> tu peux me générer un fichier de test avec un contenu iliisible comme
+> t'a fait tout à l'heure pour le test de taille du fichier
+
+**Plan validé puis implémenté.** Signal `audioError` ; rempli par
+`serverErrorMessage()` (déjà utilisé pour `load()`/`upload()`) dans le
+callback `error` de `play()`, et par une nouvelle méthode
+`onAudioError()` branchée sur `(error)` de `<audio>` pour le cas
+"fichier illisible". Message affiché au-dessus du lecteur.
+
+**Génération d'un fichier de test.** `.mp3` factice de 50 Ko (contenu
+aléatoire, valide pour le type/la taille — accepté à l'upload comme au
+point précédent — mais indécodable comme audio réel), généré dans le
+scratchpad, utilisé pour déclencher `onAudioError()`, supprimé après le
+test.
+
+**Deux incohérences trouvées pendant le test, recopiées tel quel :**
+> ok le message en bas s'affiche bien mais j'ai quelques incohérences au
+> niveaiu des autres messages, pour être raccord, il faudrait que le
+> badge en cours de lecture soit remplacé par "erreur" et aussi le
+> message de succès au niveau de l'ajour devrait disparaître lorsque
+> j'effectue une autre action
+
+1. **Badge de liste incohérent.** `playingTrack` était rempli dès le
+   téléchargement du `Blob`, avant de savoir si le navigateur pouvait le
+   lire — le badge "En cours de lecture" restait donc affiché même en
+   échec. Nouveau Signal `playbackFailed`, mis à `true` uniquement par
+   `onAudioError()` — **jamais** par l'échec HTTP, sciemment : si une
+   piste différente jouait déjà, elle ne doit pas être faussement
+   marquée en erreur par l'échec d'une tentative sur une autre piste.
+2. **Message de succès de l'upload qui persistait** après une action sans
+   rapport (clic sur ▶). `uploadSuccess` vidé en tout début de `load()`
+   et de `play()`. A nécessité de réordonner `upload()` : appeler
+   `load()` **avant** de fixer le message de succès, sinon `load()`
+   l'aurait effacé aussitôt (il le vide lui aussi en tout début).
+
+**Fichiers effectivement modifiés.** `tracks-page.ts` (Signaux
+`audioError`, `playbackFailed`, méthode `onAudioError()`, réordonnancement
+de `upload()`, vidage de `uploadSuccess` dans `load()`/`play()`) ;
+`tracks-page.html` (message d'erreur, binding `(error)`, badge
+conditionnel) ; `styles.css` (règle `.track small.error`, même
+contrainte de spécificité CSS que `.now-playing`) ; `compte-rendu/TP2.md`
+(case cochée, section complète avec 3 captures) ; `RAPPORT_IA_MODELE.md`
+(cette entrée).
+
+**Preuve de fonctionnement.** `npm run build` réussi à chaque étape.
+Capture avant (badge et message incohérents) puis après (badge "⚠ Erreur
+de lecture", message de succès disparu) fournies par l'utilisateur.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi il faut deux Signaux
+distincts (`playingTrack` pour "quel titre est chargé", `playbackFailed`
+pour "est-ce que ça s'est bien passé") plutôt qu'un seul état combiné,
+pour ne pas propager l'échec d'une tentative à une piste différente
+toujours en cours de lecture ; pourquoi l'ordre des opérations compte
+quand plusieurs méthodes se remettent à zéro mutuellement (`load()` vide
+`uploadSuccess`, donc l'appeler avant de le fixer, pas après).
+
+---
+
+### Entrée 2.9 — Mission 3, point : révocation de l'`ObjectURL` à la destruction du composant
+
+**Objectif.** `play()` révoque déjà l'ObjectURL précédente à chaque
+nouvelle lecture, mais la dernière créée restait en mémoire si
+l'utilisateur quittait `/tracks` sans relire une autre piste —
+`URL.createObjectURL` garde le `Blob` référencé jusqu'à révocation
+explicite, indépendamment du cycle de vie Angular.
+
+**Prompt principal (recopié tel quel) :** "oui faisons ça"
+
+**Implémentation.** `TracksPageComponent implements OnDestroy` ;
+`ngOnDestroy()` révoque `audioUrl()` s'il existe. `npm run build` :
+succès.
+
+**Méthode de vérification (proposée faute d'effet visible à l'écran).**
+Lecture d'une piste, récupération de l'URL du lecteur via
+`document.querySelector('audio').src`, navigation vers `/profile`, puis
+`fetch()` sur cette URL depuis la console : doit échouer si la
+révocation fonctionne.
+
+**Fichiers effectivement modifiés.** `tracks-page.ts` (`OnDestroy`,
+`ngOnDestroy()`) ; `compte-rendu/TP2.md` (case cochée, section
+"Implémentation" avec code, méthode de test, capture) ;
+`RAPPORT_IA_MODELE.md` (cette entrée) ; capture copiée dans
+`compte-rendu/captures/tp2-mission3-objecturl-revoquee.png`.
+
+**Preuve de fonctionnement.** `npm run build` réussi. Capture fournie par
+l'utilisateur : `fetch()` sur l'ObjectURL après avoir quitté `/tracks` →
+`TypeError: Failed to fetch`, confirmant que l'URL a bien été révoquée.
+
+**État de la Mission 3.** 10/11 points de la checklist traités ; il ne
+reste que les cards responsives/accessibles avec plus de métadonnées.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `URL.createObjectURL`
+garde une référence mémoire indépendante du cycle de vie du composant
+Angular, et pourquoi ça justifie un nettoyage explicite dans
+`ngOnDestroy` plutôt que de compter sur le garbage collector ; comment
+vérifier qu'une révocation a bien eu lieu sans effet visible à l'écran
+(tenter un `fetch()` sur l'URL et observer l'échec).
+
+---
+
+### Entrée 2.10 — Mission 3 : questions mémoire, buffering, streaming (pédagogie, sans code)
+
+**Objectif.** Répondre aux 5 questions du sujet sur la mémoire, le
+buffering et le streaming audio. Méthode demandée par l'utilisateur :
+répondre aux questions une par une, lui essayant d'abord, l'agent
+corrigeant et localisant le code à l'appui.
+
+**Prompt principal du cadrage (recopié tel quel) :**
+> maintenant il faut qu'on réponde à ses questions, on va les faire une
+> par une je vais d'abord essayer d'y répondre puis tu vas me corriger et
+> m'aider à localiser les éléments de code qui expliquent les réponses
+
+**Déroulé, question par question (réponses de l'utilisateur recopiées,
+puis correction/complément apportés) :**
+
+1. *Streaming backend ?* Réponse initiale correcte sur le principe
+   ("ça correspond au streaming") mais sans savoir où dans le code.
+   Localisé : `backend/src/app.js:394`, `res.sendFile()` (utilise
+   `fs.createReadStream()` en interne). Preuve additionnelle apportée :
+   l'en-tête `Accept-Ranges: bytes`, déjà visible dans une capture prise
+   en Mission 3, confirme le streaming sans avoir besoin d'un nouveau
+   test.
+2. *Moment de réception côté Angular ?* L'utilisateur cherchait dans
+   `tracks-page.ts` sans trouver. Recentré sur `track.service.ts:24-28`
+   (`audio()`, pas de `reportProgress: true`) : `HttpClient` assemble
+   toute la réponse avant de déclencher `next` une seule fois — contraste
+   direct avec le streaming du backend (streaming "en transit", pas dans
+   ce que voit le code Angular).
+3. *100 morceaux : tout en mémoire à l'affichage ?* L'utilisateur a
+   demandé confirmation ("tout les paquets sont déjà arrivés ?") avant de
+   répondre à la question 3 elle-même — confirmé. Sa réponse à la
+   question 3 était juste sur le fond ("seul le fichier en cours de
+   lecture est chargé") ; complétée avec la justification code précise
+   demandée par le sujet : `TrackService.list()` ne renvoie que du JSON
+   (jamais de binaire), et `play()` ne garde qu'une seule URL à la fois
+   (révocation de l'ancienne avant la nouvelle).
+4. *Différence avec 100 `<audio>` en URL directe ?* Réponse initiale
+   incomplète (seulement "toutes les requêtes partiraient à l'affichage").
+   Point manquant, plus important que la performance : ces requêtes ne
+   passent jamais par `authInterceptor` (pas de `HttpClient`), donc aucun
+   header `Authorization` → les 100 échoueraient en `401` sur la route
+   protégée — rupture fonctionnelle totale, pas qu'un problème de perf.
+   Relié à l'explication de l'intercepteur déjà donnée plus tôt en
+   Mission 3.
+5. *Pourquoi révoquer l'`ObjectURL` ?* Réponse initiale correcte sur le
+   fond (éviter l'accumulation de plusieurs fichiers en mémoire).
+   Complétée avec la nuance technique : la correspondance
+   `blob:...` ↔ `Blob` est maintenue par le navigateur indépendamment de
+   toute référence JavaScript, donc ce n'est pas un simple défaut de
+   nettoyage mais une fuite **garantie** sans révocation explicite —
+   d'où les deux endroits de révocation dans le code (`play()` et
+   `ngOnDestroy()`) pour deux fuites distinctes.
+
+**Fichiers effectivement modifiés.** `compte-rendu/TP2.md` (les 5
+réponses complètes, avec renvois code et captures déjà existantes, dans
+la section "Questions — mémoire, buffering, streaming") ;
+`backend/analyse.md` (note sur `Range`/`res.sendFile` mise à jour :
+passée de "non testé/documenté" à "confirmé en pratique", avec renvoi
+vers la capture Mission 3) ; `RAPPORT_IA_MODELE.md` (cette entrée). Aucun
+code applicatif touché — exercice pédagogique pur, pas d'implémentation.
+
+**Preuve de fonctionnement.** Aucune nouvelle preuve technique
+nécessaire : toutes les réponses s'appuient sur du code et des captures
+déjà vérifiés aux entrées précédentes (2.1 à 2.9).
+
+**Ce que je sais expliquer sans l'agent.** La différence entre streaming
+réseau (backend → navigateur, par morceaux) et streaming applicatif
+(backend → composant Angular, qui lui attend le tout) ; pourquoi un objet
+JavaScript référencé uniquement via une Object URL échappe au garbage
+collector habituel ; pourquoi la vraie raison du `Blob`/`ObjectURL` dans
+ce projet est l'authentification JWT, pas une préférence de style.
+
+---
+
 _Points suivants du TP2 à compléter au fur et à mesure._

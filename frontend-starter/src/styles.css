@@ -5,7 +5,10 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+/* material-theme.scss (chargé avant ce fichier) pose un fond/texte via les
+   tokens système Material sur body ; on reprend explicitement les couleurs
+   de marque de l'app pour ne pas en hériter. */
+body { margin: 0; background: #f3f7f5; color: #17312a; }
 header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5vw; color: white; background: #123d32; }
 header small { opacity: 0.7; }
 nav { display: flex; gap: 1rem; }
@@ -29,14 +32,39 @@ main { max-width: 1050px; margin: 2rem auto; padding: 0 1rem; }
 .card form, label { display: grid; gap: 0.4rem; }
 label { margin: 0.8rem 0; }
 input { padding: 0.75rem; border: 1px solid #b8cbc5; border-radius: 8px; }
-button { padding: 0.7rem 1rem; color: white; background: #1d755e; border: 0; border-radius: 8px; cursor: pointer; }
+/* Les boutons Material (mat-icon-button, etc.) gèrent déjà leur propre
+   apparence ; on ne leur applique pas le style "bouton vert" fait maison. */
+button:not([mat-icon-button]):not([mat-button]):not([mat-raised-button]):not([mat-flat-button]):not([mat-stroked-button]):not([mat-fab]):not([mat-mini-fab]) {
+  padding: 0.7rem 1rem;
+  color: white;
+  background: #1d755e;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
 button:disabled { opacity: 0.45; }
-.row, .track, .pager { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.track { padding: 0.8rem 0; border-bottom: 1px solid #e1ebe7; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 .track small { display: block; color: #61756f; }
-.pager { margin: 1rem 0; }
+.track-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.track-info mat-card-title { font-size: 1.05rem; margin-bottom: 0.2rem; }
+.track-info mat-card-subtitle { margin-bottom: 0.3rem; }
+/* Le vert "primary" généré par Material à partir de mat.$green-palette ne
+   correspond pas exactement au vert de marque (#1d755e) ; on fixe les
+   couleurs directement plutôt que de passer par color="primary". Le
+   !important est nécessaire pour l'emporter sur les variables CSS internes
+   du composant mat-mini-fab. */
+.play-fab {
+  background-color: #f8faf9 !important;
+  color: #1d755e !important;
+}
+.play-fab:hover { background-color: #eef3f1 !important; }
+mat-paginator { background: transparent; margin: 0.5rem 0; }
 audio { width: 100%; }
 .error { color: #a33; }
+.success { color: #1d755e; }
+.track small.now-playing { color: #1d755e; font-weight: 600; }
+.track small.error { color: #a33; font-weight: 600; }
 
 @media (max-width: 720px) {
   header, .grid { display: block; }

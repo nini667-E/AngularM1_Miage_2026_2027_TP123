@@ -99,45 +99,492 @@ découpage local d'une liste déjà téléchargée.
 
 ## Mission 3 — Upload et lecture audio
 
-_Identifier d'abord dans le code (fichiers + méthodes) :_
+_Identification faite par lecture du code, avant toute modification :_
 
-- Choix du fichier : …
-- Construction du `FormData` : …
-- Appel HTTP d'upload : …
-- Récupération du `Blob` : …
-- Création de l'`ObjectURL` : …
-- Affectation au lecteur `<audio>` : …
-- Révocation de l'ancienne URL : …
+- **Choix du fichier** : `tracks-page.html:12` (`<input type="file" accept="audio/*" (change)="choose($event)">`) → `tracks-page.ts:26-29` (`choose()`, stocke `this.file`)
+- **Construction du `FormData`** : `track.service.ts:17-21` (`upload()` : `body.append('audio', file); body.append('title', title)`)
+- **Appel HTTP d'upload** : `track.service.ts:21` (`this.http.post<Track>('/api/tracks', body)`)
+- **Récupération du `Blob`** : `track.service.ts:24-28` (`audio(id)`, `responseType: 'blob'`)
+- **Création de l'`ObjectURL`** : `tracks-page.ts:67-77` (`play()`, `URL.createObjectURL(blob)`)
+- **Affectation au lecteur `<audio>`** : `tracks-page.html:41` (`<audio [src]="audioUrl()" controls autoplay>`)
+- **Révocation de l'ancienne URL** : `tracks-page.ts:71-72` — mais **seulement** de l'URL précédente à chaque nouvelle lecture ; **pas encore** à la destruction du composant (pas de `ngOnDestroy`, cf. checklist ci-dessous)
 
 ### Flux expliqué avec mes mots
 
-- Upload : composant → service → `HttpClient` → API : …
-- Lecture : API → `Blob` → `ObjectURL` → lecteur audio : …
-- Intercepteur JWT sur la requête audio : …
-- Pourquoi une URL directe dans `src` ne reçoit pas le header `Authorization` : …
+- **Upload** : composant (`choose()` récupère le fichier depuis l'`<input>`) →
+  service (`TrackService.upload()` construit le `FormData` avec exactement
+  les champs `audio` et `title` attendus par le backend) → `HttpClient`
+  (`post()`, passé par `authInterceptor`) → API (`POST /api/tracks`,
+  `multer.single('audio')`, réponse `201` avec la piste créée).
+- **Lecture** : API (`GET /api/tracks/:id/audio`, protégée par JWT,
+  `res.sendFile` — streaming depuis le disque, pas un fichier en mémoire
+  côté serveur) → `Blob` (`TrackService.audio()`, `responseType: 'blob'`,
+  le corps de la réponse est assemblé en un objet binaire unique une fois
+  la requête terminée) → `ObjectURL` (`URL.createObjectURL(blob)`, une URL
+  locale `blob:...` qui pointe vers ce `Blob` en mémoire) → lecteur audio
+  (`<audio [src]="audioUrl()">`, lit directement cette URL locale, sans
+  requête réseau supplémentaire).
+- **Intercepteur JWT sur la requête audio** : le même `authInterceptor`
+  que pour toutes les requêtes — `service.audio(id)` passe par
+  `HttpClient`, donc par l'intercepteur, qui ajoute
+  `Authorization: Bearer <token>` avant l'envoi. Vérifié concrètement dans
+  DevTools :
 
-### Checklist d'implémentation
+  ![Réponse de GET /api/tracks/:id/audio : 200 OK, Content-Type audio/mpeg, Accept-Ranges bytes](captures/tp2-mission3-audio-response-headers.png)
 
-- [ ] Validation frontend du fichier (type/taille) avant l'appel HTTP
-- [ ] Message d'erreur clair si fichier invalide
-- [ ] Pourquoi la validation frontend ne remplace pas la validation backend : …
-- [ ] État de chargement pendant l'envoi
-- [ ] Bouton désactivé, anti double-soumission
-- [ ] Affichage des erreurs serveur
-- [ ] Message de succès
-- [ ] Formulaire vidé + rechargement page 1 après succès
-- [ ] Cards responsives et accessibles (titre, nom original, format, taille, date, action de lecture)
-- [ ] Affichage du morceau en cours de lecture
-- [ ] Erreur audio compréhensible
-- [ ] Révocation de l'`ObjectURL` à la destruction du composant
+  ![Requête : header Authorization: Bearer <JWT> présent (valeur floutée)](captures/tp2-mission3-audio-authorization-header.png)
+
+- **Pourquoi une URL directe dans `src` ne reçoit pas le header
+  `Authorization`** : `authInterceptor` n'agit que sur les requêtes faites
+  **via `HttpClient`**. Un `<audio src="/api/tracks/xxx/audio">` HTML
+  classique déclencherait une requête faite directement par le
+  **navigateur**, qui ne passe jamais par Angular ni par `HttpClient` —
+  donc jamais par l'intercepteur, donc pas de header `Authorization` →
+  `401`. C'est exactement pour ça que le code télécharge d'abord le
+  `Blob` via `HttpClient` (avec le JWT), puis crée une URL locale que
+  `<audio src>` peut utiliser directement, sans requête réseau
+  supplémentaire cette fois.
+
+### Contrôles déjà en place côté backend (`backend/src/app.js`)
+
+| Contrôle | Ligne | Détail |
+|---|---|---|
+| Champ fichier obligatoire (`audio`) | 340-343 | `upload.single("audio")`, `400` si `!req.file` |
+| Taille max | 31, 108 | `MAX_FILE_SIZE = 25 * 1024 * 1024` |
+| Types autorisés | 34-41, 109-119 | `Set` de 6 MIME types (`audio/mpeg`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/mp4`, `audio/x-m4a`), rejet via `fileFilter` |
+| Ownership à la lecture | 381-384 | `Track.findOne({ _id, ownerId: req.auth.sub })` → `404` sinon |
+| Erreurs Multer → HTTP | 446-452 | `400` avec `error.message` |
+
+Côté frontend, **aucune de ces vérifications n'est dupliquée avant
+l'envoi** : `choose()` accepte n'importe quel fichier
+(`accept="audio/*"` n'est qu'une suggestion du sélecteur, pas un
+blocage), et `upload()` ne vérifie que `if (!this.file) return`.
+
+### Checklist d'implémentation — état des lieux (avant codage)
+
+| Exigence | État |
+|---|---|
+| Validation frontend du fichier (type/taille) avant l'appel HTTP | ✅ fait |
+| Message d'erreur clair si fichier invalide | ✅ fait |
+| État de chargement pendant l'envoi | ✅ fait |
+| Bouton désactivé, anti double-soumission | ✅ fait |
+| Affichage des erreurs serveur (upload) | ✅ fait |
+| Message de succès | ✅ fait |
+| Formulaire vidé + rechargement page 1 après succès | ✅ déjà fait (`title.setValue(''); file = undefined; page.set(1); load()`) |
+| Cards responsives et accessibles | ⚠️ basique — `aria-label` présent sur ▶, layout empilé en mobile déjà via `.grid`, mais peu de métadonnées (pas de date/format) |
+| Affichage du morceau en cours de lecture | ✅ fait |
+| Erreur audio compréhensible | ✅ fait |
+| Révocation de l'`ObjectURL` à la destruction du composant | ✅ fait |
+
+**Pourquoi la validation frontend ne remplace jamais la validation
+backend.** Le frontend est sous le contrôle total de l'utilisateur (ou de
+n'importe quel outil comme `curl`/Postman) — rien n'empêche d'appeler
+directement `POST /api/tracks` en contournant complètement Angular. La
+validation côté client n'est donc qu'un **confort d'expérience**
+(feedback immédiat, pas d'aller-retour réseau inutile pour une erreur
+évidente) ; la validation côté serveur (`fileFilter`, `limits.fileSize`
+dans `backend/src/app.js`) reste la **seule** garante de l'intégrité des
+données, puisque c'est le seul endroit que l'utilisateur ne peut pas
+contourner.
+
+### Implémentation — validation frontend + message d'erreur
+
+Les deux points étaient liés (une validation sans message n'aurait aucun
+intérêt) et ont été implémentés ensemble. Mêmes règles que le backend
+(`allowed`/`MAX_FILE_SIZE` dans `backend/src/app.js`), reproduites côté
+client :
+
+```ts
+const ALLOWED_AUDIO_TYPES = new Set([
+  'audio/mpeg', 'audio/wav', 'audio/x-wav',
+  'audio/ogg', 'audio/mp4', 'audio/x-m4a',
+]);
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+choose(event: Event): void {
+  const selected = (event.target as HTMLInputElement).files?.[0];
+  this.uploadError.set('');
+  this.file = undefined;
+
+  if (!selected) return;
+
+  if (!ALLOWED_AUDIO_TYPES.has(selected.type)) {
+    this.uploadError.set('Format non accepté (MP3, WAV, OGG ou M4A uniquement)');
+    return;
+  }
+  if (selected.size > MAX_FILE_SIZE) {
+    this.uploadError.set('Fichier trop volumineux (25 Mo maximum)');
+    return;
+  }
+
+  this.file = selected;
+}
+```
+
+**Fichiers modifiés :** `tracks-page.ts` (constantes de validation, Signal
+`uploadError`, logique dans `choose()`) ; `tracks-page.html` (`@if
+(uploadError())` affiché entre le champ fichier et le bouton "Envoyer").
+Si le fichier est invalide, il n'est **pas** stocké dans `this.file` — le
+bouton "Envoyer" reste donc désactivé grâce au `[disabled]="!file"` déjà
+existant, sans logique supplémentaire à ajouter pour ça.
+
+`npm run build` : succès.
+
+**Correction en cours de test.** Premier message ("Format audio non
+accepté") jugé incohérent quand le fichier sélectionné n'est pas du tout
+un audio (ex. une image) — corrigé en un message plus générique ("Format
+non accepté").
+
+**Preuve de fonctionnement (captures).**
+
+![Fichier non audio sélectionné (image) : message "Format non accepté", bouton Envoyer grisé](captures/tp2-mission3-validation-format-invalide.png)
+
+![Fichier .mp3 factice de 26 Mo sélectionné : message "Fichier trop volumineux (25 Mo maximum)", bouton Envoyer grisé](captures/tp2-mission3-validation-fichier-trop-gros.png)
+
+### Implémentation — état de chargement + anti double-soumission
+
+Les deux points traités ensemble : un état de chargement sans désactiver
+le bouton pendant ce temps n'aurait pas grand intérêt (l'utilisateur
+pourrait cliquer une deuxième fois pendant l'envoi).
+
+```ts
+readonly uploading = signal(false);
+
+upload(): void {
+  if (!this.file || this.uploading()) return;
+
+  this.uploading.set(true);
+  this.service.upload(this.file, this.title.value || this.file.name).subscribe({
+    next: (track) => {
+      this.uploading.set(false);
+      this.title.setValue('');
+      this.file = undefined;
+      this.page.set(1);
+      this.load();
+    },
+    error: (error) => {
+      console.error('[TracksPage] Envoi impossible', error);
+      this.uploading.set(false);
+    },
+  });
+}
+```
+
+**Fichiers modifiés :** `tracks-page.ts` (Signal `uploading`, garde
+`if (!this.file || this.uploading())` en tête de `upload()`, mis à `false`
+dans les deux callbacks) ; `tracks-page.html` (`@if (uploading())`
+affichant "Envoi en cours…", bouton `[disabled]="!file || uploading()"`).
+
+`npm run build` : succès.
+
+**Test.** Sur `localhost`, même un fichier de plusieurs Mo s'envoie
+quasi instantanément (débit local très élevé, la latence est le vrai
+facteur limitant, pas la taille) — un fichier `.mp3` factice de 20 Mo
+généré pour l'occasion (contenu arbitraire, seule la taille compte ici,
+supprimé après le test) n'aurait montré aucun effet visible sans
+throttling réseau. Combiné avec le profil "Slow 3G" de DevTools
+(Network), le message "Envoi en cours…" et le bouton grisé sont bien
+restés visibles le temps de l'upload.
+
+![Upload en cours (throttling 3G activé) : message "Envoi en cours…", bouton "Envoyer" grisé, requête tracks en attente dans Network](captures/tp2-mission3-upload-envoi-en-cours.png)
+
+### Implémentation — message de succès + affichage des erreurs serveur
+
+Traités ensemble : ce sont les deux issues possibles de la même action
+(`upload()` réussit ou échoue), gérées dans les deux callbacks du même
+`subscribe()`, au même emplacement visuel.
+
+```ts
+this.service.upload(this.file, this.title.value || this.file.name).subscribe({
+  next: (track) => {
+    this.uploading.set(false);
+    this.uploadSuccess.set(`« ${track.title} » ajoutée avec succès.`);
+    this.title.setValue('');
+    this.file = undefined;
+    this.page.set(1);
+    this.load();
+  },
+  error: (error: HttpErrorResponse) => {
+    console.error('[TracksPage] Envoi impossible', error);
+    this.uploading.set(false);
+    this.uploadError.set(serverErrorMessage(error, "Échec de l'envoi"));
+  },
+});
+```
+
+Signal `uploadSuccess` ajouté (réutilise `uploadError`, déjà en place
+pour la validation de fichier, pour le cas erreur — même rôle, même
+emplacement). Les deux sont vidés au début de chaque tentative et à
+chaque nouvelle sélection de fichier.
+
+**Bug trouvé pendant le test (pas juste un problème de texte).** Backend
+coupé volontairement pour tester l'affichage des erreurs serveur : au
+lieu d'un message compréhensible, l'app affichait **"Failed to fetch"**
+— un message technique du navigateur, pas applicatif :
+
+![Avant correction : message brut du navigateur "Failed to fetch" au lieu d'un message compréhensible](captures/tp2-mission3-erreur-failed-to-fetch-avant.png)
+
+**Cause.** Le code faisait confiance à `error.error?.message` dans tous
+les cas. Or `error.status === 0` signifie qu'**aucune réponse n'est
+venue du serveur** (connexion refusée) — dans ce cas, `error.error` est
+une erreur technique du navigateur (ex. `TypeError: Failed to fetch`),
+pas le JSON `{ message: ... }` renvoyé par le backend en cas d'erreur
+applicative (`400`, etc.). Une fonction `serverErrorMessage(error, fallback)`
+factorise la distinction : le message du backend n'est utilisé que si
+`error.status > 0` (une vraie réponse HTTP est arrivée), sinon un message
+de repli fixe est affiché. **Appliquée aussi à `load()`** (Mission 2),
+qui avait la même faille latente, même si elle ne s'était pas encore
+manifestée visiblement.
+
+![Après correction : message compréhensible "Chargement des pistes impossible" et "Échec de l'envoi", backend toujours coupé](captures/tp2-mission3-erreur-echec-envoi-apres.png)
+
+**Ajustements de forme demandés en cours de test :** message de succès
+accordé au féminin ("« titre » ajoutée avec succès.", `piste` est
+féminin) et couleur verte (nouvelle classe `.success` dans `styles.css`,
+symétrique de `.error` déjà existant) pour le distinguer visuellement
+d'une erreur.
+
+![Message de succès avant l'ajout de la couleur (texte noir par défaut)](captures/tp2-mission3-succes-avant-couleur.png)
+
+**Fichiers modifiés :** `tracks-page.ts` (fonction `serverErrorMessage()`,
+Signal `uploadSuccess`, callbacks `next`/`error` de `upload()` et
+`error` de `load()`) ; `tracks-page.html` (`@if (uploadSuccess())` avec
+classe `success`) ; `styles.css` (règle `.success`).
+
+`npm run build` : succès à chaque étape.
+
+### Implémentation — affichage du morceau en cours de lecture
+
+**Objectif.** Rien n'indiquait quelle piste correspondait au lecteur
+`<audio>` affiché en bas de la liste. Sur demande de l'utilisateur, le
+titre de la piste en cours est en plus affiché directement au-dessus du
+lecteur, pas seulement dans la liste.
+
+```ts
+readonly playingTrack = signal<Track | null>(null);
+
+play(track: Track): void {
+  this.service.audio(track.id).subscribe({
+    next: (blob) => {
+      const previousUrl = this.audioUrl();
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      this.audioUrl.set(URL.createObjectURL(blob));
+      this.playingTrack.set(track);
+    },
+    error: (error) => {
+      console.error('[TracksPage] Lecture impossible', error);
+      this.playingTrack.set(null);
+    },
+  });
+}
+```
+
+Signal `playingTrack` stockant la **piste entière** (pas juste son id),
+pour donner accès au titre à deux endroits sans dupliquer de logique :
+un badge "▶ En cours de lecture" sous le titre dans la liste
+(`@if (track.id === playingTrack()?.id)`) et "Lecture : *titre*"
+au-dessus du lecteur `<audio>`. Nouvelle classe CSS `.now-playing`
+(texte + couleur, pas seulement une couleur, pour rester accessible aux
+lecteurs d'écran).
+
+**Fichiers modifiés :** `tracks-page.ts`, `tracks-page.html`,
+`styles.css`.
+
+`npm run build` : succès.
+
+![Piste "youyouyou" en cours de lecture : badge dans la liste + titre au-dessus du lecteur, cohérents](captures/tp2-mission3-piste-en-cours-de-lecture.png)
+
+### Implémentation — erreur audio compréhensible
+
+**Deux sources d'erreur distinctes** identifiées avant de coder : la
+requête `GET /api/tracks/:id/audio` peut échouer (déjà catchée dans
+`subscribe()`, mais juste loggée) ; et le fichier reçu peut être
+illisible par le navigateur (événement natif `error` de l'élément
+`<audio>`, qui ne passe pas du tout par notre `subscribe()`).
+
+```ts
+play(track: Track): void {
+  this.audioError.set('');
+  this.playbackFailed.set(false);
+  this.uploadSuccess.set('');
+  this.service.audio(track.id).subscribe({
+    next: (blob) => { ...; this.playingTrack.set(track); },
+    error: (error: HttpErrorResponse) => {
+      // playingTrack n'est volontairement pas touché : si une autre piste
+      // jouait déjà, elle continue, seule cette tentative-ci a échoué.
+      this.audioError.set(serverErrorMessage(error, 'Lecture impossible'));
+    },
+  });
+}
+
+onAudioError(): void {
+  this.audioError.set('Ce fichier audio ne peut pas être lu.');
+  this.playbackFailed.set(true);
+}
+```
+
+**Fichiers modifiés :** `tracks-page.ts` (Signaux `audioError`,
+`playbackFailed`, méthode `onAudioError()`) ; `tracks-page.html`
+(message d'erreur au-dessus du lecteur, `(error)="onAudioError()"` sur
+`<audio>`).
+
+**Test avec un fichier illisible.** Un `.mp3` factice de 50 Ko (contenu
+aléatoire, valide pour le type/la taille donc accepté à l'upload, mais
+indécodable comme audio) a été généré pour l'occasion, uploadé, puis lu.
+
+**Deux incohérences trouvées pendant le test, corrigées (pas seulement
+du texte) :**
+
+![Avant correction : le badge de la liste reste "En cours de lecture" malgré l'échec, et le message de succès de l'upload précédent traîne encore](captures/tp2-mission3-erreur-lecture-incoherence-avant.png)
+
+1. **Le badge restait "En cours de lecture" malgré l'échec.** `playingTrack`
+   était rempli dès que le `Blob` était téléchargé, avant même de savoir
+   si le navigateur pouvait le lire. Correction : nouveau Signal
+   `playbackFailed`, mis à `true` uniquement par `onAudioError()` (jamais
+   par l'échec HTTP, qui ne doit pas affecter une piste **différente**
+   déjà en cours de lecture) ; le badge choisit entre "En cours de
+   lecture" et "⚠ Erreur de lecture" selon ce Signal.
+2. **Le message de succès de l'upload précédent restait affiché**, même
+   après avoir cliqué ▶ sur une autre piste. Correction : `uploadSuccess`
+   vidé en tout début de `load()` **et** de `play()` — donc dès qu'une
+   autre action se produit (Actualiser, pagination, lecture). A nécessité
+   d'inverser l'ordre dans `upload()` (`load()` appelé **avant** de fixer
+   le message de succès, sinon `load()` l'aurait effacé lui-même
+   aussitôt).
+
+`npm run build` : succès à chaque étape.
+
+![Après corrections : badge "⚠ Erreur de lecture" cohérent, message de succès disparu](captures/tp2-mission3-erreur-lecture-coherente.png)
+
+### Implémentation — révocation de l'`ObjectURL` à la destruction du composant
+
+**Objectif.** `play()` révoque déjà l'ObjectURL **précédente** à chaque
+nouvelle lecture, mais la **dernière** créée restait en mémoire si
+l'utilisateur quittait `/tracks` sans relire une autre piste —
+`URL.createObjectURL` garde le `Blob` référencé jusqu'à révocation
+explicite, indépendamment du cycle de vie du composant Angular.
+
+```ts
+export class TracksPageComponent implements OnDestroy {
+  ...
+  ngOnDestroy(): void {
+    const url = this.audioUrl();
+    if (url) URL.revokeObjectURL(url);
+  }
+}
+```
+
+`npm run build` : succès.
+
+**Test (une révocation ne se voit pas à l'écran, vérifié via la
+console).** Lecture d'une piste sur `/tracks`, récupération de l'URL du
+lecteur (`document.querySelector('audio').src`), puis navigation vers
+`/profile`, puis tentative de `fetch()` sur cette même URL depuis la
+console :
+
+![fetch() sur l'ObjectURL après avoir quitté /tracks : "TypeError: Failed to fetch" confirmant la révocation](captures/tp2-mission3-objecturl-revoquee.png)
+
+**Fichiers modifiés :** `tracks-page.ts` (`implements OnDestroy`,
+méthode `ngOnDestroy()`).
+
+**10/11 points de la checklist Mission 3 traités** — il ne reste que
+"cards responsives et accessibles avec plus de métadonnées", laissé
+volontairement pour la fin (plus qualitatif que fonctionnel).
 
 ### Questions — mémoire, buffering, streaming
 
-- Le backend envoie-t-il le fichier entier en mémoire ou progressivement depuis le disque ? …
-- Avec `responseType: "blob"`, à quel moment le composant reçoit-il le fichier ? …
-- 100 morceaux dans la liste : les 100 fichiers sont-ils chargés en mémoire à l'affichage ? Justifier avec le code. …
-- Différence avec 100 `<audio>` utilisant une URL HTTP directe ? …
-- Pourquoi révoquer l'URL créée par `URL.createObjectURL` ? …
+**1. Le backend envoie-t-il le fichier entier en mémoire ou
+progressivement depuis le disque ?**
+
+Progressivement, en streaming. `backend/src/app.js:394` —
+`res.sendFile(audioPath, callback)`. Cette méthode Express utilise en
+interne `fs.createReadStream()` et pipe directement ce flux vers la
+réponse HTTP, morceau par morceau, plutôt que de charger tout le fichier
+en mémoire avant de l'envoyer (ce qu'aurait fait un
+`res.send(fs.readFileSync(audioPath))`). Preuve concrète : la réponse
+contient l'en-tête `Accept-Ranges: bytes`, ajouté automatiquement par
+`res.sendFile` — visible dans la capture Network de la Mission 3
+([tp2-mission3-audio-response-headers.png](captures/tp2-mission3-audio-response-headers.png)).
+Le callback de `sendFile` ne s'exécute qu'une fois le transfert terminé,
+cohérent avec un envoi étalé dans le temps.
+
+**2. Avec `HttpClient` et `responseType: "blob"`, à quel moment le
+composant reçoit-il généralement le fichier ?**
+
+Seulement une fois le téléchargement **entièrement terminé**.
+`track.service.ts:24-28` (`audio()`) n'active pas `reportProgress: true`
+— sans cette option, `HttpClient` assemble toute la réponse en un seul
+`Blob` côté navigateur avant de déclencher quoi que ce soit. Dans
+`play()` (`tracks-page.ts`), `next: (blob) => ...` ne s'exécute qu'**une
+seule fois**, avec le fichier déjà complet — pas de callback progressif
+par paquet reçu. Le streaming vu à la question 1 se passe "en transit"
+réseau ; côté Angular, le composant n'a aucune visibilité intermédiaire.
+
+**3. Si la bibliothèque contient 100 morceaux, les 100 fichiers audio
+sont-ils chargés en mémoire dès l'affichage de la liste ? Justifier à
+partir du code.**
+
+Non. Deux garanties dans le code :
+- `TrackService.list()` (`track.service.ts:11-15`) ne récupère que du
+  JSON de métadonnées (`GET /api/tracks` → titre, nom original, taille,
+  id…), jamais de fichier binaire. Le `@for` de `tracks-page.html`
+  n'affiche que ces champs texte ; aucun appel à `play()`/`service.audio()`
+  n'est déclenché par le simple affichage, seulement par le `(click)` sur
+  le bouton ▶ d'une piste précise.
+- Même pour la piste effectivement jouée, une seule à la fois reste en
+  mémoire : dans `play()`, l'ancienne `ObjectURL` est révoquée
+  (`URL.revokeObjectURL(previousUrl)`) **avant** que la nouvelle ne
+  remplace le Signal `audioUrl` (qui ne contient qu'une seule valeur, pas
+  un tableau).
+
+Conclusion : avec 100 morceaux, 0 fichier audio chargé tant qu'aucun clic
+n'a eu lieu, et au maximum 1 en mémoire à tout instant, quel que soit le
+nombre total de pistes.
+
+**4. Quelle différence y aurait-il avec 100 éléments `<audio>` utilisant
+directement une URL HTTP ?**
+
+Deux différences, dont une bloquante pour cette app précisément :
+- **Nombre de requêtes** : avec des `<audio src="...">` directs, le
+  navigateur commence à faire des requêtes dès l'affichage (comportement
+  natif, pas forcément le fichier entier selon `preload`), au lieu de 0
+  requête tant que rien n'est cliqué avec l'approche actuelle.
+- **Rupture fonctionnelle totale (pas qu'une question de perf) :**
+  `authInterceptor` n'agit que sur les requêtes passées par `HttpClient`.
+  Un `<audio src="...">` HTML déclenche une requête faite **directement
+  par le navigateur**, qui ne passe jamais par l'intercepteur — donc
+  jamais de header `Authorization`. Or la route est protégée
+  (`app.get("/api/tracks/:id/audio", auth, ...)` dans
+  `backend/src/app.js`) : les 100 requêtes échoueraient toutes en
+  `401 Unauthorized`. C'est la vraie raison du passage par
+  `HttpClient` + `Blob` + `ObjectURL` : pas une question d'élégance, la
+  **seule façon que ça fonctionne** avec des routes protégées par JWT.
+  (Bonus, si l'auth n'était pas un problème : les navigateurs limitent les
+  connexions simultanées par domaine (~6), donc 100 requêtes d'un coup se
+  mettraient en file d'attente au chargement de la page.)
+
+**5. Pourquoi l'URL créée par `URL.createObjectURL` doit-elle être
+révoquée ?**
+
+Parce que `URL.createObjectURL(blob)` enregistre une correspondance
+**interne au navigateur** entre la chaîne `blob:...` et l'objet `Blob`,
+qui maintient ce `Blob` vivant en mémoire tant que le document est
+chargé — **indépendamment de toute référence JavaScript**. Écraser la
+variable qui pointait vers l'ancienne URL (`this.audioUrl.set(nouvelle)`)
+ne suffit donc pas à libérer l'ancien `Blob` : le garbage collector
+habituel ne peut rien faire ici, puisque le navigateur garde volontairement
+cette référence par conception. `URL.revokeObjectURL()` est le **seul**
+moyen de casser ce lien.
+
+Deux endroits de révocation dans le code, pour deux fuites différentes
+sans ça :
+- `play()` révoque l'ancienne URL à chaque nouvelle lecture (fuite à
+  chaque changement de piste sinon) ;
+- `ngOnDestroy()` révoque la dernière URL encore active en quittant
+  `/tracks` (fuite à chaque navigation hors de la page sinon) — vérifié
+  concrètement en testant un `fetch()` sur l'URL après navigation : échec
+  (`TypeError: Failed to fetch`), confirmant la révocation
+  (`compte-rendu/captures/tp2-mission3-objecturl-revoquee.png`).
 
 ## Améliorations facultatives
 

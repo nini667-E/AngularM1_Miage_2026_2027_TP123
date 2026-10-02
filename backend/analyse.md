@@ -351,9 +351,13 @@ automatiquement au premier démarrage s'il n'existe pas déjà.
   `"tp1-development-secret"` — acceptable en développement uniquement.
 - **Pas de rate limiting** ni de protection anti-bruteforce sur
   `/api/auth/login`.
-- **`Range` non géré explicitement** sur `GET /api/tracks/:id/audio` :
-  `res.sendFile` peut le supporter nativement selon Express, mais ce n'est
-  pas testé/documenté ici — pertinent pour le *seek* dans un lecteur audio.
+- **`Range` non géré explicitement** sur `GET /api/tracks/:id/audio`, mais
+  **confirmé en pratique** (TP2, Mission 3) : la réponse contient bien
+  l'en-tête `Accept-Ranges: bytes` (capture Network,
+  `compte-rendu/captures/tp2-mission3-audio-response-headers.png`), preuve
+  que `res.sendFile` streame le fichier depuis le disque via
+  `fs.createReadStream()` plutôt que de le charger entièrement en mémoire
+  — Express ajoute cet en-tête automatiquement pour ce mode d'envoi.
 - **Aucune limite de nombre de fichiers par utilisateur** ni de quota total
   de stockage disque.
 

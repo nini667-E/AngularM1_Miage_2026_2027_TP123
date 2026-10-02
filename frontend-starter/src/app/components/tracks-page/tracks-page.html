@@ -10,7 +10,16 @@
       <h2>Importer</h2>
       <label>Titre<input [formControl]="title" /></label>
       <label>Fichier audio<input type="file" accept="audio/*" (change)="choose($event)" /></label>
-      <button type="button" (click)="upload()" [disabled]="!file">Envoyer</button>
+      @if (uploadError()) {
+        <p class="error">{{ uploadError() }}</p>
+      }
+      @if (uploadSuccess()) {
+        <p class="success">{{ uploadSuccess() }}</p>
+      }
+      @if (uploading()) {
+        <p>Envoi en cours…</p>
+      }
+      <button type="button" (click)="upload()" [disabled]="!file || uploading()">Envoyer</button>
     </article>
 
     <article class="card">
@@ -24,24 +33,46 @@
       @if (loading()) {
         <p>Chargement…</p>
       }
-      @for (track of tracks(); track track.id) {
-        <div class="track">
-          <div>
-            <b>{{ track.title }}</b>
-            <small>{{ track.originalName }} · {{ track.size }} Ko</small>
-          </div>
-          <button type="button" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">▶</button>
-        </div>
-      } @empty {
-        <p>Aucune piste.</p>
+      <ul class="tracks">
+        @for (track of tracks(); track track.id) {
+          <li>
+            <mat-card appearance="outlined" class="track">
+              <mat-card-content class="track-content">
+                <div class="track-info">
+                  <mat-card-title>{{ track.title }}</mat-card-title>
+                  <mat-card-subtitle>{{ track.originalName }} · {{ formatType(track.mimeType) }} · {{ formatSize(track.size) }}</mat-card-subtitle>
+                  <small>Ajouté le {{ track.createdAt | date: 'dd/MM/yyyy' }}</small>
+                  @if (track.id === playingTrack()?.id) {
+                    @if (playbackFailed()) {
+                      <small class="error">⚠ Erreur de lecture</small>
+                    } @else {
+                      <small class="now-playing">▶ En cours de lecture</small>
+                    }
+                  }
+                </div>
+                <button mat-mini-fab class="play-fab" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">
+                  <mat-icon aria-hidden="true">play_arrow</mat-icon>
+                </button>
+              </mat-card-content>
+            </mat-card>
+          </li>
+        } @empty {
+          <p>Aucune piste.</p>
+        }
+      </ul>
+      <mat-paginator
+        [length]="total()"
+        [pageSize]="limit()"
+        [pageIndex]="page() - 1"
+        [pageSizeOptions]="[5, 10, 20]"
+        (page)="onPage($event)"
+      ></mat-paginator>
+      @if (audioError()) {
+        <p class="error">{{ audioError() }}</p>
       }
-      <div class="pager">
-        <button type="button" (click)="go(page() - 1)" [disabled]="page() === 1">Préc.</button>
-        <span>Page {{ page() }} / {{ pages() }}</span>
-        <button type="button" (click)="go(page() + 1)" [disabled]="page() === pages()">Suiv.</button>
-      </div>
       @if (audioUrl()) {
-        <audio [src]="audioUrl()" controls autoplay></audio>
+        <p>Lecture : <b>{{ playingTrack()?.title }}</b></p>
+        <audio [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
       }
     </article>
   </div>

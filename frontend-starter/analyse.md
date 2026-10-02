@@ -303,8 +303,10 @@ return next(authorizedRequest).pipe(
 
 Signals exposés par `TracksPageComponent` :
 `tracks`, `page`, `pages`, `loading`, `error` (ajouté Mission 2, TP2 — voir
-ci-dessous), `audioUrl`, plus un `FormControl` `title` et une propriété
-classique `file?: File` (choix de fichier, pas encore un Signal).
+ci-dessous), `uploadError`, `uploadSuccess`, `uploading`, `playingTrack`,
+`playbackFailed` et `audioError` (ajoutés Mission 3, TP2 — voir plus bas),
+`audioUrl`, plus un `FormControl` `title` et une propriété classique
+`file?: File` (choix de fichier, pas encore un Signal).
 
 **Signal `error` (Mission 2, TP2).** Avant, un échec de `GET /api/tracks`
 dans `load()` ne produisait qu'un `console.error`, invisible pour
@@ -353,24 +355,134 @@ sequenceDiagram
     participant API as Backend
 
     U->>C: sélectionne un fichier -> choose(event)
-    C->>C: this.file = input.files[0]
+    C->>C: valide type MIME + taille (25 Mo max)
+    alt fichier invalide
+        C->>C: uploadError.set(message), file reste undefined
+    else fichier valide
+        C->>C: this.file = input.files[0]
+    end
     U->>C: clic "Envoyer" -> upload()
+    C->>C: garde if (!file || uploading()) return
+    C->>C: uploading.set(true)
+    C->>C: uploadError.set(''), uploadSuccess.set('')
     C->>S: service.upload(file, title)
     S->>S: FormData: append('audio', file), append('title', title)
     S->>API: POST /api/tracks (multipart/form-data)
-    API-->>S: 201 track
-    S-->>C: track créé
-    C->>C: reset title/file, page.set(1), load()
+    alt succès
+        API-->>S: 201 track
+        S-->>C: track créé
+        C->>C: uploadSuccess.set(message), reset title/file, page.set(1), load()
+    else échec
+        API-->>S: 400/... ou aucune réponse (backend injoignable)
+        S-->>C: erreur
+        C->>C: uploadError.set(serverErrorMessage(error, repli))
+    end
+    C->>C: uploading.set(false)
 
     U->>C: clic ▶ sur une piste -> play(track)
+    C->>C: audioError.set(''), playbackFailed.set(false), uploadSuccess.set('')
     C->>S: service.audio(track.id)
     S->>API: GET /api/tracks/:id/audio (responseType: blob)
-    API-->>S: flux binaire audio
-    S-->>C: Blob
-    C->>C: revoke ancien ObjectURL (s'il existe)
-    C->>C: audioUrl.set(URL.createObjectURL(blob))
-    Note over C: template : <audio [src]="audioUrl()" controls autoplay>
+    alt requête réussie
+        API-->>S: flux binaire audio
+        S-->>C: Blob
+        C->>C: revoke ancien ObjectURL (s'il existe)
+        C->>C: audioUrl.set(URL.createObjectURL(blob))
+        C->>C: playingTrack.set(track)
+        Note over C: <audio (error)="onAudioError()">
+        alt décodage échoue (fichier illisible)
+            C->>C: onAudioError() -> audioError.set(...), playbackFailed.set(true)
+        end
+    else requête échoue (404/réseau)
+        API-->>S: erreur
+        S-->>C: erreur
+        Note over C: playingTrack non touché : une piste différente<br/>déjà en lecture n'est pas affectée
+        C->>C: audioError.set(serverErrorMessage(error, repli))
+    end
+    Note over C: template : badge "En cours de lecture" ou "⚠ Erreur de lecture"<br/>selon playbackFailed, + titre au-dessus du lecteur
 ```
+
+**Validation frontend du fichier (Mission 3, TP2).** `choose()` reproduit
+côté client les mêmes règles que `backend/src/app.js` (constantes
+`ALLOWED_AUDIO_TYPES` : les 6 mêmes types MIME que le `Set allowed` du
+backend, et `MAX_FILE_SIZE` : 25 Mo). Si le fichier échoue l'une des deux
+règles, `this.file` n'est **pas** renseigné (reste `undefined`) et le
+Signal `uploadError` est rempli avec un message dédié — le bouton
+"Envoyer" (`[disabled]="!file || uploading()"`) reste donc désactivé sans
+logique supplémentaire. Cette validation est un confort d'UX : elle ne
+remplace jamais `fileFilter`/`limits.fileSize` côté backend, seul rempart
+réel puisque le frontend est entièrement contournable (ex. `curl` direct
+sur `POST /api/tracks`).
+
+**État de chargement + anti double-soumission (Mission 3, TP2).** Signal
+`uploading`, mis à `true` au début de `upload()` et à `false` dans les
+deux callbacks (`next`/`error`). La garde
+`if (!this.file || this.uploading()) return;` en tête de `upload()` et le
+`[disabled]="!file || uploading()"` du bouton partagent la **même**
+condition côté logique et côté UI — évite une double soumission par clic
+répété pendant qu'une requête est déjà en cours, sans deux logiques à
+synchroniser séparément.
+
+**Message de succès + erreurs serveur, et bug "Failed to fetch" corrigé
+(Mission 3, TP2).** `uploadSuccess` (nouveau) et `uploadError` (réutilisé,
+déjà présent pour la validation de fichier) sont remplis respectivement
+dans les callbacks `next`/`error` de `upload()`, et vidés au début de
+chaque tentative. Un bug a été trouvé pendant le test avec le backend
+coupé : le code faisait confiance à `error.error?.message` dans tous les
+cas, ce qui laissait fuiter un message technique du navigateur
+(`TypeError: Failed to fetch`) plutôt qu'un message applicatif quand
+**aucune réponse** n'arrivait du serveur. Correction, factorisée en
+fonction utilitaire :
+
+```ts
+function serverErrorMessage(error: HttpErrorResponse, fallback: string): string {
+  return error.status > 0 ? (error.error?.message ?? fallback) : fallback;
+}
+```
+
+`error.status === 0` signale une absence totale de réponse HTTP (backend
+injoignable) — dans ce cas, `error.error` est une erreur technique
+(`ProgressEvent`/`TypeError` selon le navigateur), pas le JSON `{ message }`
+applicatif renvoyé par le backend sur une vraie erreur (`400`, etc.). Cette
+fonction est utilisée à la fois par `upload()` **et par `load()`**
+(Mission 2), qui avait la même faille latente non encore observée.
+
+`uploadSuccess` est en plus vidé en tout début de `load()` **et** de
+`play()` — donc dès qu'une autre action se produit sur la page
+(Actualiser, pagination, lecture), pas seulement au prochain envoi. Ça a
+nécessité de réordonner `upload()` : `this.load()` est appelé **avant**
+`this.uploadSuccess.set(...)`, sinon le vidage en tout début de `load()`
+effacerait le message qu'on vient tout juste de fixer.
+
+**Affichage du morceau en cours de lecture (Mission 3, TP2).** Signal
+`playingTrack` stockant la **piste entière** (pas juste son id), rempli
+dans le callback `next` de `play()` en même temps que `audioUrl` (donc
+toujours cohérent avec ce qui est réellement chargé). Choix de stocker
+la piste plutôt qu'un id : évite d'avoir à la rechercher dans `tracks()`,
+qui est paginé et pourrait ne plus contenir la piste jouée si la page a
+changé entre-temps. Deux affichages dérivés : un badge sous le titre
+dans la liste (`@if (track.id === playingTrack()?.id)`) et "Lecture :
+*titre*" au-dessus du lecteur `<audio>` — texte, pas seulement une
+couleur, pour rester perceptible avec un lecteur d'écran.
+
+**Erreur audio compréhensible + Signal `playbackFailed` (Mission 3,
+TP2).** Deux sources d'erreur distinctes : l'échec de la requête HTTP
+(`GET /api/tracks/:id/audio`, catché dans `subscribe()`, message posé
+via `serverErrorMessage()`) et l'échec de **décodage** par le
+navigateur, détecté via l'événement natif `(error)` de l'élément
+`<audio>` (`onAudioError()`) — un fichier peut être téléchargé avec
+succès (le `Blob` arrive) sans pour autant être un audio valide.
+
+Un piège trouvé en testant avec un fichier volontairement illisible :
+`playingTrack` est rempli dès que le `Blob` est téléchargé (avant même
+de savoir si le navigateur peut le lire), donc le badge "En cours de
+lecture" restait affiché même en cas d'échec de décodage. Solution :
+**`playbackFailed`, un Signal séparé de `playingTrack`**, mis à `true`
+uniquement par `onAudioError()` — jamais par un échec HTTP, car celui-ci
+concerne une tentative sur une piste qui **n'a pas** pu remplacer
+`playingTrack` ; si une piste différente jouait déjà, elle ne doit pas
+être faussement marquée en erreur par l'échec d'un clic sur une autre
+piste. Le badge choisit entre les deux textes selon `playbackFailed()`.
 
 **Pourquoi un `Blob` + `ObjectURL` plutôt qu'une URL directe dans `src`** :
 le endpoint `/api/tracks/:id/audio` est **protégé par JWT**. Un attribut
@@ -381,6 +493,17 @@ faites via `HttpClient`) et n'aurait donc pas l'en-tête `Authorization` →
 par l'intercepteur), obtenir un `Blob` en mémoire, puis créer une URL locale
 temporaire (`blob:...`) que le navigateur peut utiliser directement dans
 `<audio src>` sans requête réseau supplémentaire.
+
+**Révocation à la destruction du composant (Mission 3, TP2).** `play()`
+révoque déjà l'ObjectURL **précédente** à chaque nouvelle lecture, mais
+la **dernière** créée restait en mémoire si l'utilisateur quittait
+`/tracks` sans relire une autre piste — `URL.createObjectURL` garde le
+`Blob` référencé indépendamment du cycle de vie du composant Angular.
+`TracksPageComponent implements OnDestroy` ; `ngOnDestroy()` révoque
+`audioUrl()` s'il existe encore. Vérifié en pratique : récupérer l'URL
+du lecteur, changer de route, puis tenter un `fetch()` dessus depuis la
+console — échoue (`TypeError: Failed to fetch`) si la révocation a bien
+eu lieu.
 
 ---
 
@@ -442,9 +565,12 @@ réellement complétée.
 | TP2 · M2 | Pagination serveur avec Signals (`tracks`,`page`,`pages`,`loading`) | ✅ Présent (déjà dans le starter) |
 | TP2 · M2 | Signal `error` dédié à la liste, affiché à l'utilisateur | ✅ Fait (Mission 2) — absent du starter, ajouté avec affichage dans `tracks-page.html` |
 | TP2 · M2 | Boutons Préc./Suiv. désactivés aux bornes | ✅ Présent |
-| TP2 · M3 | Validation frontend du fichier (type/taille) avant envoi | ❌ Absent |
-| TP2 · M3 | État de chargement + anti double-soumission pendant l'upload | ❌ Absent (`upload()` n'a pas d'état `uploading`) |
-| TP2 · M3 | Révocation de l'`ObjectURL` à la destruction du composant | ❌ Absent (pas de `ngOnDestroy`) |
+| TP2 · M3 | Validation frontend du fichier (type/taille) avant envoi | ✅ Fait (Mission 3) — mêmes règles que le backend (`ALLOWED_AUDIO_TYPES`, `MAX_FILE_SIZE` dans `tracks-page.ts`), Signal `uploadError` affiché |
+| TP2 · M3 | État de chargement + anti double-soumission pendant l'upload | ✅ Fait (Mission 3) — Signal `uploading`, garde `if (!file \|\| uploading())`, bouton désactivé pendant l'envoi |
+| TP2 · M3 | Message de succès + affichage des erreurs serveur (upload) | ✅ Fait (Mission 3) — Signal `uploadSuccess`, `uploadError` réutilisé ; bug "Failed to fetch" corrigé (`serverErrorMessage()`, appliqué aussi à `load()`) |
+| TP2 · M3 | Affichage du morceau en cours de lecture | ✅ Fait (Mission 3) — Signal `playingTrack` (piste entière), badge dans la liste + titre au-dessus du lecteur `<audio>` |
+| TP2 · M3 | Erreur audio compréhensible | ✅ Fait (Mission 3) — Signal `audioError` (échec HTTP ou décodage natif via `onAudioError()`) ; Signal `playbackFailed` distinct pour ne pas propager l'échec à une piste différente déjà en lecture |
+| TP2 · M3 | Révocation de l'`ObjectURL` à la destruction du composant | ✅ Fait (Mission 3) — `TracksPageComponent implements OnDestroy`, révoque `audioUrl()` s'il existe |
 | TP2 · M3 | Cards responsives/accessibles avec plus de métadonnées | ⚠️ Basique : titre, nom original, taille — pas de date/format visibles |
 | TP3 · M5 | Suppression d'une piste (`DELETE /api/tracks/:id`) | ❌ Absent (pas de méthode `delete()` dans `TrackService`, pas de bouton) |
 | TP3 · M6 | Progression d'upload (`reportProgress`, événements HTTP) | ❌ Absent (`upload()` ne suit pas la progression) |
@@ -475,3 +601,24 @@ réellement complétée.
   pagination serveur était déjà conforme dans le starter ; ajout du Signal
   `error` (absent) sur `TracksPageComponent`, affiché à l'utilisateur en
   cas d'échec de `GET /api/tracks` (§4.2, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2), points 1+2 : validation
+  frontend du fichier (type/taille, mêmes règles que le backend) et
+  Signal `uploadError` ajoutés dans `choose()` (§4.2, §4.4, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2), points 3+4 : Signal
+  `uploading` ajouté dans `upload()`, garde anti double-soumission
+  partagée entre la logique et le bouton (§4.2, §4.4, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2), points 5+6 : Signal
+  `uploadSuccess` ajouté, `uploadError` réutilisé pour les erreurs
+  serveur ; bug "Failed to fetch" corrigé (`serverErrorMessage()`,
+  appliqué aussi à `load()`) (§4.2, §4.4, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2) : Signal `playingTrack`
+  ajouté, badge "En cours de lecture" dans la liste + titre au-dessus du
+  lecteur `<audio>` (§4.2, §4.4, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2) : Signaux `audioError` et
+  `playbackFailed` ajoutés (erreur HTTP vs erreur de décodage natif de
+  `<audio>`) ; `uploadSuccess` désormais vidé par `load()`/`play()` en
+  plus de `choose()`/`upload()` (§4.2, §4.4, §7).
+- **27/09** — Mise à jour après Mission 3 (TP2) : `TracksPageComponent`
+  implémente `OnDestroy`, révoque l'`ObjectURL` restante à la
+  destruction du composant (§4.4, §7). **10/11 points de la Mission 3
+  traités**, seules les cards responsives restent à faire.
