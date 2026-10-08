@@ -282,13 +282,19 @@ par MongoDB**.
   disque. Si la suppression disque échoue, l'API répond 500 en signalant
   explicitement le fichier orphelin (pas d'échec silencieux).
 - `GET /api/tracks` (protégée) : liste paginée (`page`, `limit`, max 20 par
-  page) des pistes de l'utilisateur connecté uniquement.
+  page) des pistes de l'utilisateur connecté uniquement. **Depuis TP2
+  (amélioration facultative "filtre par titre")** : paramètre `title`
+  optionnel, recherche par sous-chaîne insensible à la casse (`$regex`
+  Mongo, `$options: "i"`), combiné au filtre `ownerId` existant. L'entrée
+  utilisateur est échappée (`escapeRegExp()`) avant d'être injectée dans
+  la regex, pour éviter qu'une recherche ne casse la requête ou ne fasse
+  exploser le temps de calcul (ReDoS).
 
 ### 4.4 Table des routes "tracks"
 
 | Méthode | Route | Protégée | Description |
 |---|---|---|---|
-| GET | `/api/tracks` | oui | Liste paginée des pistes de l'utilisateur |
+| GET | `/api/tracks` | oui | Liste paginée des pistes de l'utilisateur, filtrable par `title` (TP2) |
 | POST | `/api/tracks` | oui | Upload d'un fichier audio + métadonnées |
 | GET | `/api/tracks/:id/audio` | oui | Téléchargement/lecture du fichier binaire |
 | DELETE | `/api/tracks/:id` | oui | Suppression piste + fichier disque |

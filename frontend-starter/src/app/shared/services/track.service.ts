@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Page } from '../models/page.model';
 import { Track } from '../models/track.model';
 
@@ -8,10 +8,11 @@ import { Track } from '../models/track.model';
 export class TrackService {
   private readonly http = inject(HttpClient);
 
-  list(page = 1, limit = 5) {
-    return this.http.get<Page<Track>>('/api/tracks', {
-      params: { page, limit },
-    });
+  list(page = 1, limit = 5, title = '') {
+    let params = new HttpParams().set('page', page).set('limit', limit);
+    if (title) params = params.set('title', title);
+
+    return this.http.get<Page<Track>>('/api/tracks', { params });
   }
 
   upload(file: File, title: string) {
@@ -25,5 +26,9 @@ export class TrackService {
     return this.http.get(`/api/tracks/${id}/audio`, {
       responseType: 'blob',
     });
+  }
+
+  delete(id: string) {
+    return this.http.delete<void>(`/api/tracks/${id}`);
   }
 }

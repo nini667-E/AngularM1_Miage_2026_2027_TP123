@@ -40,6 +40,14 @@ const allowed = new Set([
   "audio/x-m4a",
 ]);
 
+// Échappe les caractères spéciaux d'une regex avant de l'injecter dans une
+// requête Mongo : sans ça, un titre recherché comme ".*" ou "(a+)+"
+// pourrait soit matcher n'importe quoi, soit faire exploser le temps de
+// calcul (ReDoS) côté serveur.
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
  * Le mot de passe n'est jamais placé dans le token. `sub` signifie subject
@@ -272,9 +280,18 @@ export function createApp() {
     try {
       const page = Math.max(1, Number(req.query.page) || 1);
       const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 5));
+      const title = typeof req.query.title === "string" ? req.query.title.trim() : "";
       const filter = { ownerId: req.auth.sub };
 
-      console.log(`[tracks] Lecture page=${page}, limit=${limit}, user=${req.auth.sub}`);
+      // Filtre facultatif par titre : recherche insensible à la casse,
+      // sur une sous-chaîne (pas une égalité stricte).
+      if (title) {
+        filter.title = { $regex: escapeRegExp(title), $options: "i" };
+      }
+
+      console.log(
+        `[tracks] Lecture page=${page}, limit=${limit}, title=${title || "(aucun)"}, user=${req.auth.sub}`,
+      );
 
       // La lecture des pistes et le comptage total sont parallélisés pour réduire la latence.
       // on utilise Promise.all pour exécuter les deux opérations en parallèle. 

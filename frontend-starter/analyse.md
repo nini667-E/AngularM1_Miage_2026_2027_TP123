@@ -25,6 +25,7 @@ des TP consistent à le compléter, le fiabiliser et l'enrichir (voir
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
 | Build/test | Angular CLI 22, Vitest 4 (configuré, aucun test écrit) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
+| Composants UI | Angular Material 22.2.1 + CDK (ajoutés TP2, Mission 3) | `mat-card`, `mat-paginator`, `mat-dialog`, `mat-button`/`mat-icon` — uniquement sur `TracksPageComponent` pour l'instant, thème Material 3 custom (`material-theme.scss`, palette verte) |
 
 ### 1.2 Arborescence
 
@@ -101,10 +102,21 @@ explicite des sujets de TP, déjà respectée par le starter.
 flowchart TD
     A[bootstrapApplication AppComponent] --> B[provideRouter routes]
     A --> C["provideHttpClient(withInterceptors([authInterceptor]))"]
+    A --> D[provideAnimationsAsync]
+    A --> E["MatPaginatorIntl -> FrenchPaginatorIntl"]
 ```
 
 Tous les appels HTTP de l'application passent donc systématiquement par
 `authInterceptor` (configuration globale, pas de config par service).
+`provideAnimationsAsync()` (ajouté TP2, Mission 3) est nécessaire pour les
+interactions Angular Material (ripple, transitions de `mat-dialog`,
+etc.) ; sans lui ces composants fonctionnent mais sans retour visuel
+d'interaction. `MatPaginatorIntl` est surchargé par `FrenchPaginatorIntl`
+(`shared/i18n/french-paginator-intl.ts`) : sans ça, `mat-paginator`
+affiche ses textes par défaut en anglais ("Items per page:", "0 of 0"),
+incohérent avec le reste de l'app — fourni globalement ici plutôt que
+localement sur `TracksPageComponent`, pour couvrir tout usage futur de
+`mat-paginator` ailleurs sans avoir à y repenser.
 
 ### 2.2 Table des routes (`routes.ts`)
 
@@ -295,18 +307,26 @@ return next(authorizedRequest).pipe(
 
 | Méthode | Requête HTTP | Utilisation |
 |---|---|---|
-| `list(page, limit=5)` | `GET /api/tracks?page=&limit=` | Pagination serveur |
+| `list(page, limit=5, title='')` | `GET /api/tracks?page=&limit=&title=` | Pagination serveur + filtre par titre (facultatif, ajouté TP2) |
 | `upload(file, title)` | `POST /api/tracks` (`FormData`: `audio`, `title`) | Envoi d'un fichier audio |
 | `audio(id)` | `GET /api/tracks/:id/audio` (`responseType: 'blob'`) | Récupération du binaire audio |
+| `delete(id)` | `DELETE /api/tracks/:id` | Suppression (Mission 3, améliorations facultatives) |
 
 ### 4.2 État réactif du composant
 
 Signals exposés par `TracksPageComponent` :
-`tracks`, `page`, `pages`, `loading`, `error` (ajouté Mission 2, TP2 — voir
-ci-dessous), `uploadError`, `uploadSuccess`, `uploading`, `playingTrack`,
-`playbackFailed` et `audioError` (ajoutés Mission 3, TP2 — voir plus bas),
-`audioUrl`, plus un `FormControl` `title` et une propriété classique
-`file?: File` (choix de fichier, pas encore un Signal).
+`tracks`, `page`, `total`, `limit`, `loading`, `error` (ajouté Mission 2,
+TP2 — voir ci-dessous), `uploadError`, `uploadSuccess`, `uploading`,
+`playingTrack`, `playbackFailed`, `audioError` (ajoutés Mission 3, TP2 —
+voir plus bas), `deleteError`, `deletingId` (ajoutés avec la suppression,
+Mission 3) et `audioUrl`, plus deux `FormControl` : `title` (formulaire
+d'upload) et `titleFilter` (champ de recherche, amélioration facultative
+TP2 — à ne pas confondre malgré le nom proche), et une propriété classique
+`file?: File` (choix de fichier, pas encore un Signal). Le
+Signal `pages` (nombre total de pages, stocké manuellement depuis
+`response.pages`) a été remplacé par `total` (nombre total de pistes,
+`response.total`) : `mat-paginator` recalcule lui-même le nombre de pages
+à partir de `total()`/`limit()`.
 
 **Signal `error` (Mission 2, TP2).** Avant, un échec de `GET /api/tracks`
 dans `load()` ne produisait qu'un `console.error`, invisible pour
@@ -330,20 +350,25 @@ sequenceDiagram
     participant API as GET /api/tracks
 
     Note over C: constructor() appelle load() au chargement
-    U->>C: clic "Suiv." -> go(page()+1)
-    C->>C: page.set(nouvellePage)
+    U->>C: interaction mat-paginator -> (page)="onPage($event)"
+    C->>C: page.set(event.pageIndex + 1), limit.set(event.pageSize)
     C->>C: load()
     C->>C: loading.set(true)
-    C->>S: service.list(page())
-    S->>API: GET /api/tracks?page=N&limit=5
+    C->>S: service.list(page(), limit())
+    S->>API: GET /api/tracks?page=N&limit=M
     API-->>S: { items, page, limit, total, pages }
     S-->>C: réponse
-    C->>C: tracks.set(items), pages.set(pages), loading.set(false)
+    C->>C: tracks.set(items), total.set(total), loading.set(false)
+    Note over C: mat-paginator recalcule lui-même le nombre de pages<br/>à partir de [length]="total()" / [pageSize]="limit()"
 ```
 
 Chaque changement de page déclenche une **nouvelle requête serveur** (pas de
 découpage local d'une liste déjà chargée) — conforme à l'exigence de
-Mission 2 du TP2.
+Mission 2 du TP2. Depuis l'AVANCÉ Mission 2 (`mat-paginator`, TP2),
+l'utilisateur peut aussi changer la taille de page via le menu déroulant
+(`[pageSizeOptions]="[5, 10, 20]"`) — ce changement passe par le même
+événement `(page)` et déclenche donc aussi une requête fraîche, jamais un
+recalcul local.
 
 ### 4.4 Diagramme de séquence — Upload puis lecture
 
@@ -399,7 +424,7 @@ sequenceDiagram
         Note over C: playingTrack non touché : une piste différente<br/>déjà en lecture n'est pas affectée
         C->>C: audioError.set(serverErrorMessage(error, repli))
     end
-    Note over C: template : badge "En cours de lecture" ou "⚠ Erreur de lecture"<br/>selon playbackFailed, + titre au-dessus du lecteur
+    Note over C: template : badge "En cours de lecture" ou "⚠ Erreur de lecture"<br/>selon playbackFailed, lecteur <audio> affiché dans la card de la piste
 ```
 
 **Validation frontend du fichier (Mission 3, TP2).** `choose()` reproduit
@@ -460,10 +485,11 @@ dans le callback `next` de `play()` en même temps que `audioUrl` (donc
 toujours cohérent avec ce qui est réellement chargé). Choix de stocker
 la piste plutôt qu'un id : évite d'avoir à la rechercher dans `tracks()`,
 qui est paginé et pourrait ne plus contenir la piste jouée si la page a
-changé entre-temps. Deux affichages dérivés : un badge sous le titre
-dans la liste (`@if (track.id === playingTrack()?.id)`) et "Lecture :
-*titre*" au-dessus du lecteur `<audio>` — texte, pas seulement une
-couleur, pour rester perceptible avec un lecteur d'écran.
+changé entre-temps. Deux affichages dérivés, tous deux dans la **card de
+la piste concernée** (pas un bloc global sous la liste, cf. ajustement
+UX plus bas) : un badge sous le titre (`@if (track.id ===
+playingTrack()?.id)`) — texte, pas seulement une couleur, pour rester
+perceptible avec un lecteur d'écran — et le lecteur `<audio>` lui-même.
 
 **Erreur audio compréhensible + Signal `playbackFailed` (Mission 3,
 TP2).** Deux sources d'erreur distinctes : l'échec de la requête HTTP
@@ -504,6 +530,72 @@ la **dernière** créée restait en mémoire si l'utilisateur quittait
 du lecteur, changer de route, puis tenter un `fetch()` dessus depuis la
 console — échoue (`TypeError: Failed to fetch`) si la révocation a bien
 eu lieu.
+
+**Cards responsives et accessibles, avec Angular Material (Mission 3,
+TP2).** Chaque piste est un `<mat-card appearance="outlined" class="track">`,
+dans une `<ul class="tracks">`/`<li>` sémantique (métadonnées : titre,
+nom original, format lisible via `formatAudioType()`, taille lisible via
+`formatFileSize()`, date via `DatePipe`). Structure interne volontairement
+simplifiée (un seul `mat-card-content` en flex-row plutôt que
+`mat-card-header`/`mat-card-actions` séparés, qui laissaient un grand
+vide vertical — paddings Material empilés). Bouton de lecture en
+`mat-mini-fab` ; sa couleur est fixée explicitement (`.play-fab`,
+`!important`) plutôt que via `color="primary"`, car la palette Material
+générée à partir de `mat.$green-palette` ne correspond pas exactement au
+vert de marque (`#1d755e`).
+
+**Lecteur audio dans la card, pas dans un bloc global (ajustement UX,
+Mission 3, TP2).** Le lecteur `<audio>` est affiché **dans la card de la
+piste concernée**, pas dans un bloc partagé sous la liste :
+```html
+@if (track.id === playingTrack()?.id && audioUrl()) {
+  <audio class="track-audio" [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
+}
+```
+Fonctionne avec les Signals globaux existants (`playingTrack`,
+`audioUrl`) sans Signal par piste : chaque `@if` compare l'id de sa
+propre piste à `playingTrack()?.id`, donc un seul lecteur s'affiche
+jamais à la fois, peu importe le nombre de cards dans la liste.
+
+**Suppression avec confirmation (améliorations facultatives, Mission 3,
+TP2).** `TrackService.delete(id)` (`DELETE /api/tracks/:id`). Confirmation
+via `MatDialog.open()` sur un `<ng-template>` local (pas de composant
+séparé) plutôt qu'un `window.confirm()`, cohérent avec le reste de la
+page en Material. Après un `204` : nettoyage du lecteur si la piste
+supprimée était celle en cours de lecture (`URL.revokeObjectURL` +
+remise à vide de `audioUrl`/`playingTrack`), recul d'une page si c'était
+la dernière piste d'une page non-1, puis `load()` dans tous les cas —
+regroupe dans la même implémentation les deux points facultatifs du
+sujet "suppression avec confirmation" et "rafraîchissement après
+suppression", qui décrivent en réalité la même action.
+
+**Filtre par titre (amélioration facultative, TP2) — premier changement
+backend de la session.** `title` ajouté en paramètre optionnel de
+`GET /api/tracks` (`backend/src/app.js`), recherche par sous-chaîne
+insensible à la casse (`$regex`/`$options: "i"` Mongo), combinée au
+filtre `ownerId` existant ; entrée échappée via `escapeRegExp()` avant
+injection dans la regex (sécurité : éviter qu'un motif spécial ne
+matche tout ou ne fasse exploser le temps de calcul côté serveur).
+`API_CONTRACT.md` mis à jour dans la même modification.
+`TrackService.list(page, limit, title)` ajoute `title` aux query params
+seulement s'il est non vide. Signal `titleFilter`, méthode
+`applyFilter()` (remet `page` à 1 avant de recharger).
+
+**Piège trouvé et corrigé : `ngSubmit` sans `FormsModule`/`[formGroup]`.**
+Premier essai avec `<form (ngSubmit)="applyFilter()">` : la recherche ne
+filtrait jamais, alors que la requête partait bien (sans `title`,
+confirmé via DevTools Network). `ngSubmit` n'est fourni que par `NgForm`
+(`FormsModule`) ou `FormGroupDirective` (`[formGroup]`,
+`ReactiveFormsModule`, non utilisé ici) — le composant n'important que
+`ReactiveFormsModule` sans `[formGroup]` sur ce `<form>`, ni l'une ni
+l'autre directive ne s'y attachait. `(ngSubmit)` ne se liait donc à rien
+côté Angular ; le clic déclenchait la soumission **native** du
+navigateur, qui rechargeait toute l'application (perdant le champ de
+recherche) — d'où la requête sans filtre observée, en réalité un tout
+nouveau chargement initial post-rechargement, pas un vrai appel à
+`applyFilter()`. Corrigé en supprimant le `<form>` : `(keyup.enter)` sur
+l'input et `(click)` sur le bouton appellent directement `applyFilter()`,
+sans aucune soumission de formulaire.
 
 ---
 
@@ -562,17 +654,19 @@ réellement complétée.
 | TP1 · M1 | Chargement de `/api/users/me` à la demande du profil | ✅ Fait (Mission 1, point 8) — corrigé un faux positif : l'affichage dépendait du Signal `currentUser` déjà rempli par ailleurs (login), sans jamais émettre sa propre requête ; `ProfilePageComponent` appelle désormais `load()` dans son constructeur |
 | TP1 · M1 | Gestion d'un 401 → retour `/login` | ✅ Fait (Mission 1, point 10) — `authInterceptor` nettoie l'état et redirige sur un 401 portant un token ; les 401 sans token (login/register) restent gérés localement |
 | TP1 · M1 | Messages d'erreur compréhensibles par champ | ✅ Fait (Mission 1, points 1+2) — message par champ, `minLength(8)` sur le mot de passe à l'inscription, bouton désactivé si formulaire invalide |
-| TP2 · M2 | Pagination serveur avec Signals (`tracks`,`page`,`pages`,`loading`) | ✅ Présent (déjà dans le starter) |
+| TP2 · M2 | Pagination serveur avec Signals (`tracks`,`page`,`total`,`loading`) | ✅ Présent (déjà dans le starter) |
 | TP2 · M2 | Signal `error` dédié à la liste, affiché à l'utilisateur | ✅ Fait (Mission 2) — absent du starter, ajouté avec affichage dans `tracks-page.html` |
-| TP2 · M2 | Boutons Préc./Suiv. désactivés aux bornes | ✅ Présent |
+| TP2 · M2 | Boutons Préc./Suiv. désactivés aux bornes | ✅ Présent (remplacés par `mat-paginator`, AVANCÉ, qui gère ça nativement) |
+| TP2 · M2 AVANCÉ | Paginator Angular Material | ✅ Fait — `<mat-paginator>`, Signal `total` ajouté, `pages`/`go()` supprimés ; `FrenchPaginatorIntl` pour l'i18n (textes anglais par défaut, trouvé via le harnais de test Playwright) |
 | TP2 · M3 | Validation frontend du fichier (type/taille) avant envoi | ✅ Fait (Mission 3) — mêmes règles que le backend (`ALLOWED_AUDIO_TYPES`, `MAX_FILE_SIZE` dans `tracks-page.ts`), Signal `uploadError` affiché |
 | TP2 · M3 | État de chargement + anti double-soumission pendant l'upload | ✅ Fait (Mission 3) — Signal `uploading`, garde `if (!file \|\| uploading())`, bouton désactivé pendant l'envoi |
 | TP2 · M3 | Message de succès + affichage des erreurs serveur (upload) | ✅ Fait (Mission 3) — Signal `uploadSuccess`, `uploadError` réutilisé ; bug "Failed to fetch" corrigé (`serverErrorMessage()`, appliqué aussi à `load()`) |
-| TP2 · M3 | Affichage du morceau en cours de lecture | ✅ Fait (Mission 3) — Signal `playingTrack` (piste entière), badge dans la liste + titre au-dessus du lecteur `<audio>` |
+| TP2 · M3 | Affichage du morceau en cours de lecture | ✅ Fait (Mission 3) — Signal `playingTrack` (piste entière), badge + lecteur `<audio>` dans la card de la piste |
 | TP2 · M3 | Erreur audio compréhensible | ✅ Fait (Mission 3) — Signal `audioError` (échec HTTP ou décodage natif via `onAudioError()`) ; Signal `playbackFailed` distinct pour ne pas propager l'échec à une piste différente déjà en lecture |
 | TP2 · M3 | Révocation de l'`ObjectURL` à la destruction du composant | ✅ Fait (Mission 3) — `TracksPageComponent implements OnDestroy`, révoque `audioUrl()` s'il existe |
-| TP2 · M3 | Cards responsives/accessibles avec plus de métadonnées | ⚠️ Basique : titre, nom original, taille — pas de date/format visibles |
-| TP3 · M5 | Suppression d'une piste (`DELETE /api/tracks/:id`) | ❌ Absent (pas de méthode `delete()` dans `TrackService`, pas de bouton) |
+| TP2 · M3 | Cards responsives/accessibles avec plus de métadonnées | ✅ Fait (Mission 3) — refonte avec Angular Material (`mat-card`), format/taille/date lisibles |
+| Facultatif | Suppression d'une piste (`DELETE /api/tracks/:id`) + confirmation | ✅ Fait — `TrackService.delete()`, confirmation via `MatDialog`, rafraîchissement + nettoyage du lecteur regroupés dans la même implémentation |
+| Facultatif | Filtre par titre | ✅ Fait — paramètre `title` sur `GET /api/tracks` (premier changement backend de la session), Signal `titleFilter` |
 | TP3 · M6 | Progression d'upload (`reportProgress`, événements HTTP) | ❌ Absent (`upload()` ne suit pas la progression) |
 | TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ❌ Aucun fichier `*.spec.ts` applicatif (Vitest configuré mais inutilisé) |
 
@@ -622,3 +716,23 @@ réellement complétée.
   implémente `OnDestroy`, révoque l'`ObjectURL` restante à la
   destruction du composant (§4.4, §7). **10/11 points de la Mission 3
   traités**, seules les cards responsives restent à faire.
+- **08/10** — Mise à jour majeure après Mission 3 (TP2), dernier point +
+  AVANCÉ + facultatifs : installation d'**Angular Material** (`@angular/material`,
+  `@angular/cdk`, `@angular/animations`, `provideAnimationsAsync()`,
+  `material-theme.scss` palette verte) ; refonte des cards en `mat-card`
+  (§1.1, §2.1, §4.2, §4.4) ; `mat-paginator` remplace le pager fait maison
+  (Signal `total` ajouté, `pages`/`go()` supprimés, §4.2, §4.3) ;
+  suppression de piste avec confirmation `MatDialog` + rafraîchissement
+  (§4.4) ; lecteur `<audio>` déplacé dans la card de la piste plutôt
+  qu'un bloc global (§4.4). **Mission 3 (TP2) complète : 11/11 points**,
+  AVANCÉ Paginator et 2 améliorations facultatives faits en plus.
+- **08/10** — Amélioration facultative "filtre par titre" : paramètre
+  `title` ajouté à `GET /api/tracks` côté backend (**premier changement
+  backend de la session**, voir `backend/analyse.md`), Signal
+  `titleFilter` + `applyFilter()` côté frontend. Bug `ngSubmit` sans
+  `FormsModule`/`[formGroup]` trouvé et corrigé (§4.2, §4.4, §7).
+- **08/10** — Mise en place d'un harnais de test automatisé (Playwright,
+  hors dépôt projet, dans le scratchpad de session) + `curl` pour les
+  tests API directs. Bug trouvé dès le premier test : `mat-paginator` en
+  anglais par défaut — corrigé avec `FrenchPaginatorIntl`, fourni dans
+  `main.ts` (§2.1, §7).

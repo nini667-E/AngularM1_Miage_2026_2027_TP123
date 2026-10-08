@@ -1547,4 +1547,337 @@ ce projet est l'authentification JWT, pas une préférence de style.
 
 ---
 
+### Entrée 2.11 — Mission 3 : cards responsives et accessibles, puis passage à Angular Material
+
+**Objectif.** Dernier point de la checklist Mission 3 : transformer la
+liste de pistes en cards responsives/accessibles (titre, nom original,
+format, taille, date, action de lecture).
+
+**Prompts principaux (recopiés tels quels) :**
+> Aller on s'y attaque, choissisons d'abord quel genre de card on va
+> implémenter
+>
+> Je vois mais on va rendre ça encore plus beau, déjà détaille moi un peu
+> plus ce que t'as fait exactement
+>
+> ok je vois, on peut pas utiliser un composant de la bibliothèque
+> graphique angular ?
+
+**Étape 1 — CSS fait maison.** Choix du style demandé via question à
+options avec previews ASCII (liste de mini-cards empilées vs grille) —
+utilisateur choisit les mini-cards empilées. Implémenté : `<ul>`/`<li>`
+sémantique, métadonnées complètes, bug corrigé au passage (taille
+affichée en octets bruts étiquetés "Ko").
+
+**Étape 2 — détail demandé avant d'aller plus loin.** Explication fichier
+par fichier de ce qui avait été fait (`tracks-page.ts`, `.html`,
+`styles.css`), avant que l'utilisateur ne demande le passage à Angular
+Material.
+
+**Étape 3 — décision d'installer Angular Material.** Nouvelle dépendance
+= vraie décision de projet, posée via question à options (installer
+maintenant vs rester en CSS fait maison) plutôt que tranchée seule.
+Utilisateur choisit l'installation.
+
+**Implémentation.** `ng add @angular/material` (thème custom,
+typographie, animations). **Dépendance manquante trouvée et corrigée
+pendant le build** : `@angular/animations` pas installé du tout
+(`ng add` ne l'ajoute pas automatiquement dans cette version), build en
+échec — ajouté en `22.1.4` pour matcher le reste du projet. Palette
+changée de `mat.$azure-palette` à `mat.$green-palette`. **Conflits avec
+le CSS existant trouvés et corrigés** : la règle globale `button {}`
+s'appliquait aussi aux boutons Material (restreinte via `:not(...)`) ;
+le fond de `body` posé par Material écrasait le vert de marque (fixé
+explicitement). Cards en `mat-card appearance="outlined"`.
+
+**Incohérence de couleur trouvée et corrigée** (recopié tel quel) :
+> c'est good, maintenant tu peux implémenter le paginator [...] juste le
+> vert du bouton je le trouve pas cohérent avec le reste du menu garde
+> l'îcone triangle verte au milieu mais le fond passe à du blanc cassé
+
+Le vert "primary" généré par Material à partir de `mat.$green-palette`
+ne correspond pas exactement à `#1d755e`. Question posée (bouton rond
+plein vert vs icône subtile) avant de corriger ; couleurs fixées
+directement (`!important` nécessaire pour l'emporter sur les variables
+CSS internes de `mat-mini-fab`) plutôt que `color="primary"`.
+
+**Espacement corrigé** : `mat-card-header` + `mat-card-actions` séparés
+remplacés par un seul `mat-card-content` en flex-row, qui laissaient un
+grand vide vertical (paddings Material empilés).
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html`,
+`styles.css`, `main.ts`, `material-theme.scss` (créé par le schematic),
+`package.json`/`package-lock.json` (`@angular/material`, `@angular/cdk`,
+`@angular/animations`) ; `compte-rendu/TP2.md` (case cochée, section
+complète avec 3 captures) ; `RAPPORT_IA_MODELE.md` (cette entrée) ; 3
+captures copiées dans `compte-rendu/captures/tp2-mission3-cards-*.png`.
+
+**Preuve de fonctionnement.** `npm run build` réussi à chaque étape.
+Captures avant/après confirmant la correction de couleur, confirmées
+par l'utilisateur ("c'est good").
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi une palette Material
+générée à partir d'une teinte générique ne correspond jamais exactement
+à une couleur de marque précise, et pourquoi fixer les couleurs
+directement (avec `!important`) est parfois nécessaire face aux
+variables CSS internes d'un composant tiers ; pourquoi installer une
+bibliothèque de composants est une décision de projet à exposer
+explicitement, pas un simple détail d'implémentation.
+
+---
+
+### Entrée 2.12 — Mission 2 AVANCÉ : `mat-paginator`
+
+**Objectif.** Bonus facultatif du sujet TP2 (Mission 2) : remplacer le
+pager fait maison par le composant Paginator d'Angular Material.
+
+**Prompt principal (recopié tel quel) :** implicite, enchaîné après la
+validation de la couleur du bouton de lecture ("maintenant tu peux
+implémenter le paginator puis m'expliquer comment tout ça marche").
+
+**Implémentation.** `<mat-paginator [length] [pageSize] [pageIndex]
+[pageSizeOptions] (page)="onPage($event)">`. Nouveau Signal `total`
+(`response.total`, jamais récupéré jusqu'ici) ; Signal `pages` devenu
+inutile et supprimé (`mat-paginator` recalcule lui-même le nombre de
+pages). `onPage()` reconvertit `pageIndex` (0-based) en `page` (1-based,
+cohérent avec le contrat `?page=1` de l'API). Bonus fonctionnel :
+sélection de la taille de page (5/10/20), absente de l'ancien pager.
+`.pager`/`go()` supprimés (code mort).
+
+**Fichiers effectivement modifiés.** `tracks-page.ts`, `tracks-page.html`,
+`styles.css` ; `compte-rendu/TP2.md` (case AVANCÉ cochée, section
+implémentation) ; `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** `npm run build` réussi.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `mat-paginator` est
+un composant sans état propre (il faut toujours recharger les données
+soi-même au changement de page) ; pourquoi reconvertir l'index 0-based
+de Material vers le `page` 1-based de l'API évite une confusion
+silencieuse (décalage d'une page).
+
+---
+
+### Entrée 2.13 — Amélioration facultative : suppression avec confirmation + rafraîchissement
+
+**Objectif.** Permettre de supprimer une piste (`DELETE /api/tracks/:id`,
+déjà fonctionnel côté backend), avec confirmation avant d'agir.
+
+**Prompt principal (recopié tel quel) :**
+> Maintenant j'aimerais implémenter quelques améliorations facultatives,
+> à commencer par la supression avec confirmation
+>
+> C'est good implémente
+
+**Plan validé puis implémenté.** `TrackService.delete(id)`. Confirmation
+via `MatDialog` (plutôt qu'un `window.confirm()` basique) — cohérent
+avec le reste de la page en Material, implémentée avec un simple
+`<ng-template>` dans `tracks-page.html`, sans composant séparé. Point
+facultatif suivant du sujet ("rafraîchissement après suppression")
+regroupé dans la foulée, car c'est littéralement la même action
+(`204` reçu → nettoyage + rechargement) : nettoyage du lecteur si la
+piste supprimée était en cours de lecture, recul d'une page si c'était
+la dernière piste d'une page non-1, `load()` dans tous les cas.
+
+**Fichiers effectivement modifiés.** `track.service.ts`, `tracks-page.ts`,
+`tracks-page.html`, `styles.css` ; `compte-rendu/TP2.md` (2 cases
+cochées, section implémentation complète) ; `RAPPORT_IA_MODELE.md`
+(cette entrée).
+
+**Preuve de fonctionnement.** `npm run build` réussi. Tests manuels
+confirmés par l'utilisateur : suppression normale, et suppression de la
+dernière piste d'une page non-1 (recul de page vérifié).
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi regrouper deux points
+facultatifs du sujet en une seule implémentation a du sens quand ils
+décrivent en réalité la même action vue sous deux angles ; pourquoi
+nettoyer l'état du lecteur après suppression évite de laisser l'UI dans
+un état incohérent (un lecteur "actif" pointant vers un fichier qui
+n'existe plus côté serveur).
+
+---
+
+### Entrée 2.14 — Ajustement UX : lecteur audio déplacé dans la card de la piste
+
+**Objectif.** Déplacer le lecteur `<audio>`, affiché jusqu'ici dans un
+bloc unique sous la liste des pistes, directement dans la card de la
+piste en cours de lecture.
+
+**Prompt principal (recopié tel quel) :**
+> J'ai fait les tests tout est bon. Par contre je me rends compte que ça
+> serait mieux de mettre le la barre de lecture du son directement dans
+> la card correspondante plutôt que en bas
+
+**Implémentation.** `@if (track.id === playingTrack()?.id && audioUrl())`
+ajouté dans chaque card, sous `.track-content` ; bloc "Lecture : titre" +
+lecteur global en bas de liste supprimé (redondant avec le badge
+"▶ En cours de lecture" déjà présent dans la card concernée).
+
+**Fichiers effectivement modifiés.** `tracks-page.html`, `styles.css` ;
+`compte-rendu/TP2.md`/`RAPPORT_IA_MODELE.md` (documentés dans l'entrée
+2.11, cette fonctionnalité en faisant partie intégrante du travail sur
+les cards).
+
+**Preuve de fonctionnement.** `npm run build` réussi. Confirmé par
+l'utilisateur après test manuel ("oui c'est bon").
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `playingTrack` et
+`audioUrl` (deux Signals globaux au composant, pas par piste) suffisent
+pour afficher le lecteur au bon endroit malgré une liste de plusieurs
+pistes : un seul `@if` par piste compare son id à `playingTrack()?.id`,
+donc un seul lecteur s'affiche jamais à la fois, peu importe le nombre
+de cards dans la liste.
+
+---
+
+### Entrée 2.15 — Amélioration facultative : filtre par titre (premier changement backend)
+
+**Objectif.** Filtrer la liste des pistes par titre, "de manière assez
+basique juste avec la requête backend" (demande explicite de
+l'utilisateur).
+
+**Prompts principaux (recopiés tels quels) :**
+> je veux bien qu'on fasse le filtre par titre, de manière assez basique
+> juste avec la requête backend
+>
+> oui implémente
+
+**Plan proposé et validé avant codage.** Signalé explicitement : premier
+changement backend de toute la session (TP1 et TP2 étaient restés 100%
+frontend). Plan : `GET /api/tracks` accepte `title` optionnel (regex
+Mongo insensible à la casse), `API_CONTRACT.md` mis à jour dans la même
+modification, frontend avec Signal `titleFilter` + champ de recherche.
+
+**Implémentation backend.** `backend/src/app.js` : paramètre `title`
+ajouté au filtre Mongoose existant (`ownerId`). Fonction `escapeRegExp()`
+ajoutée pour échapper l'entrée utilisateur avant injection dans la
+regex — sans ça, un titre comme `.*` matcherait tout, ou un pattern
+pathologique pourrait ralentir le serveur (ReDoS). `npm test` (backend) :
+2/2 toujours au vert. Vérifié que `app.js` se charge sans erreur
+(`node -e "require('./src/app.js')"`) avant de lancer les tests.
+
+**Implémentation frontend.** `TrackService.list(page, limit, title)` ;
+Signal `titleFilter`, méthode `applyFilter()` (remet `page` à 1).
+
+**Bug utilisateur signalé, diagnostiqué et corrigé (pas un problème
+backend) :**
+> ça ne marche pas, j'ai l'impression que la requête passe sans prendre
+> en compte el filtre
+
+Diagnostic demandé d'abord : redémarrage du backend oublié (hypothèse
+raisonnable vu que c'était le premier changement backend jamais fait
+dans cette session) — écartée après vérification des logs serveur et de
+l'onglet Network (capture fournie : `GET /api/tracks?page=1&limit=5`,
+**sans** `title` du tout). Cause réelle : `<form (ngSubmit)="applyFilter()">`
+sur un composant qui n'importe que `ReactiveFormsModule` (pas
+`FormsModule`, pas de `[formGroup]`) — ni `NgForm` ni
+`FormGroupDirective` ne s'attachent à ce `<form>`, donc `(ngSubmit)` ne
+se liait à rien côté Angular ; le clic déclenchait la soumission
+**native** du navigateur, qui rechargeait toute l'app (perdant le champ
+de recherche), d'où la requête sans filtre observée — en réalité un
+tout nouveau chargement initial, pas un vrai appel à `applyFilter()`.
+Corrigé en supprimant le `<form>` : `(keyup.enter)` sur l'input et
+`(click)` sur le bouton appellent directement `applyFilter()`, sans
+aucune soumission de formulaire.
+
+**Fichiers effectivement modifiés.** `backend/src/app.js`,
+`API_CONTRACT.md` ; `track.service.ts`, `tracks-page.ts`,
+`tracks-page.html`, `styles.css` ; `backend/analyse.md` (description de
+la route + table des routes) ; `compte-rendu/TP2.md` (case cochée,
+section complète) ; `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** `npm run build` (frontend) et `npm test`
+(backend) réussis. Captures fournies par l'utilisateur (logs backend,
+Network) ayant servi au diagnostic du bug `ngSubmit`. Fonctionnement
+confirmé par l'utilisateur après correction.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `ngSubmit` ne
+fonctionne que si `NgForm` (`FormsModule`) ou `FormGroupDirective`
+(`[formGroup]`, `ReactiveFormsModule`) sont présents sur le `<form>`, et
+pourquoi l'absence silencieuse de liaison peut ressembler à "ça ne fait
+rien" plutôt qu'à une erreur visible ; pourquoi échapper une entrée
+utilisateur avant de l'injecter dans une regex est nécessaire des deux
+côtés (sécurité serveur), pas juste une bonne pratique côté validation
+frontend ; pourquoi vérifier l'URL exacte de la requête réseau (pas
+seulement son statut) est la première chose à faire quand "ça ne marche
+pas" — ça distingue immédiatement un problème serveur (requête correcte,
+mauvaise réponse) d'un problème client (requête elle-même incorrecte ou
+absente).
+
+---
+
+### Entrée 2.16 — Mise en place d'un harnais de test automatisé, et correctif trouvé grâce à lui
+
+**Objectif.** Répondre à une question méthodologique de l'utilisateur sur
+les limites de test de l'assistant, puis mettre en place les capacités
+manquantes sur demande.
+
+**Prompts principaux (recopiés tels quels) :**
+> il te faudrait quoi pour lancer l'appli et la tester toi même ?
+>
+> met en place tout
+
+**Diagnostic initial (question précédente).** Expliqué la distinction
+entre ce qui était déjà possible sans rien installer (`npm run build`,
+`npm test` backend, scripts Node ponctuels, lecture statique du code) et
+ce qui manquait pour un vrai pilotage navigateur (Playwright/Chromium,
+jamais installés jusqu'ici) — avec le compromis explicite : pollution du
+dépôt projet (`package.json`) si installé au mauvais endroit.
+
+**Mise en place.**
+1. **`curl`** : déjà disponible, aucune installation. Compte de test
+   jetable créé via `POST /api/auth/register`
+   (`claude-test-bot@example.com`) pour obtenir un token JWT réutilisable
+   sans dépendre des identifiants réels de l'utilisateur.
+2. **Playwright + Chromium headless** : installés **exclusivement dans
+   le répertoire scratchpad de la session**, jamais dans
+   `frontend-starter/` ni `backend/` — décision volontaire pour ne rien
+   ajouter au dépôt que l'utilisateur doit rendre. Vérifié que les deux
+   serveurs (backend `:3000`, frontend `:4200`) tournaient déjà avant de
+   construire le harnais dessus, plutôt que d'en relancer de nouveaux
+   (risque de conflit de port).
+3. Script de fumée (`smoke-test.js`) écrit et exécuté pour valider le
+   harnais de bout en bout : login automatique, navigation vers
+   `/tracks`, capture d'écran.
+
+**Découverte immédiate grâce à ce premier test.** La capture du smoke
+test montrait `mat-paginator` avec ses textes par défaut en anglais
+("Items per page:", "0 of 0"), alors que toute l'application est en
+français — un bug trouvé par l'assistant lui-même au tout premier essai
+du nouvel outil, pas signalé par l'utilisateur.
+
+**Correction, demandée ensuite ("corrige").** `MatPaginatorIntl`
+(mécanisme d'i18n fourni par Angular Material) étendu dans une nouvelle
+classe `FrenchPaginatorIntl`, fournie globalement dans `main.ts` (utile
+pour tout usage futur de `mat-paginator` ailleurs dans l'app, pas
+seulement sur `/tracks`). `npm run build` : succès. **Re-vérifié par
+l'assistant lui-même** en relançant le smoke test Playwright après le
+correctif — capture confirmant "Pistes par page :" et "0 sur 0" en
+français, sans qu'aucun test manuel de l'utilisateur n'ait été
+nécessaire pour cette vérification précise.
+
+**Fichiers effectivement modifiés.** `main.ts`,
+`shared/i18n/french-paginator-intl.ts` (nouveau) ; `compte-rendu/TP2.md`
+(section correctif + section harnais de test, capture) ;
+`RAPPORT_IA_MODELE.md` (cette entrée). Rien dans
+`frontend-starter/package.json`/`backend/package.json` — le harnais de
+test lui-même vit entièrement hors du dépôt.
+
+**Preuve de fonctionnement.** `npm run build` réussi. Deux captures
+Playwright (avant/après correctif), prises et vérifiées par l'assistant
+sans intervention de l'utilisateur pour cette étape précise — première
+fois dans la session qu'une fonctionnalité est validée visuellement sans
+capture fournie par l'utilisateur.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi installer un outil de
+test dans le répertoire du projet lui-même (plutôt que dans un espace
+séparé) aurait pollué ce qui doit être rendu pour la notation ; pourquoi
+`mat-paginator`, comme beaucoup de composants Angular Material, n'a pas
+de traduction française par défaut et nécessite un provider `*Intl`
+dédié ; la différence entre une vérification que l'assistant peut faire
+seul (rendu HTML/CSS statique, capture d'écran) et une vérification qui
+reste du ressort de l'utilisateur (ressenti UX, préférence visuelle).
+
+---
+
 _Points suivants du TP2 à compléter au fur et à mesure._

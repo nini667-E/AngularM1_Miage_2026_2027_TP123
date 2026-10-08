@@ -1,9 +1,10 @@
-import { Component, inject, OnDestroy, signal } from '@angular/core';
+import { Component, inject, OnDestroy, signal, TemplateRef, ViewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { Track } from '../../shared/models/track.model';
@@ -53,12 +54,23 @@ function formatFileSize(bytes: number): string {
 }
 
 @Component({
-  imports: [ReactiveFormsModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule, MatPaginatorModule],
+  imports: [
+    ReactiveFormsModule,
+    DatePipe,
+    MatCardModule,
+    MatButtonModule,
+    MatIconModule,
+    MatPaginatorModule,
+    MatDialogModule,
+  ],
   templateUrl: './tracks-page.html',
   styleUrl: './tracks-page.css',
 })
 export class TracksPageComponent implements OnDestroy {
   private readonly service = inject(TrackService);
+  private readonly dialog = inject(MatDialog);
+
+  @ViewChild('confirmDeleteDialog') confirmDeleteDialog!: TemplateRef<{ track: Track }>;
 
   readonly tracks = signal<Track[]>([]);
   readonly page = signal(1);
@@ -73,9 +85,12 @@ export class TracksPageComponent implements OnDestroy {
   readonly playbackFailed = signal(false);
   readonly audioError = signal('');
   readonly title = new FormControl('', { nonNullable: true });
+  readonly titleFilter = new FormControl('', { nonNullable: true });
   readonly uploadError = signal('');
   readonly uploadSuccess = signal('');
   readonly uploading = signal(false);
+  readonly deleteError = signal('');
+  readonly deletingId = signal<string | null>(null);
   file?: File;
 
   constructor() {
@@ -111,7 +126,7 @@ export class TracksPageComponent implements OnDestroy {
     this.loading.set(true);
     this.error.set('');
     this.uploadSuccess.set('');
-    this.service.list(this.page(), this.limit()).subscribe({
+    this.service.list(this.page(), this.limit(), this.titleFilter.value.trim()).subscribe({
       next: (response) => {
         console.debug('[TracksPage] Pistes chargées', response.items.length);
         this.tracks.set(response.items);
@@ -131,6 +146,13 @@ export class TracksPageComponent implements OnDestroy {
   onPage(event: PageEvent): void {
     this.page.set(event.pageIndex + 1);
     this.limit.set(event.pageSize);
+    this.load();
+  }
+
+  // Filtre volontairement déclenché à la soumission (pas à chaque frappe) :
+  // reste simple, pas de debounce/RxJS à gérer pour ce point facultatif.
+  applyFilter(): void {
+    this.page.set(1);
     this.load();
   }
 
@@ -189,6 +211,48 @@ export class TracksPageComponent implements OnDestroy {
     console.error('[TracksPage] Erreur de lecture audio (élément <audio>)');
     this.audioError.set('Ce fichier audio ne peut pas être lu.');
     this.playbackFailed.set(true);
+  }
+
+  confirmDelete(track: Track): void {
+    this.dialog
+      .open(this.confirmDeleteDialog, { data: { track } })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) this.performDelete(track);
+      });
+  }
+
+  private performDelete(track: Track): void {
+    this.deletingId.set(track.id);
+    this.deleteError.set('');
+    this.service.delete(track.id).subscribe({
+      next: () => {
+        console.debug('[TracksPage] Piste supprimée', track.id);
+        this.deletingId.set(null);
+
+        // La piste supprimée était celle en cours de lecture : on nettoie
+        // le lecteur plutôt que de laisser jouer un fichier qui n'existe
+        // plus côté serveur.
+        if (this.playingTrack()?.id === track.id) {
+          const url = this.audioUrl();
+          if (url) URL.revokeObjectURL(url);
+          this.audioUrl.set('');
+          this.playingTrack.set(null);
+        }
+
+        // Dernière piste d'une page > 1 : reculer d'une page plutôt que
+        // d'afficher une page vide après rechargement.
+        if (this.tracks().length === 1 && this.page() > 1) {
+          this.page.set(this.page() - 1);
+        }
+        this.load();
+      },
+      error: (error: HttpErrorResponse) => {
+        console.error('[TracksPage] Suppression impossible', error);
+        this.deletingId.set(null);
+        this.deleteError.set(serverErrorMessage(error, 'Suppression impossible'));
+      },
+    });
   }
 
   // play() ne révoque que l'ObjectURL précédente à chaque nouvelle lecture ;

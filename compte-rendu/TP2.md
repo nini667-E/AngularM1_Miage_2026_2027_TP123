@@ -93,9 +93,90 @@ découpage local d'une liste déjà téléchargée.
 
 ### AVANCÉ (facultatif)
 
-- [ ] Angular Material Paginator
+- [x] Angular Material Paginator
 - [ ] Pagination Mongoose (`aggregate-paginate-v2`) — **implique de modifier
       le backend et `API_CONTRACT.md`**
+
+#### Implémentation — `mat-paginator`
+
+Fait après l'installation d'Angular Material pour les cards de la Mission 3
+(voir plus bas) — une fois la bibliothèque en place, autant couvrir aussi
+ce bonus plutôt que de garder le pager fait maison.
+
+`mat-paginator` est un composant **sans état propre** : il affiche ce
+qu'on lui donne (`length`, `pageSize`, `pageIndex`) et émet un événement
+`(page)` quand l'utilisateur change de page ou de taille de page — c'est
+toujours le composant qui reste responsable de recharger les données.
+
+```html
+<mat-paginator
+  [length]="total()"
+  [pageSize]="limit()"
+  [pageIndex]="page() - 1"
+  [pageSizeOptions]="[5, 10, 20]"
+  (page)="onPage($event)"
+></mat-paginator>
+```
+
+```ts
+// mat-paginator est en index de page 0-based (pageIndex) ; nos Signals
+// restent 1-based (page) pour correspondre au contrat de l'API (?page=1).
+onPage(event: PageEvent): void {
+  this.page.set(event.pageIndex + 1);
+  this.limit.set(event.pageSize);
+  this.load();
+}
+```
+
+**Nouveau Signal `total`** (le `limit` existait déjà) : `mat-paginator` a
+besoin du nombre total de pistes (`response.total`, renvoyé par l'API
+mais jamais récupéré jusqu'ici) pour calculer lui-même le nombre de
+pages — le Signal `pages` (qu'on stockait manuellement depuis
+`response.pages`) est devenu inutile et a été supprimé.
+
+**Bonus fonctionnel par rapport à l'ancien pager** : l'utilisateur peut
+maintenant choisir la taille de page (5/10/20) via le menu déroulant du
+paginator, ce que les boutons Préc./Suiv. faits main ne permettaient pas.
+
+**Fichiers modifiés :** `tracks-page.ts` (Signal `total`, suppression de
+`pages` et `go()`, méthode `onPage()`) ; `tracks-page.html`
+(`<mat-paginator>` à la place de `.pager`) ; `styles.css` (règles `.pager`
+orphelines supprimées).
+
+`npm run build` : succès.
+
+#### Correctif — `mat-paginator` en anglais par défaut
+
+Trouvé via le harnais de test automatisé mis en place plus tard dans la
+session (voir "Mise en place d'un harnais de test automatisé"
+ci-dessous), pas par un test manuel : `mat-paginator` affiche par défaut
+ses textes en anglais ("Items per page:", "0 of 0"), alors que toute
+l'app est en français. Angular Material expose `MatPaginatorIntl` pour
+ça, fourni globalement dans `main.ts` (utile pour tout futur usage de
+`mat-paginator` ailleurs dans l'app, pas seulement ici) :
+
+```ts
+// shared/i18n/french-paginator-intl.ts
+@Injectable()
+export class FrenchPaginatorIntl extends MatPaginatorIntl {
+  override itemsPerPageLabel = 'Pistes par page :';
+  override nextPageLabel = 'Page suivante';
+  override previousPageLabel = 'Page précédente';
+  override firstPageLabel = 'Première page';
+  override lastPageLabel = 'Dernière page';
+  override getRangeLabel = (page, pageSize, length) => { /* "X – Y sur Z" */ };
+}
+```
+```ts
+// main.ts
+{ provide: MatPaginatorIntl, useClass: FrenchPaginatorIntl },
+```
+
+`npm run build` : succès. Vérifié par Claude lui-même via le harnais
+Playwright — "Pistes par page :" et "0 sur 0" s'affichent bien en
+français :
+
+![Paginator en français ("Pistes par page :", "0 sur 0"), capture prise automatiquement via Playwright](captures/tp2-mission2-paginator-francais.png)
 
 ## Mission 3 — Upload et lecture audio
 
@@ -171,7 +252,7 @@ blocage), et `upload()` ne vérifie que `if (!this.file) return`.
 | Affichage des erreurs serveur (upload) | ✅ fait |
 | Message de succès | ✅ fait |
 | Formulaire vidé + rechargement page 1 après succès | ✅ déjà fait (`title.setValue(''); file = undefined; page.set(1); load()`) |
-| Cards responsives et accessibles | ⚠️ basique — `aria-label` présent sur ▶, layout empilé en mobile déjà via `.grid`, mais peu de métadonnées (pas de date/format) |
+| Cards responsives et accessibles | ✅ fait — refonte avec Angular Material (`mat-card`), voir section dédiée ci-dessous |
 | Affichage du morceau en cours de lecture | ✅ fait |
 | Erreur audio compréhensible | ✅ fait |
 | Révocation de l'`ObjectURL` à la destruction du composant | ✅ fait |
@@ -487,9 +568,93 @@ console :
 **Fichiers modifiés :** `tracks-page.ts` (`implements OnDestroy`,
 méthode `ngOnDestroy()`).
 
-**10/11 points de la checklist Mission 3 traités** — il ne reste que
-"cards responsives et accessibles avec plus de métadonnées", laissé
-volontairement pour la fin (plus qualitatif que fonctionnel).
+### Implémentation — cards responsives et accessibles (Angular Material)
+
+**Première version, CSS fait maison.** Chaque piste transformée en
+mini-card empilée (`<ul>`/`<li>` sémantique plutôt qu'une pile de
+`<div>`, métadonnées complètes : format lisible MP3/WAV/OGG/M4A, taille
+convertie Ko/Mo, date d'ajout via `DatePipe`). Bug corrigé au passage :
+la taille affichait les octets bruts étiquetés "Ko"
+(`3605337 Ko` pour un fichier de 3,4 Mo) — nouvelle fonction
+`formatFileSize()`.
+
+![Première version : cards en CSS fait maison, bordure/fond légers](captures/tp2-mission3-cards-css-maison.png)
+
+**Passage à Angular Material.** Sur demande explicite de l'utilisateur
+("on peut pas utiliser un composant de la bibliothèque graphique
+angular ?"), décision prise après consultation (`@angular/material`
+n'était pas installé — nouvelle dépendance, donc vraie décision de
+projet, pas juste un ajustement de style) :
+```
+ng add @angular/material --theme=custom --typography --animations=enabled
+```
+- `@angular/material` + `@angular/cdk` (22.2.1) installés ; **dépendance
+  manquante trouvée et corrigée** : `@angular/animations` n'était pas
+  installé du tout (`ng add` ne l'ajoute pas automatiquement dans cette
+  version), le build échouait (`Could not resolve
+  "@angular/animations/browser"`) — ajouté en `22.1.4`, aligné sur le
+  reste du projet.
+- `provideAnimationsAsync()` ajouté dans `main.ts` (nécessaire pour les
+  interactions Material comme le ripple).
+- `src/material-theme.scss` (thème Material 3, tokens CSS modernes) :
+  palette changée de `mat.$azure-palette` (bleu par défaut) à
+  `mat.$green-palette` pour coller au vert de marque.
+- **Conflits avec le CSS existant corrigés** : la règle globale
+  `button { background: #1d755e; ... }` s'appliquait à *tous* les
+  boutons y compris les nouveaux boutons Material — restreinte avec
+  `:not([mat-icon-button])` etc. Le fond de page risquait aussi de
+  changer (Material pose son propre `background-color` sur `body`) —
+  fixé explicitement dans `styles.css`.
+- Chaque piste devient un `<mat-card appearance="outlined">`
+  (`mat-card-title`/`mat-card-subtitle` pour le texte, bouton de lecture
+  en `mat-mini-fab` avec icône Material `play_arrow`).
+
+**Incohérence de couleur trouvée et corrigée.** Le vert "primary" généré
+par Material à partir de `mat.$green-palette` ne correspond pas
+exactement au vert de marque (`#1d755e`) :
+
+![Bouton de lecture en vert vif généré par Material, incohérent avec le reste du menu](captures/tp2-mission3-cards-material-vert-incoherent.png)
+
+Corrigé en fixant les couleurs directement plutôt que de passer par
+`color="primary"` :
+```css
+/* !important nécessaire pour l'emporter sur les variables CSS internes
+   du composant mat-mini-fab. */
+.play-fab {
+  background-color: #f8faf9 !important;
+  color: #1d755e !important;
+}
+```
+
+![Rendu final : bouton rond blanc cassé, icône verte de marque, cohérent avec le reste de l'app](captures/tp2-mission3-cards-material-final.png)
+
+**Espacement corrigé.** Le découpage initial en `mat-card-header` +
+`mat-card-content` + `mat-card-actions` séparés laissait un grand vide
+vertical (paddings Material empilés). Remplacé par un seul
+`mat-card-content` en flex-row (texte à gauche, boutons à droite),
+retrouvant la compacité du layout précédent tout en gardant le look
+Material.
+
+**Lecteur audio déplacé dans la card correspondante.** Dernier
+ajustement demandé : le lecteur `<audio>`, affiché au départ dans un
+bloc unique sous la liste ("Lecture : *titre*" + lecteur), a été déplacé
+**dans la card de la piste concernée** :
+```html
+@if (track.id === playingTrack()?.id && audioUrl()) {
+  <audio class="track-audio" [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
+}
+```
+Le bloc "Lecture : titre" en bas de liste supprimé (redondant avec le
+badge "▶ En cours de lecture" déjà présent dans la card et le lecteur
+désormais intégré directement).
+
+**Fichiers modifiés :** `tracks-page.ts`, `tracks-page.html`,
+`styles.css`, `main.ts`, `material-theme.scss`, `package.json`
+(`@angular/material`, `@angular/cdk`, `@angular/animations`).
+
+`npm run build` : succès à chaque étape.
+
+**11/11 points de la checklist Mission 3 traités — Mission 3 complète.**
 
 ### Questions — mémoire, buffering, streaming
 
@@ -589,11 +754,164 @@ sans ça :
 ## Améliorations facultatives
 
 - [ ] Barre de progression de l'upload
-- [ ] Suppression avec confirmation
-- [ ] Rafraîchissement après suppression
-- [ ] Formatage lisible taille/date
-- [ ] Filtre par titre
+- [x] Suppression avec confirmation
+- [x] Rafraîchissement après suppression (regroupé avec le point précédent, même action)
+- [x] Formatage lisible taille/date (fait avec les cards, Mission 3 — `formatFileSize()`, `DatePipe`)
+- [x] Filtre par titre
 - [ ] AVANCÉ — image de couverture (upload ou recherche via tags ID3 / web service)
+
+### Implémentation — suppression avec confirmation + rafraîchissement
+
+**Contrat backend déjà en place**, pas de backend à toucher
+(`backend/src/app.js:409-434`) : `DELETE /api/tracks/:id` → `204` si
+réussi, `404` si la piste n'existe pas/pas la sienne, `500` si le
+fichier physique n'a pas pu être supprimé après la métadonnée.
+
+```ts
+// track.service.ts
+delete(id: string) {
+  return this.http.delete<void>(`/api/tracks/${id}`);
+}
+```
+
+**Confirmation via `MatDialog`** plutôt qu'un `window.confirm()` basique
+— cohérent avec le reste de la page maintenant en Material. Pas de
+composant séparé : un `<ng-template>` dans `tracks-page.html`, ouvert
+via `MatDialog.open()` :
+
+```html
+<ng-template #confirmDeleteDialog let-data>
+  <h2 mat-dialog-title>Supprimer « {{ data.track.title }} » ?</h2>
+  <mat-dialog-content>
+    Cette action est définitive : le fichier audio et ses métadonnées seront supprimés.
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button [mat-dialog-close]="false">Annuler</button>
+    <button mat-flat-button color="warn" [mat-dialog-close]="true">Supprimer</button>
+  </mat-dialog-actions>
+</ng-template>
+```
+
+```ts
+confirmDelete(track: Track): void {
+  this.dialog
+    .open(this.confirmDeleteDialog, { data: { track } })
+    .afterClosed()
+    .subscribe((confirmed) => {
+      if (confirmed) this.performDelete(track);
+    });
+}
+```
+
+**Rafraîchissement + nettoyage, regroupés car c'est la même action
+(`204` reçu) :**
+- si la piste supprimée était celle en cours de lecture, nettoyage du
+  lecteur (`URL.revokeObjectURL` + `audioUrl`/`playingTrack` remis à
+  vide) plutôt que de laisser "jouer" un fichier qui n'existe plus
+  côté serveur ;
+- si c'était la **dernière piste d'une page non-1**, recul d'une page
+  avant de recharger, pour ne pas atterrir sur une page vide ;
+- dans tous les cas, `load()` relance un `GET /api/tracks` à jour.
+
+Bouton désactivé pendant la suppression en cours (Signal
+`deletingId`), message d'erreur dédié (`deleteError`, même fonction
+`serverErrorMessage()` que pour les autres appels) en cas d'échec
+serveur.
+
+**Fichiers modifiés :** `track.service.ts` (`delete()`) ;
+`tracks-page.ts` (Signaux `deleteError`/`deletingId`, méthodes
+`confirmDelete()`/`performDelete()`, import `MatDialog`) ;
+`tracks-page.html` (bouton icône `delete`, `<ng-template>` du
+dialogue) ; `styles.css` (`.track-actions`).
+
+`npm run build` : succès. Test manuel confirmé par l'utilisateur :
+suppression normale, et suppression de la dernière piste d'une page
+non-1 (recul de page vérifié).
+
+### Implémentation — filtre par titre
+
+Demandé explicitement "avec la requête backend" — **premier changement
+backend de toute la session** (TP1 et TP2 étaient restés 100% frontend
+jusqu'ici), signalé avant de s'y mettre.
+
+**Backend (`backend/src/app.js`).** `GET /api/tracks` accepte un
+paramètre `title` optionnel : recherche par sous-chaîne, insensible à la
+casse (`$regex` Mongo, `$options: "i"`), combinée au filtre `ownerId`
+déjà en place.
+
+```js
+const title = typeof req.query.title === "string" ? req.query.title.trim() : "";
+const filter = { ownerId: req.auth.sub };
+
+if (title) {
+  filter.title = { $regex: escapeRegExp(title), $options: "i" };
+}
+```
+
+L'entrée utilisateur est échappée (`escapeRegExp()`) avant d'être injectée
+dans la regex — sans ça, un titre recherché comme `.*` ou un pattern
+pathologique pourrait soit tout matcher, soit faire exploser le temps de
+calcul côté serveur (ReDoS). `API_CONTRACT.md` mis à jour dans la même
+modification (règle du `CLAUDE.md` backend). Tests backend existants
+toujours au vert (`npm test`, 2/2).
+
+**Frontend.** `TrackService.list(page, limit, title)` — `title` ajouté
+aux query params seulement s'il est non vide. Champ de recherche au-dessus
+de la liste, Signal `titleFilter` (`FormControl`), méthode `applyFilter()`
+qui remet `page` à 1 avant de recharger.
+
+**Bug trouvé en test, pas lié au backend.** Premier essai avec un
+`<form (ngSubmit)="applyFilter()">` : la recherche ne filtrait jamais,
+alors que la requête partait bien (confirmé via DevTools Network :
+`GET /api/tracks?page=1&limit=5`, sans `title`). Diagnostic : `ngSubmit`
+n'est fourni que par les directives `NgForm` (module `FormsModule`) ou
+`FormGroupDirective` (`[formGroup]`, `ReactiveFormsModule`) — le
+composant n'importe que `ReactiveFormsModule`, sans `[formGroup]` sur ce
+`<form>`. Résultat : `(ngSubmit)` ne se liait à rien côté Angular, et le
+clic sur "Rechercher" déclenchait la soumission **native** du navigateur,
+qui rechargeait toute la page (donc le champ de recherche repartait à
+zéro) — d'où la requête sans filtre observée, qui n'était en fait qu'un
+tout nouveau chargement initial après rechargement complet de l'app.
+
+**Correction.** Suppression du `<form>`, remplacé par des handlers
+directs :
+```html
+<input [formControl]="titleFilter" (keyup.enter)="applyFilter()" ... />
+<button type="button" (click)="applyFilter()">Rechercher</button>
+```
+Plus de soumission de formulaire du tout, donc plus aucun risque de
+rechargement natif intempestif.
+
+**Fichiers modifiés :** `backend/src/app.js` (paramètre `title`,
+fonction `escapeRegExp()`), `API_CONTRACT.md` ; `track.service.ts`,
+`tracks-page.ts` (Signal `titleFilter`, méthode `applyFilter()`),
+`tracks-page.html`, `styles.css` (`.filter-row`).
+
+`npm run build` (frontend) et `npm test` (backend) : succès. Confirmé
+fonctionnel par l'utilisateur après correction du bug `ngSubmit`.
+
+### Mise en place d'un harnais de test automatisé
+
+Question posée par l'utilisateur sur les limites de test de l'assistant
+("jusqu'où tu peux faire les tests ?", "il te faudrait quoi pour lancer
+l'appli et la tester toi même ?"). Deux capacités mises en place sur
+demande ("met en place tout") :
+
+1. **Tests API directs via `curl`** — aucune installation nécessaire.
+   Un compte de test jetable (`claude-test-bot@example.com`) créé via
+   `POST /api/auth/register` pour obtenir un token JWT réutilisable, sans
+   dépendre des identifiants réels de l'utilisateur.
+2. **Playwright + Chromium headless**, pour piloter un vrai navigateur
+   (login, navigation, clics, captures d'écran) — **installés uniquement
+   dans le répertoire scratchpad de la session, hors du dépôt du
+   projet**. Aucune ligne ajoutée à `frontend-starter/package.json` ni
+   `backend/package.json` : rien à nettoyer avant de rendre le TP.
+
+Un script de fumée (`smoke-test.js`) confirme que le harnais fonctionne
+en conditions réelles : connexion automatique, navigation vers
+`/tracks`, capture d'écran. **C'est ce test qui a révélé le bug
+`mat-paginator` en anglais** documenté juste au-dessus — trouvé par
+l'assistant lui-même, pas par un test manuel.
 
 ## Checkpoint — Onglet Network
 

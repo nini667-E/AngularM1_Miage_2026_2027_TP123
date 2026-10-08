@@ -27,6 +27,16 @@
         <h2>Mes pistes</h2>
         <button type="button" (click)="load()">Actualiser</button>
       </div>
+      <div class="filter-row">
+        <input
+          [formControl]="titleFilter"
+          type="search"
+          placeholder="Filtrer par titre…"
+          aria-label="Filtrer les pistes par titre"
+          (keyup.enter)="applyFilter()"
+        />
+        <button type="button" (click)="applyFilter()">Rechercher</button>
+      </div>
       @if (error()) {
         <p class="error">{{ error() }}</p>
       }
@@ -37,22 +47,37 @@
         @for (track of tracks(); track track.id) {
           <li>
             <mat-card appearance="outlined" class="track">
-              <mat-card-content class="track-content">
-                <div class="track-info">
-                  <mat-card-title>{{ track.title }}</mat-card-title>
-                  <mat-card-subtitle>{{ track.originalName }} · {{ formatType(track.mimeType) }} · {{ formatSize(track.size) }}</mat-card-subtitle>
-                  <small>Ajouté le {{ track.createdAt | date: 'dd/MM/yyyy' }}</small>
-                  @if (track.id === playingTrack()?.id) {
-                    @if (playbackFailed()) {
-                      <small class="error">⚠ Erreur de lecture</small>
-                    } @else {
-                      <small class="now-playing">▶ En cours de lecture</small>
+              <mat-card-content>
+                <div class="track-content">
+                  <div class="track-info">
+                    <mat-card-title>{{ track.title }}</mat-card-title>
+                    <mat-card-subtitle>{{ track.originalName }} · {{ formatType(track.mimeType) }} · {{ formatSize(track.size) }}</mat-card-subtitle>
+                    <small>Ajouté le {{ track.createdAt | date: 'dd/MM/yyyy' }}</small>
+                    @if (track.id === playingTrack()?.id) {
+                      @if (playbackFailed()) {
+                        <small class="error">⚠ Erreur de lecture</small>
+                      } @else {
+                        <small class="now-playing">▶ En cours de lecture</small>
+                      }
                     }
-                  }
+                  </div>
+                  <div class="track-actions">
+                    <button
+                      mat-icon-button
+                      (click)="confirmDelete(track)"
+                      [disabled]="deletingId() === track.id"
+                      [attr.aria-label]="'Supprimer ' + track.title"
+                    >
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                    </button>
+                    <button mat-mini-fab class="play-fab" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">
+                      <mat-icon aria-hidden="true">play_arrow</mat-icon>
+                    </button>
+                  </div>
                 </div>
-                <button mat-mini-fab class="play-fab" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">
-                  <mat-icon aria-hidden="true">play_arrow</mat-icon>
-                </button>
+                @if (track.id === playingTrack()?.id && audioUrl()) {
+                  <audio class="track-audio" [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
+                }
               </mat-card-content>
             </mat-card>
           </li>
@@ -60,6 +85,9 @@
           <p>Aucune piste.</p>
         }
       </ul>
+      @if (deleteError()) {
+        <p class="error">{{ deleteError() }}</p>
+      }
       <mat-paginator
         [length]="total()"
         [pageSize]="limit()"
@@ -70,10 +98,17 @@
       @if (audioError()) {
         <p class="error">{{ audioError() }}</p>
       }
-      @if (audioUrl()) {
-        <p>Lecture : <b>{{ playingTrack()?.title }}</b></p>
-        <audio [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
-      }
     </article>
   </div>
 </section>
+
+<ng-template #confirmDeleteDialog let-data>
+  <h2 mat-dialog-title>Supprimer « {{ data.track.title }} » ?</h2>
+  <mat-dialog-content>
+    Cette action est définitive : le fichier audio et ses métadonnées seront supprimés.
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button [mat-dialog-close]="false">Annuler</button>
+    <button mat-flat-button color="warn" [mat-dialog-close]="true">Supprimer</button>
+  </mat-dialog-actions>
+</ng-template>
