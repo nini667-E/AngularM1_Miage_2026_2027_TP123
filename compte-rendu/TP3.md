@@ -5,7 +5,7 @@
 
 ## Prérequis vérifiés
 
-- [ ] TP1 et TP2 fonctionnels (connexion, profil, pagination, upload, lecture)
+- [x] TP1 et TP2 fonctionnels (connexion, profil, pagination, upload, lecture) — 100% des points obligatoires + plusieurs AVANCÉ/facultatifs, mergés dans `main`
 
 ## Mission 5 — Suppression d'une piste
 
@@ -38,17 +38,35 @@ Pourquoi un upload avec progression ne se traite pas comme une requête HTTP
 
 ## Mission 7 — Tests automatisés
 
+**Approche choisie** : commencer par cette mission en premier (plutôt que
+dans l'ordre du sujet), puisque la plupart des autres missions du TP3
+étaient déjà partiellement faites pendant le TP2. Méthodologie complète,
+inventaire détaillé et règles de travail dans `../Tests.md` (document de
+référence, mis à jour au fil du TP3).
+
 Au moins 3 tests parmi la liste du sujet :
 
-- [ ] `AuthService.login()` → `POST /api/auth/login` avec le bon corps
-- [ ] `TrackService.list()` transmet `page`/`limit`
-- [ ] L'intercepteur ajoute `Authorization` si un token existe
-- [ ] Le guard redirige un utilisateur sans token
-- [ ] Le composant affiche une erreur après un échec HTTP
-- [ ] La suppression appelle `DELETE /api/tracks/:id` et recharge la liste
-- [ ] L'upload met à jour la progression et traite l'erreur
+- [x] `AuthService.login()` → `POST /api/auth/login` avec le bon corps
+- [x] `TrackService.list()` transmet `page`/`limit`
+- [x] L'intercepteur ajoute `Authorization` si un token existe
+- [x] Le guard redirige un utilisateur sans token
+- [ ] Le composant affiche une erreur après un échec HTTP (test de composant, en attente)
+- [ ] La suppression appelle `DELETE /api/tracks/:id` et recharge la liste (avec la Mission 5)
+- [ ] L'upload met à jour la progression et traite l'erreur (avec la Mission 6)
 
-Résultats attendus vs observés : …
+**4/7 faits, minimum de 3 déjà dépassé.** Détail des assertions et des
+résultats dans `../Tests.md`.
+
+**État des lieux trouvé avant d'écrire le moindre test** (0:00–0:15 du
+déroulé conseillé) : `npm test` frontend ne fonctionnait pas du tout —
+`jsdom` manquant et `angular.json` sans configuration `build:development`
+(dépendance implicite du target `test`). Les deux corrigés avant de
+pouvoir écrire quoi que ce soit.
+
+**Bonus** (motivés par des bugs réels trouvés en TP1/TP2, pas demandés
+par le sujet) : `serverErrorMessage()`, `formatFileSize()`,
+`formatAudioType()` — exportées depuis `tracks-page.ts` et testées
+isolément. Détail dans `../Tests.md`.
 
 ### Extension backend (facultative)
 
@@ -59,12 +77,17 @@ Résultats attendus vs observés : …
 - [ ] Pagination `page`/`limit`
 - [ ] Accès interdit à la piste d'un autre utilisateur
 
+Analyse préalable (dans `../Tests.md`) : seul le dernier cas a vraiment
+besoin de MongoDB — le middleware `auth` ne vérifie que la signature du
+JWT, jamais l'existence de l'utilisateur en base. Pas encore implémenté,
+à faire sur demande.
+
 ## Vérifications finales
 
-- [ ] Tests frontend lancés
-- [ ] Tests backend lancés
-- [ ] `npm run build` exécuté sans erreur
-- [ ] Aucune donnée sensible journalisée dans la console
+- [x] Tests frontend lancés — 5 fichiers, 15 tests, tous au vert
+- [x] Tests backend lancés — 2/2 toujours au vert (non modifiés)
+- [x] `npm run build` exécuté sans erreur
+- [ ] Aucune donnée sensible journalisée dans la console (à revérifier une fois Missions 5/6 faites)
 
 ## Restitution orale — points à savoir expliquer
 

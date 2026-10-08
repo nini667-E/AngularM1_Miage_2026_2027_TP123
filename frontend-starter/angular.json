@@ -21,6 +21,12 @@
                           "src/material-theme.scss",
                           "src/styles.css"
                         ]
+                    },
+                    "configurations": {
+                        "development": {
+                            "optimization": false,
+                            "sourceMap": true
+                        }
                     }
                 },
                 "serve": {

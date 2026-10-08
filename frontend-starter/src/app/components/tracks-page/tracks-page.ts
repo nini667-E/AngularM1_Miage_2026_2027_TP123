@@ -14,7 +14,7 @@ import { TrackService } from '../../shared/services/track.service';
 // (connexion refusée, backend arrêté...) : error.error est alors une erreur
 // technique du navigateur (ex. "Failed to fetch"), pas un message applicatif
 // à afficher tel quel à l'utilisateur.
-function serverErrorMessage(error: HttpErrorResponse, fallback: string): string {
+export function serverErrorMessage(error: HttpErrorResponse, fallback: string): string {
   return error.status > 0 ? (error.error?.message ?? fallback) : fallback;
 }
 
@@ -41,12 +41,12 @@ const FORMAT_LABELS: Record<string, string> = {
   'audio/x-m4a': 'M4A',
 };
 
-function formatAudioType(mimeType: string): string {
+export function formatAudioType(mimeType: string): string {
   return FORMAT_LABELS[mimeType] ?? mimeType;
 }
 
 // track.size est en octets (taille brute renvoyée par multer côté backend).
-function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
   const ko = bytes / 1024;
   if (ko < 1024) return `${ko.toFixed(1)} Ko`;

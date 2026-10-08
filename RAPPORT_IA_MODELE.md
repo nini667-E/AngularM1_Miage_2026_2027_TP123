@@ -1880,4 +1880,118 @@ reste du ressort de l'utilisateur (ressenti UX, préférence visuelle).
 
 ---
 
-_Points suivants du TP2 à compléter au fur et à mesure._
+## TP3 — Fiabilisation et enrichissement du frontend
+
+> Travail effectué sur la branche Git `TP3`.
+
+### Entrée 3.1 — Mission 7 : fondations de la suite de tests automatisés
+
+**Objectif.** Démarrer le TP3 par la Mission 7 plutôt que dans l'ordre du
+sujet, puisque la plupart des autres missions étaient déjà partiellement
+couvertes par le TP2 — construire une vraie suite de tests reproductible
+et un document de référence (`Tests.md`) pour la suite du TP3.
+
+**Prompts principaux (recopiés tels quels) :**
+> on va commencer par la mission 7, les tests automatisés [...] on va
+> construire ça et créer un fichier Tests.md qui sera à suivre pour la
+> suite. Selon les consignes de la mission 7 et l'expérience que t'as eu
+> depuis qu'on a commencé à travailler sur cette appli, tu penses qu'on
+> devrait articuler ça comment ?
+>
+> oui ça me va comme plan mais fait pas la mission 5 tout de suite. Juste
+> une précision sur les tests, ils doivent se faire après implémentation
+> d'une nouvelle fonctionnalité et à ma demande. Pas besoin de tout revoir
+> à chaque fois à part dans les cas où des fonctionnalités pourrait
+> interférer avec d'autres, vu que t'as déjà fait un check up maintenant
+> on peut considérer que jusqu'ici tout est correctement testé. Les tests
+> doivent être complets, back, front etc build appli dans le navigateur
+
+**Règles de travail validées, consignées dans `Tests.md`.** Tests écrits
+après l'implémentation d'une fonctionnalité et sur demande explicite
+(pas automatiquement à chaque modification) ; tout ce qui précède ce
+document (TP1+TP2) considéré comme suffisamment couvert par les tests
+manuels déjà faits, pas de reprise rétroactive systématique ; un test
+"complet" couvre tous les niveaux concernés (backend si l'API est
+touchée, frontend, `npm run build`, vérification navigateur réelle).
+
+**État des lieux trouvé avant d'écrire le moindre test (0:00–0:15 du
+déroulé conseillé de la Mission 7).** `npm test` frontend ne fonctionnait
+**pas du tout**, pour deux raisons indépendantes du contenu des tests :
+1. `jsdom` manquant — `@angular/build:unit-test` (builder Angular pilotant
+   Vitest) a besoin d'un environnement DOM, jamais installé dans ce
+   starter.
+2. `angular.json` incomplet — le target `test` dépend implicitement d'une
+   configuration `build:development`, jamais définie (seule une
+   configuration par défaut existait).
+
+Les deux corrigés (`npm install -D jsdom` ; ajout d'une configuration
+`development` minimale sur le target `build`) avant de pouvoir écrire quoi
+que ce soit — exactement le type de "manque identifié" que la Mission 7
+demande de repérer en premier.
+
+**Piège découvert en écrivant le premier test.** Les globals Jasmine
+(`describe`/`it`/`expect`/`beforeEach`/`afterEach`) ne sont pas injectés
+automatiquement par ce setup Vitest, contrairement à l'ancien
+Karma+Jasmine — première tentative échouée (`Cannot find name
+'describe'`), corrigée en les important explicitement depuis `'vitest'`.
+
+**4 des 7 tests frontend suggérés par le sujet écrits**, sur du code
+stable depuis TP1/TP2 (pas une nouvelle fonctionnalité — traités dès la
+mise en place du harnais, minimum de 3 déjà dépassé) :
+- `AuthService.login()` → corps exact `{ email, password }` + mise à jour
+  des Signals `token`/`currentUser` (`auth.service.spec.ts`)
+- `TrackService.list()` → `page`/`limit` en query params (`track.service.spec.ts`)
+- `authInterceptor` → ajoute `Authorization` si token présent, aucun
+  header sinon (`auth.interceptor.spec.ts`)
+- `authGuard` → autorise si token, redirige vers `/login` sinon
+  (`auth.guard.spec.ts`)
+
+Les 3 restants (erreur affichée par un composant, suppression, upload)
+nécessitent soit un composant monté soit les Missions 5/6 pas encore
+faites — volontairement laissés en attente, conformément à "pas la
+mission 5 tout de suite" et à la règle "tests après implémentation".
+
+**Bonus, motivé par notre historique de bugs réels (pas demandé par le
+sujet).** `serverErrorMessage()`, `formatFileSize()`, `formatAudioType()`
+— trois fonctions pures de `tracks-page.ts`, jamais exportées jusqu'ici
+(donc jamais testables isolément). Exportées (`export function ...`,
+aucun changement de comportement) spécifiquement pour ce test. Chaque cas
+de test est directement relié à un bug réel trouvé en test manuel pendant
+TP1/TP2 (ex. `serverErrorMessage()` reproduit exactement le bug "Failed to
+fetch" de TP2, Mission 3) — preuve concrète que ces fonctions méritaient
+un test dès le départ.
+
+**Analyse préalable pour l'extension backend (facultative, pas encore
+implémentée).** Repéré que le middleware `auth`
+(`backend/src/app.js`) ne vérifie que la signature du JWT, jamais
+l'existence réelle de l'utilisateur en base — donc la plupart des tests
+suggérés (401 sans JWT, JWT invalide, upload sans fichier, type MIME
+refusé, pagination) peuvent s'écrire sans connexion MongoDB. Un seul cas
+y échappe : l'accès interdit à la piste d'un autre utilisateur, qui a
+besoin d'une vraie piste en base. Détail dans `Tests.md`.
+
+**Fichiers effectivement modifiés.** `frontend-starter/angular.json`,
+`package.json`/`package-lock.json` (`jsdom`) ; 5 nouveaux fichiers
+`*.spec.ts` (`auth.service.spec.ts`, `track.service.spec.ts`,
+`auth.interceptor.spec.ts`, `auth.guard.spec.ts`,
+`tracks-page.utils.spec.ts`) ; `tracks-page.ts` (3 fonctions passées en
+`export`) ; `Tests.md` (nouveau, racine du projet) ; `compte-rendu/TP3.md`
+(Mission 7 renseignée) ; `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** `npm test` (frontend) : 5 fichiers, 15 tests,
+tous au vert. `npm run build` (frontend) : succès. `npm test` (backend) :
+toujours 2/2 (non touché). Les trois vérifiés par l'assistant lui-même
+dans ce tour.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi `npm test` peut rester
+cassé silencieusement pendant tout un projet si personne ne l'exécute
+jamais (deux causes indépendantes trouvées ici, aucune liée au contenu
+des tests) ; pourquoi des fonctions pures extraites et exportées sont les
+tests les moins chers à écrire et à maintenir ; pourquoi un middleware
+d'authentification qui ne vérifie que la signature d'un JWT (sans
+requête DB) permet de tester toute la chaîne de validation en amont sans
+jamais dépendre d'une vraie base de données.
+
+---
+
+_Points suivants du TP3 à compléter au fur et à mesure._

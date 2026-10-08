@@ -23,7 +23,7 @@ des TP consistent à le compléter, le fiabiliser et l'enrichir (voir
 | Formulaires | Reactive Forms (`FormGroup`, `FormControl`) | Saisie inscription/connexion/profil/upload |
 | HTTP | `HttpClient` + intercepteur fonctionnel | Appels API, ajout du JWT |
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
-| Build/test | Angular CLI 22, Vitest 4 (configuré, aucun test écrit) | `ng serve`, `ng build`, `ng test` |
+| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés, 5 fichiers `*.spec.ts`) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
 | Composants UI | Angular Material 22.2.1 + CDK (ajoutés TP2, Mission 3) | `mat-card`, `mat-paginator`, `mat-dialog`, `mat-button`/`mat-icon` — uniquement sur `TracksPageComponent` pour l'instant, thème Material 3 custom (`material-theme.scss`, palette verte) |
 
@@ -668,7 +668,7 @@ réellement complétée.
 | Facultatif | Suppression d'une piste (`DELETE /api/tracks/:id`) + confirmation | ✅ Fait — `TrackService.delete()`, confirmation via `MatDialog`, rafraîchissement + nettoyage du lecteur regroupés dans la même implémentation |
 | Facultatif | Filtre par titre | ✅ Fait — paramètre `title` sur `GET /api/tracks` (premier changement backend de la session), Signal `titleFilter` |
 | TP3 · M6 | Progression d'upload (`reportProgress`, événements HTTP) | ❌ Absent (`upload()` ne suit pas la progression) |
-| TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ❌ Aucun fichier `*.spec.ts` applicatif (Vitest configuré mais inutilisé) |
+| TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ⚠️ 4/7 faits (minimum dépassé) : `AuthService`, `TrackService`, `authInterceptor`, `authGuard`. Composant/suppression/upload en attente (Missions 5/6). Détail : `Tests.md` |
 
 ---
 
@@ -736,3 +736,8 @@ réellement complétée.
   tests API directs. Bug trouvé dès le premier test : `mat-paginator` en
   anglais par défaut — corrigé avec `FrenchPaginatorIntl`, fourni dans
   `main.ts` (§2.1, §7).
+- **08/10** — TP3, Mission 7 : `npm test` rendu fonctionnel (`jsdom`
+  manquant, config `build:development` absente), 5 fichiers `*.spec.ts`
+  (15 tests) ; `serverErrorMessage`/`formatFileSize`/`formatAudioType`
+  exportées depuis `tracks-page.ts` pour être testables isolément. Voir
+  `Tests.md` (§1.1, §7).
