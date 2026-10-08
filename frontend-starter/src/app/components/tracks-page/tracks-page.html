@@ -9,7 +9,7 @@
     <article class="card">
       <h2>Importer</h2>
       <label>Titre<input [formControl]="title" /></label>
-      <label>Fichier audio<input type="file" accept="audio/*" (change)="choose($event)" /></label>
+      <label>Fichier audio<input #fileInput type="file" accept="audio/*" (change)="choose($event)" [disabled]="uploading()" /></label>
       @if (uploadError()) {
         <p class="error">{{ uploadError() }}</p>
       }
@@ -17,7 +17,20 @@
         <p class="success">{{ uploadSuccess() }}</p>
       }
       @if (uploading()) {
-        <p>Envoi en cours…</p>
+        <div class="upload-progress">
+          <mat-progress-bar
+            mode="determinate"
+            [value]="uploadProgress()"
+            aria-label="Progression de l'envoi"
+          ></mat-progress-bar>
+          <!-- 100 % = octets envoyés, mais le serveur doit encore écrire le
+               fichier et enregistrer la piste en base avant de répondre. -->
+          @if (uploadProgress() < 100) {
+            <p>Envoi : {{ uploadProgress() }} %</p>
+          } @else {
+            <p>Finalisation…</p>
+          }
+        </div>
       }
       <button type="button" (click)="upload()" [disabled]="!file || uploading()">Envoyer</button>
     </article>
@@ -85,9 +98,6 @@
           <p>Aucune piste.</p>
         }
       </ul>
-      @if (deleteError()) {
-        <p class="error">{{ deleteError() }}</p>
-      }
       <mat-paginator
         [length]="total()"
         [pageSize]="limit()"

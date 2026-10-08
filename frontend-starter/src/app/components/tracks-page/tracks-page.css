@@ -1,1 +1,5 @@
 :host { display: block; }
+
+/* Barre de progression de l'upload (Mission 6, TP3) */
+.upload-progress { margin: 0.75rem 0; }
+.upload-progress p { margin: 0.25rem 0 0; }

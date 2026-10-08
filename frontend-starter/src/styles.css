@@ -34,7 +34,7 @@ label { margin: 0.8rem 0; }
 input { padding: 0.75rem; border: 1px solid #b8cbc5; border-radius: 8px; }
 /* Les boutons Material (mat-icon-button, etc.) gèrent déjà leur propre
    apparence ; on ne leur applique pas le style "bouton vert" fait maison. */
-button:not([mat-icon-button]):not([mat-button]):not([mat-raised-button]):not([mat-flat-button]):not([mat-stroked-button]):not([mat-fab]):not([mat-mini-fab]) {
+button:not([mat-icon-button]):not([mat-button]):not([mat-raised-button]):not([mat-flat-button]):not([mat-stroked-button]):not([mat-fab]):not([mat-mini-fab]):not(.mat-mdc-button-base) {
   padding: 0.7rem 1rem;
   color: white;
   background: #1d755e;
@@ -74,4 +74,18 @@ audio { width: 100%; }
   header, .grid { display: block; }
   nav { margin-top: 1rem; }
   .grid .card { margin-bottom: 1rem; }
+}
+
+/* SnackBar de la suppression (TP3, Mission 5) : la SnackBar est rendue dans
+   un overlay hors du composant, d'où un style global. Couleurs reprises de
+   .success / .error. */
+.mat-mdc-snack-bar-container.snack-success {
+  --mat-snack-bar-container-color: #1d755e;
+  --mat-snack-bar-supporting-text-color: #fff;
+  --mat-snack-bar-button-color: #fff;
+}
+.mat-mdc-snack-bar-container.snack-error {
+  --mat-snack-bar-container-color: #a33;
+  --mat-snack-bar-supporting-text-color: #fff;
+  --mat-snack-bar-button-color: #fff;
 }

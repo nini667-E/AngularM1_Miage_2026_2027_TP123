@@ -21,11 +21,11 @@ des TP consistent à le compléter, le fiabiliser et l'enrichir (voir
 | Framework | Angular 22 (standalone components) | UI, routage, DI |
 | Rendu réactif | Signals (`signal`, pas de `computed`/`effect` pour l'instant) | État local et partagé |
 | Formulaires | Reactive Forms (`FormGroup`, `FormControl`) | Saisie inscription/connexion/profil/upload |
-| HTTP | `HttpClient` + intercepteur fonctionnel | Appels API, ajout du JWT |
+| HTTP | `HttpClient` + intercepteur fonctionnel ; mécanisme XHR forcé par `withXhr()` (TP3, Mission 6, 08/10/2026) | Appels API, ajout du JWT, progression d'upload |
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
-| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés, 5 fichiers `*.spec.ts`) | `ng serve`, `ng build`, `ng test` |
+| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés, 6 fichiers `*.spec.ts` / 25 tests au 08/10/2026) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
-| Composants UI | Angular Material 22.2.1 + CDK (ajoutés TP2, Mission 3) | `mat-card`, `mat-paginator`, `mat-dialog`, `mat-button`/`mat-icon` — uniquement sur `TracksPageComponent` pour l'instant, thème Material 3 custom (`material-theme.scss`, palette verte) |
+| Composants UI | Angular Material 22.2.1 + CDK (ajoutés TP2, Mission 3) | `mat-card`, `mat-paginator`, `mat-dialog`, `mat-button`/`mat-icon`, `mat-progress-bar` + `MatSnackBar` (TP3, 08/10/2026) — uniquement sur `TracksPageComponent` pour l'instant, thème Material 3 custom (`material-theme.scss`, palette verte) |
 
 ### 1.2 Arborescence
 
@@ -101,13 +101,25 @@ explicite des sujets de TP, déjà respectée par le starter.
 ```mermaid
 flowchart TD
     A[bootstrapApplication AppComponent] --> B[provideRouter routes]
-    A --> C["provideHttpClient(withInterceptors([authInterceptor]))"]
+    A --> C["provideHttpClient(withXhr(), withInterceptors([authInterceptor]))"]
     A --> D[provideAnimationsAsync]
     A --> E["MatPaginatorIntl -> FrenchPaginatorIntl"]
 ```
 
 Tous les appels HTTP de l'application passent donc systématiquement par
 `authInterceptor` (configuration globale, pas de config par service).
+
+**`withXhr()` (TP3, Mission 6, 08/10/2026).** Depuis Angular 22,
+`provideHttpClient()` envoie les requêtes avec l'API **`fetch`** du
+navigateur par défaut (`FetchBackend`). Or `fetch` ne sait pas suivre la
+progression d'un **envoi** (seulement d'un téléchargement) : la barre de
+progression de l'upload restait bloquée à 0 %. `withXhr()` remet
+`XMLHttpRequest` (`HttpXhrBackend`), qui expose `xhr.upload.onprogress`.
+Choix global : il s'applique à **toutes** les requêtes de l'app ; vérifié
+sans régression (connexion, liste, lecture audio, suppression),
+l'intercepteur fonctionnant de la même façon avec les deux mécanismes. Les
+avertissements Angular liés à `withXhr()` ne concernent que le rendu
+serveur (SSR) et des options non utilisées ici (`keepalive`, `priority`…).
 `provideAnimationsAsync()` (ajouté TP2, Mission 3) est nécessaire pour les
 interactions Angular Material (ripple, transitions de `mat-dialog`,
 etc.) ; sans lui ces composants fonctionnent mais sans retour visuel
@@ -308,9 +320,9 @@ return next(authorizedRequest).pipe(
 | Méthode | Requête HTTP | Utilisation |
 |---|---|---|
 | `list(page, limit=5, title='')` | `GET /api/tracks?page=&limit=&title=` | Pagination serveur + filtre par titre (facultatif, ajouté TP2) |
-| `upload(file, title)` | `POST /api/tracks` (`FormData`: `audio`, `title`) | Envoi d'un fichier audio |
+| `upload(file, title)` | `POST /api/tracks` (`FormData`: `audio`, `title`), options `{ reportUploadProgress: true, observe: 'events' }` → `Observable<HttpEvent<Track>>` (TP3, Mission 6) | Envoi d'un fichier audio avec suivi de progression |
 | `audio(id)` | `GET /api/tracks/:id/audio` (`responseType: 'blob'`) | Récupération du binaire audio |
-| `delete(id)` | `DELETE /api/tracks/:id` | Suppression (Mission 3, améliorations facultatives) |
+| `delete(id)` | `DELETE /api/tracks/:id` | Suppression (Mission 3 TP2 ; réactions par statut + SnackBar en TP3, Mission 5) |
 
 ### 4.2 État réactif du composant
 
@@ -318,11 +330,14 @@ Signals exposés par `TracksPageComponent` :
 `tracks`, `page`, `total`, `limit`, `loading`, `error` (ajouté Mission 2,
 TP2 — voir ci-dessous), `uploadError`, `uploadSuccess`, `uploading`,
 `playingTrack`, `playbackFailed`, `audioError` (ajoutés Mission 3, TP2 —
-voir plus bas), `deleteError`, `deletingId` (ajoutés avec la suppression,
+voir plus bas), `uploadProgress` (ajouté TP3, Mission 6, 08/10/2026 —
+pourcentage 0-100, significatif seulement pendant `uploading()`), `deletingId` (ajouté avec la suppression ; `deleteError` a été retiré en TP3, Mission 5, remplacé par une `MatSnackBar`,
 Mission 3) et `audioUrl`, plus deux `FormControl` : `title` (formulaire
 d'upload) et `titleFilter` (champ de recherche, amélioration facultative
 TP2 — à ne pas confondre malgré le nom proche), et une propriété classique
-`file?: File` (choix de fichier, pas encore un Signal). Le
+`file?: File` (choix de fichier, pas encore un Signal) et une référence
+`@ViewChild('fileInput')` vers l'`<input type="file">` (TP3, Mission 6 :
+pour le vider après un envoi réussi). Le
 Signal `pages` (nombre total de pages, stocké manuellement depuis
 `response.pages`) a été remplacé par `total` (nombre total de pistes,
 `response.total`) : `mat-paginator` recalcule lui-même le nombre de pages
@@ -388,21 +403,27 @@ sequenceDiagram
     end
     U->>C: clic "Envoyer" -> upload()
     C->>C: garde if (!file || uploading()) return
-    C->>C: uploading.set(true)
-    C->>C: uploadError.set(''), uploadSuccess.set('')
+    C->>C: uploading.set(true), uploadProgress.set(0)
+    C->>C: uploadError.set(''), uploadSuccess.set(''), title.disable()
     C->>S: service.upload(file, title)
     S->>S: FormData: append('audio', file), append('title', title)
-    S->>API: POST /api/tracks (multipart/form-data)
+    S->>API: POST /api/tracks (multipart/form-data, XHR)
+    loop pendant l'envoi (plusieurs HttpEvent)
+        S-->>C: HttpEventType.UploadProgress {loaded, total}
+        C->>C: uploadProgress.set(round(100 * loaded / total))
+    end
+    Note over C: à 100 % : "Finalisation…" (Multer + MongoDB<br/>pas encore terminés côté serveur)
     alt succès
         API-->>S: 201 track
-        S-->>C: track créé
-        C->>C: uploadSuccess.set(message), reset title/file, page.set(1), load()
+        S-->>C: HttpEventType.Response (body = track)
+        C->>C: uploading.set(false), title.enable()
+        C->>C: reset title/file + fileInput.value = '', page.set(1), load(), uploadSuccess.set(message)
     else échec
         API-->>S: 400/... ou aucune réponse (backend injoignable)
-        S-->>C: erreur
+        S-->>C: erreur (callback error)
+        C->>C: uploading.set(false), title.enable()
         C->>C: uploadError.set(serverErrorMessage(error, repli))
     end
-    C->>C: uploading.set(false)
 
     U->>C: clic ▶ sur une piste -> play(track)
     C->>C: audioError.set(''), playbackFailed.set(false), uploadSuccess.set('')
@@ -447,6 +468,34 @@ deux callbacks (`next`/`error`). La garde
 condition côté logique et côté UI — évite une double soumission par clic
 répété pendant qu'une requête est déjà en cours, sans deux logiques à
 synchroniser séparément.
+
+**Progression de l'upload (TP3, Mission 6, 08/10/2026).** Avec
+`observe: 'events'` + `reportUploadProgress`, l'Observable de
+`TrackService.upload()` n'émet plus une seule réponse finale mais une
+**suite d'`HttpEvent`** : `Sent`, plusieurs `UploadProgress`,
+`ResponseHeader`, `Response`. Le `next` est donc appelé plusieurs fois et
+trie selon `event.type` :
+- `UploadProgress` → `uploadProgress.set(Math.round(100 * loaded / total))`,
+  seulement si `total` est connu (sinon on garde le dernier pourcentage
+  plutôt que `NaN`) ;
+- `Response` → réussite (seul cet événement contient la piste créée) ;
+- les autres types sont ignorés.
+
+Les 4 états demandés se déduisent des Signals existants : aucun upload
+(`uploading()` faux, pas de message), en cours (`uploading()` vrai,
+`mat-progress-bar` en mode `determinate` + « Envoi : N % »), réussite
+(`uploadSuccess()`), échec (`uploadError()`). À 100 %, le texte devient
+« Finalisation… » : tous les octets sont partis mais le serveur doit
+encore écrire le fichier (Multer) et enregistrer la piste (MongoDB) avant
+de répondre `201`. Pendant l'envoi, le champ Titre est désactivé par
+`title.disable()`/`enable()` (API du `FormControl`, recommandée plutôt
+qu'un `[disabled]` sur un contrôle réactif), le sélecteur de fichier et le
+bouton par `[disabled]="uploading()"`. Après succès, `fileInput.nativeElement.value = ''`
+vide le sélecteur (avant, `file` était remis à `undefined` mais le nom du
+fichier restait affiché). Nécessite `withXhr()` dans `main.ts` (§2.1) :
+c'était la cause d'un bug « barre bloquée à 0 % » trouvé en vérification
+navigateur, invisible pour les tests unitaires (`provideHttpClientTesting()`
+remplace complètement le mécanisme HTTP du navigateur).
 
 **Message de succès + erreurs serveur, et bug "Failed to fetch" corrigé
 (Mission 3, TP2).** `uploadSuccess` (nouveau) et `uploadError` (réutilisé,
@@ -569,6 +618,66 @@ regroupe dans la même implémentation les deux points facultatifs du
 sujet "suppression avec confirmation" et "rafraîchissement après
 suppression", qui décrivent en réalité la même action.
 
+**Suppression complétée (TP3, Mission 5, 08/10/2026).**
+
+```mermaid
+sequenceDiagram
+    participant U as Utilisateur
+    participant C as TracksPageComponent
+    participant S as TrackService
+    participant API as Backend
+
+    U->>C: clic poubelle -> confirmDelete(track)
+    C->>C: garde : deletingId() ou fenêtre déjà ouverte -> return
+    C->>U: MatDialog "Supprimer « X » ?"
+    U->>C: Supprimer -> performDelete(track)
+    C->>C: deletingId.set(track.id) (bouton désactivé)
+    C->>S: service.delete(track.id)
+    S->>API: DELETE /api/tracks/:id (JWT via intercepteur)
+    Note over API: findOneAndDelete({ _id, ownerId: req.auth.sub })
+    alt 204
+        C->>C: SnackBar verte + afterTrackRemoved(track)
+    else 404 (supprimée ailleurs OU pas au propriétaire)
+        C->>C: SnackBar rouge "n'existe plus ou ne vous appartient pas" + afterTrackRemoved(track)
+    else 500 (métadonnée supprimée, fichier resté)
+        C->>C: SnackBar rouge (message backend) + afterTrackRemoved(track)
+    else 401
+        Note over C: authInterceptor -> logout + /login
+    else 0 / autre (réseau)
+        C->>C: SnackBar rouge "Suppression impossible", liste inchangée
+    end
+    C->>C: deletingId.set(null)
+```
+
+- `afterTrackRemoved(track)` regroupe le nettoyage qui n'existait qu'en
+  cas de succès (lecteur coupé + `revokeObjectURL`, recul d'une page,
+  `load()`) : il est maintenant aussi appelé pour `404` et `500`, cas où
+  la piste n'existe plus côté serveur. Avant, une carte « fantôme »
+  restait affichée après un `404`.
+- Le backend renvoie volontairement le **même** `404` pour une piste
+  supprimée et pour la piste d'un autre utilisateur (ne pas révéler son
+  existence) : le frontend ne les distingue pas, un seul message.
+- `notify(message, isError)` ouvre la `MatSnackBar` avec une
+  `panelClass` (`snack-success` / `snack-error`). La SnackBar est rendue
+  dans un **overlay CDK** hors du composant : ses styles sont donc dans
+  `src/styles.css` (tokens `--mat-snack-bar-*`), pas dans
+  `tracks-page.css` (encapsulé).
+- Garde anti double-clic en tête de `confirmDelete()` :
+  `deletingId` ne bloque qu'**après** la confirmation ; deux clics plus
+  rapides que l'affichage de la fenêtre en ouvraient deux.
+  `this.dialog.openDialogs.length` empêche d'en ouvrir une seconde.
+- Sécurité : le guard et l'interface ne protègent rien (contournables par
+  `curl`) ; la protection réelle est côté backend (signature du JWT +
+  filtre `ownerId` issu du token). Voir `backend/analyse.md` §4.3.
+
+**Style global des boutons (TP3, Mission 5, 08/10/2026).** La règle
+`button:not([mat-icon-button]):not([mat-button])…` de `styles.css` excluait
+les boutons Material par leurs **attributs**, mais Material 22 utilise
+aussi `matButton` (ex. le bouton « OK » de la SnackBar), qui recevait le
+fond vert. Ajout de `:not(.mat-mdc-button-base)`, classe portée par tous
+les boutons Material. Effet de bord : les flèches de `mat-paginator`, qui
+recevaient elles aussi ce fond vert, ont retrouvé le style Material.
+
 **Filtre par titre (amélioration facultative, TP2) — premier changement
 backend de la session.** `title` ajouté en paramètre optionnel de
 `GET /api/tracks` (`backend/src/app.js`), recherche par sous-chaîne
@@ -667,8 +776,9 @@ réellement complétée.
 | TP2 · M3 | Cards responsives/accessibles avec plus de métadonnées | ✅ Fait (Mission 3) — refonte avec Angular Material (`mat-card`), format/taille/date lisibles |
 | Facultatif | Suppression d'une piste (`DELETE /api/tracks/:id`) + confirmation | ✅ Fait — `TrackService.delete()`, confirmation via `MatDialog`, rafraîchissement + nettoyage du lecteur regroupés dans la même implémentation |
 | Facultatif | Filtre par titre | ✅ Fait — paramètre `title` sur `GET /api/tracks` (premier changement backend de la session), Signal `titleFilter` |
-| TP3 · M6 | Progression d'upload (`reportProgress`, événements HTTP) | ❌ Absent (`upload()` ne suit pas la progression) |
-| TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ⚠️ 4/7 faits (minimum dépassé) : `AuthService`, `TrackService`, `authInterceptor`, `authGuard`. Composant/suppression/upload en attente (Missions 5/6). Détail : `Tests.md` |
+| TP3 · M5 | Suppression : SnackBar, piste déjà supprimée / pas au propriétaire (404), anti double-clic | ✅ Fait (08/10/2026) — base TP2 + `MatSnackBar` (`notify()`), réaction par statut (204/404/500/0, 401 laissé à l'intercepteur), `afterTrackRemoved()`, garde `openDialogs` dans `confirmDelete()` |
+| TP3 · M6 | Progression d'upload (événements HTTP) | ✅ Fait (08/10/2026) — `reportUploadProgress` + `observe: 'events'`, Signal `uploadProgress`, `mat-progress-bar`, 4 états, contrôles désactivés ; `withXhr()` dans `main.ts` (`fetch`, défaut d'Angular 22, ne remonte pas la progression d'envoi) |
+| TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ✅ 7/7 (08/10/2026) — `AuthService`, `TrackService`, `authInterceptor`, `authGuard`, + `tracks-page.spec.ts` (erreur HTTP affichée, suppression, upload avec progression). Détail : `Tests.md` |
 
 ---
 
@@ -741,3 +851,16 @@ réellement complétée.
   (15 tests) ; `serverErrorMessage`/`formatFileSize`/`formatAudioType`
   exportées depuis `tracks-page.ts` pour être testables isolément. Voir
   `Tests.md` (§1.1, §7).
+- **08/10/2026** — TP3, Mission 6 : progression de l'upload
+  (`reportUploadProgress` + `observe: 'events'`, Signal `uploadProgress`,
+  `mat-progress-bar`, contrôles désactivés, sélecteur vidé après succès) ;
+  `withXhr()` ajouté dans `main.ts` après le bug « barre bloquée à 0 % »
+  (`fetch` par défaut depuis Angular 22) (§1.1, §2.1, §4.1, §4.2, §4.4, §7).
+- **08/10/2026** — TP3, Mission 5 : suppression complétée (`MatSnackBar`
+  via `notify()`, réaction par statut 204/404/500/0, `afterTrackRemoved()`,
+  garde anti double-fenêtre dans `confirmDelete()`, Signal `deleteError`
+  retiré) ; style global `button` : exclusion `.mat-mdc-button-base`
+  (§1.1, §4.1, §4.2, §4.4, §7).
+- **08/10/2026** — TP3, Mission 7 terminée : `tracks-page.spec.ts`
+  (10 tests de composant : erreur HTTP, suppression, upload/progression) ;
+  6 fichiers / 25 tests (§1.1, §7).

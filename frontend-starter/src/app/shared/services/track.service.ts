@@ -15,11 +15,19 @@ export class TrackService {
     return this.http.get<Page<Track>>('/api/tracks', { params });
   }
 
+  // observe: 'events' + reportUploadProgress : l'Observable n'émet plus une
+  // seule réponse finale mais une suite d'HttpEvent (Sent, UploadProgress...,
+  // Response) ; c'est au composant de trier selon event.type.
+  // Nécessite withXhr() dans main.ts (fetch ne remonte pas la progression
+  // d'envoi ; sans XHR, Angular lève une erreur explicite).
   upload(file: File, title: string) {
     const body = new FormData();
     body.append('audio', file);
     body.append('title', title);
-    return this.http.post<Track>('/api/tracks', body);
+    return this.http.post<Track>('/api/tracks', body, {
+      reportUploadProgress: true,
+      observe: 'events',
+    });
   }
 
   audio(id: string) {

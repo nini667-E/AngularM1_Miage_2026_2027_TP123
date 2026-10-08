@@ -1,12 +1,14 @@
-import { Component, inject, OnDestroy, signal, TemplateRef, ViewChild } from '@angular/core';
+import { Component, ElementRef, inject, OnDestroy, signal, TemplateRef, ViewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { Track } from '../../shared/models/track.model';
 import { TrackService } from '../../shared/services/track.service';
 
@@ -62,6 +64,7 @@ export function formatFileSize(bytes: number): string {
     MatIconModule,
     MatPaginatorModule,
     MatDialogModule,
+    MatProgressBarModule,
   ],
   templateUrl: './tracks-page.html',
   styleUrl: './tracks-page.css',
@@ -69,8 +72,10 @@ export function formatFileSize(bytes: number): string {
 export class TracksPageComponent implements OnDestroy {
   private readonly service = inject(TrackService);
   private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
 
   @ViewChild('confirmDeleteDialog') confirmDeleteDialog!: TemplateRef<{ track: Track }>;
+  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
   readonly tracks = signal<Track[]>([]);
   readonly page = signal(1);
@@ -89,7 +94,9 @@ export class TracksPageComponent implements OnDestroy {
   readonly uploadError = signal('');
   readonly uploadSuccess = signal('');
   readonly uploading = signal(false);
-  readonly deleteError = signal('');
+  // Pourcentage d'octets déjà envoyés (0-100), significatif seulement
+  // pendant uploading().
+  readonly uploadProgress = signal(0);
   readonly deletingId = signal<string | null>(null);
   file?: File;
 
@@ -160,23 +167,43 @@ export class TracksPageComponent implements OnDestroy {
     if (!this.file || this.uploading()) return;
 
     this.uploading.set(true);
+    this.uploadProgress.set(0);
     this.uploadError.set('');
     this.uploadSuccess.set('');
-    this.service.upload(this.file, this.title.value || this.file.name).subscribe({
-      next: (track) => {
-        console.debug('[TracksPage] Piste envoyée', track.id);
-        this.uploading.set(false);
-        this.title.setValue('');
-        this.file = undefined;
-        this.page.set(1);
-        // load() vide uploadSuccess en tout premier (synchrone) : on
-        // l'appelle avant de fixer le message pour que celui-ci survive.
-        this.load();
-        this.uploadSuccess.set(`« ${track.title} » ajoutée avec succès.`);
+    const title = this.title.value || this.file.name;
+    // Contrôle réactif : on le désactive via l'API du FormControl plutôt
+    // qu'avec [disabled] dans le template (déconseillé par Angular).
+    this.title.disable();
+    this.service.upload(this.file, title).subscribe({
+      // next est appelé plusieurs fois (un HttpEvent par étape) : seul
+      // l'événement Response signifie que le serveur a créé la piste.
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress) {
+          // total peut être inconnu (undefined) : on garde alors le dernier
+          // pourcentage plutôt que d'afficher NaN.
+          if (event.total) {
+            this.uploadProgress.set(Math.round((100 * event.loaded) / event.total));
+          }
+        } else if (event.type === HttpEventType.Response && event.body) {
+          const track = event.body;
+          console.debug('[TracksPage] Piste envoyée', track.id);
+          this.uploading.set(false);
+          this.title.enable();
+          this.title.setValue('');
+          this.file = undefined;
+          // Sinon le sélecteur affiche encore le nom du fichier déjà envoyé.
+          this.fileInput.nativeElement.value = '';
+          this.page.set(1);
+          // load() vide uploadSuccess en tout premier (synchrone) : on
+          // l'appelle avant de fixer le message pour que celui-ci survive.
+          this.load();
+          this.uploadSuccess.set(`« ${track.title} » ajoutée avec succès.`);
+        }
       },
       error: (error: HttpErrorResponse) => {
         console.error('[TracksPage] Envoi impossible', error);
         this.uploading.set(false);
+        this.title.enable();
         this.uploadError.set(serverErrorMessage(error, "Échec de l'envoi"));
       },
     });
@@ -214,6 +241,9 @@ export class TracksPageComponent implements OnDestroy {
   }
 
   confirmDelete(track: Track): void {
+    // Un double-clic rapide sur la poubelle ouvrait deux fenêtres : le
+    // bouton n'est désactivé (deletingId) qu'après la confirmation.
+    if (this.deletingId() || this.dialog.openDialogs.length) return;
     this.dialog
       .open(this.confirmDeleteDialog, { data: { track } })
       .afterClosed()
@@ -224,34 +254,61 @@ export class TracksPageComponent implements OnDestroy {
 
   private performDelete(track: Track): void {
     this.deletingId.set(track.id);
-    this.deleteError.set('');
     this.service.delete(track.id).subscribe({
       next: () => {
         console.debug('[TracksPage] Piste supprimée', track.id);
         this.deletingId.set(null);
-
-        // La piste supprimée était celle en cours de lecture : on nettoie
-        // le lecteur plutôt que de laisser jouer un fichier qui n'existe
-        // plus côté serveur.
-        if (this.playingTrack()?.id === track.id) {
-          const url = this.audioUrl();
-          if (url) URL.revokeObjectURL(url);
-          this.audioUrl.set('');
-          this.playingTrack.set(null);
-        }
-
-        // Dernière piste d'une page > 1 : reculer d'une page plutôt que
-        // d'afficher une page vide après rechargement.
-        if (this.tracks().length === 1 && this.page() > 1) {
-          this.page.set(this.page() - 1);
-        }
-        this.load();
+        this.notify(`« ${track.title} » supprimée.`);
+        this.afterTrackRemoved(track);
       },
       error: (error: HttpErrorResponse) => {
         console.error('[TracksPage] Suppression impossible', error);
         this.deletingId.set(null);
-        this.deleteError.set(serverErrorMessage(error, 'Suppression impossible'));
+        if (error.status === 401) return; // déjà géré par authInterceptor (-> /login)
+
+        if (error.status === 404) {
+          // Le backend filtre par { _id, ownerId } : « supprimée ailleurs »
+          // et « pas au propriétaire » donnent le même 404, volontairement
+          // indiscernables. Dans les deux cas la carte affichée est obsolète.
+          this.notify(`« ${track.title} » n'existe plus ou ne vous appartient pas. Liste actualisée.`, true);
+          this.afterTrackRemoved(track);
+        } else if (error.status === 500 && error.error?.message) {
+          // Seul 500 renvoyé par la route : métadonnée supprimée en base mais
+          // fichier audio non effacé du disque -> la piste a bien disparu.
+          this.notify(error.error.message, true);
+          this.afterTrackRemoved(track);
+        } else {
+          // Réseau coupé (status 0) ou autre : la piste existe sûrement
+          // encore, on ne touche pas à la liste.
+          this.notify(serverErrorMessage(error, 'Suppression impossible'), true);
+        }
       },
+    });
+  }
+
+  // Nettoyage commun à tous les cas où la piste n'existe plus côté serveur.
+  private afterTrackRemoved(track: Track): void {
+    // La piste supprimée était celle en cours de lecture : on nettoie le
+    // lecteur plutôt que de laisser jouer un fichier qui n'existe plus.
+    if (this.playingTrack()?.id === track.id) {
+      const url = this.audioUrl();
+      if (url) URL.revokeObjectURL(url);
+      this.audioUrl.set('');
+      this.playingTrack.set(null);
+    }
+
+    // Dernière piste d'une page > 1 : reculer d'une page plutôt que
+    // d'afficher une page vide après rechargement.
+    if (this.tracks().length === 1 && this.page() > 1) {
+      this.page.set(this.page() - 1);
+    }
+    this.load();
+  }
+
+  private notify(message: string, isError = false): void {
+    this.snackBar.open(message, 'OK', {
+      duration: isError ? 6000 : 4000,
+      panelClass: isError ? 'snack-error' : 'snack-success',
     });
   }
 

@@ -74,11 +74,33 @@ fonctionnalité" — traités dès la mise en place du harnais).
 | 2 | `TrackService.list()` transmet `page` et `limit` | ✅ Fait | `track.service.spec.ts` |
 | 3 | L'intercepteur ajoute `Authorization` si un token existe | ✅ Fait | `auth.interceptor.spec.ts` |
 | 4 | Le guard redirige un utilisateur sans token | ✅ Fait | `auth.guard.spec.ts` |
-| 5 | Le composant affiche une erreur après un échec HTTP | ⏳ À faire (test de composant, en attente de validation) | `tracks-page.spec.ts` (à créer) |
-| 6 | La suppression appelle `DELETE /api/tracks/:id` et recharge la liste | ⏳ À faire **avec** la Mission 5 (SnackBar, cas race condition) | idem |
-| 7 | L'upload met à jour la progression et traite l'erreur | ⏳ À faire **avec** la Mission 6 (progression upload, pas encore implémentée) | idem |
+| 5 | Le composant affiche une erreur après un échec HTTP | ✅ Fait le 08/10/2026 (2 tests : message backend, message de repli si backend injoignable) | `tracks-page.spec.ts` |
+| 6 | La suppression appelle `DELETE /api/tracks/:id` et recharge la liste | ✅ Fait le 08/10/2026 (5 tests : `204`, `404`, réseau, garde anti double-fenêtre, confirmation annulée) | `tracks-page.spec.ts` |
+| 7 | L'upload met à jour la progression et traite l'erreur | ✅ Fait le 08/10/2026 (3 tests : progression + réponse, erreur, double clic) | `tracks-page.spec.ts` |
 
-**4/7 faits, dont les 3 minimum requis par le sujet — déjà validé.**
+**7/7 faits (08/10/2026)** — 6 fichiers `*.spec.ts`, 25 tests frontend au vert.
+
+## Leçon : ce que les tests unitaires HTTP ne voient pas (08/10/2026)
+
+Bug trouvé pendant la Mission 6 (détail : `compte-rendu/TP3.md`) : la
+barre de progression restait à 0 % parce qu'Angular 22 utilise `fetch`
+par défaut, et que `fetch` ne remonte pas la progression d'un envoi
+(corrigé par `withXhr()` dans `main.ts`). Build OK, tests unitaires OK :
+seule la vérification dans un **vrai navigateur** (harnais Playwright,
+réseau ralenti) l'a révélé.
+
+Raison : `provideHttpClientTesting()` remplace **tout** le mécanisme HTTP
+du navigateur (`fetch` comme XHR) par un faux backend qui renvoie ce
+qu'on lui demande. Un test unitaire de l'upload vérifiera donc la
+**logique du composant** (tri des événements, calcul du pourcentage,
+états), mais jamais que le navigateur émet réellement ces événements.
+C'est la justification concrète de la règle n°3 (un test « complet »
+inclut la vérification navigateur), et un exemple de la différence
+test unitaire / test d'intégration.
+
+À retenir pour le test n°7 : simuler les événements à la main avec
+`req.event({ type: HttpEventType.UploadProgress, loaded, total })` puis
+`req.flush(...)` sur le `TestRequest`.
 
 ## Bonus : tests motivés par notre propre historique de bugs
 
@@ -102,12 +124,12 @@ comportement.
 
 | # | Test suggéré | Besoin de MongoDB ? | Statut |
 |---|---|---|---|
-| 1 | `401` sans JWT | Non — le middleware `auth` rejette avant toute requête DB | ⏳ |
-| 2 | `401` avec JWT invalide | Non — `jwt.verify()` échoue avant toute requête DB | ⏳ |
-| 3 | Upload sans fichier | Non — `auth` ne vérifie que la signature du JWT (pas l'existence de l'utilisateur en base), le rejet "fichier requis" arrive avant tout accès DB | ⏳ |
-| 4 | Type MIME refusé | Non — rejeté par `multer.fileFilter`, avant la DB | ⏳ |
-| 5 | Pagination `page`/`limit` | Non, si on teste juste le *clamping* des paramètres (valeurs par défaut/bornées) sur une liste vide — pas besoin de vraies pistes en base pour ça | ⏳ |
-| 6 | Accès interdit à la piste d'un autre utilisateur | **Oui**, le seul cas qui ne peut pas s'éviter : il faut une vraie piste en base appartenant à un autre `ownerId` pour prouver le `404` | ⏳ |
+| 1 | `401` sans JWT | Non — le middleware `auth` rejette avant toute requête DB | ✅ 08/10/2026 |
+| 2 | `401` avec JWT invalide | Non — `jwt.verify()` échoue avant toute requête DB | ✅ 08/10/2026 (mauvaise signature, expiré, malformé) |
+| 3 | Upload sans fichier | Non — `auth` ne vérifie que la signature du JWT (pas l'existence de l'utilisateur en base), le rejet "fichier requis" arrive avant tout accès DB | ✅ 08/10/2026 (`Track.create` jamais appelé) |
+| 4 | Type MIME refusé | Non — rejeté par `multer.fileFilter`, avant la DB | ✅ 08/10/2026 (aucun fichier écrit dans `data/uploads`) |
+| 5 | Pagination `page`/`limit` | Non, si on teste juste le *clamping* des paramètres (valeurs par défaut/bornées) sur une liste vide — pas besoin de vraies pistes en base pour ça | ✅ 08/10/2026 (5 combinaisons, `Track.find`/`countDocuments` simulés) |
+| 6 | Accès interdit à la piste d'un autre utilisateur | Prévu « oui » (une vraie piste d'un autre `ownerId`) ; finalement évité en simulant les méthodes de `Track` — limite expliquée ci-dessous | ✅ 08/10/2026 — **sans MongoDB finalement** : `Track.findOne`/`findOneAndDelete` simulés (voir ci-dessous) ; preuve sur la vraie base faite par `curl` avec 2 comptes |
 
 **Découverte utile pour les tests 1-4** : le middleware `auth`
 (`backend/src/app.js`) ne vérifie **que** la signature du JWT
@@ -117,7 +139,21 @@ par `auth` sans connexion MongoDB — ce qui permet de tester tout ce qui
 se passe *avant* une requête DB (validation du format, de l'auth, du
 fichier) sans jamais se connecter à MongoDB Atlas.
 
-Pas encore implémenté (facultatif) — à faire sur demande, comme le reste.
+**Implémenté le 08/10/2026** dans `backend/test/api.test.js` (8 tests au
+vert, dont les 2 d'origine). Pour les tests 5 et 6, les méthodes du modèle
+`Track` sont remplacées par des fausses avec `mock.method` (`node:test`) :
+- **ce que ça prouve** : la route transmet bien `ownerId: req.auth.sub`
+  (l'identité du token) à la requête, renvoie `404` quand rien n'est
+  trouvé, supprime le fichier du disque seulement pour le propriétaire,
+  et convertit/borne correctement `page`/`limit` ;
+- **ce que ça ne prouve pas** : que MongoDB applique réellement ce filtre
+  (on fait confiance à Mongo). Cette partie a été vérifiée sur la vraie
+  base avec `curl` et deux comptes (voir `compte-rendu/TP3.md`, Mission 5).
+
+Choix écarté : `mongodb-memory-server` (vraie base en mémoire) aurait
+ajouté une dépendance lourde au backend (téléchargement d'un binaire
+`mongod`) pour une extension facultative ; et tester contre MongoDB Atlas
+polluerait la vraie base.
 
 ## Comment lancer les tests
 
@@ -138,3 +174,52 @@ exclusivement dans le répertoire scratchpad de la session, jamais dans
 ce dépôt** (aucune ligne ajoutée à `package.json`). Détails : voir
 `RAPPORT_IA_MODELE.md`, entrée 2.16 (TP2). Rien à configurer ici, c'est
 un outil de l'assistant, pas un livrable du TP.
+
+## Rapport des tests — attendu vs observé (08/10/2026)
+
+### Frontend (`npm test`, 6 fichiers, 25 tests)
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `auth.service.spec.ts` | `login()` | `POST /api/auth/login` avec `{email,password}` | ✅ |
+| `track.service.spec.ts` | `list(2, 10)` | `page=2`, `limit=10`, pas de `title` | ✅ |
+| `auth.interceptor.spec.ts` | token présent / absent / 401 | en-tête `Authorization` ajouté ou non ; logout sur 401 | ✅ |
+| `auth.guard.spec.ts` | sans / avec token | redirection `/login` / accès | ✅ |
+| `tracks-page.utils.spec.ts` | `serverErrorMessage`, `formatFileSize`, `formatAudioType` | conversions et messages | ✅ |
+| `tracks-page.spec.ts` | `GET` en `500` | message du backend affiché dans `p.error` | ✅ |
+| | `GET` sans réponse (statut 0) | « Chargement des pistes impossible » | ✅ |
+| | suppression `204` | `DELETE /api/tracks/t1`, rechargement, SnackBar `snack-success` | ✅ |
+| | suppression `404` | rechargement **aussi**, SnackBar « n'existe plus ou ne vous appartient pas » | ✅ |
+| | suppression, erreur réseau | **pas** de rechargement, `deletingId` remis à `null` | ✅ |
+| | suppression déjà en cours | aucune fenêtre ouverte, aucune requête | ✅ |
+| | confirmation annulée | aucune requête `DELETE` | ✅ |
+| | upload, progression | 50/200 → 25 % affiché ; 200/200 → « Finalisation… » ; `total` inconnu → pas de `NaN` ; réponse → succès, titre/fichier vidés, rechargement | ✅ |
+| | upload, erreur `400` | message backend, titre conservé et réactivé, pas de rechargement | ✅ |
+| | upload, second clic | une seule requête `POST` | ✅ |
+
+### Backend (`npm test`, 8 tests)
+
+| Cas | Attendu | Observé |
+|---|---|---|
+| `GET /api/health` | `200 {status:"ok"}` | ✅ |
+| Schémas Mongoose | email en minuscules, `ref: "User"` | ✅ |
+| Sans JWT | `401 Authentification requise` | ✅ |
+| JWT mauvaise signature / expiré / malformé | `401 Jeton invalide ou expiré` | ✅ (×3) |
+| Upload sans fichier | `400 Fichier audio requis`, rien en base | ✅ |
+| Type MIME `text/plain` | `400 Format audio non accepté`, rien sur le disque | ✅ |
+| Pagination (5 combinaisons) | `skip`/`limit` corrects, `limit` ≤ 20, défauts si invalide, filtre `ownerId` = token | ✅ |
+| Piste d'un autre utilisateur | lecture `404`, suppression `404`, piste et fichier intacts ; propriétaire `204` + fichier supprimé ; 2ᵉ suppression `404` | ✅ |
+
+### Les tests détectent-ils vraiment les bugs ? (vérification croisée, 08/10/2026)
+
+Des tests tous verts du premier coup ne prouvent rien s'ils ne peuvent
+pas échouer. Bugs introduits volontairement, un par un, puis code
+restauré à l'identique (vérifié avec `cmp` / `git diff`) :
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| `404` sans rechargement (comportement du TP2) | `404 … message dédié ET rechargement` |
+| Pourcentage `loaded / total` sans `× 100` | `met à jour la progression…` |
+| Garde `uploading()` retirée de `upload()` | `ignore un second clic pendant l'envoi` |
+| `DELETE` backend sans filtre `ownerId` | `accès interdit à la piste d'un autre utilisateur` |
+| `limit` backend non bornée à 20 | `pagination …` |

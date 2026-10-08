@@ -4,7 +4,7 @@ Pour chaque mission, détailler et fournir des explications concernant : objecti
 
 Ce fichier est cumulatif : une section par phase/mission, dans l'ordre chronologique, pour TP1 à TP3.
 
-Assistant utilisé : Claude Code (modèle Claude Sonnet 5, `claude-sonnet-5`).
+Assistant utilisé : Claude Code (modèle Claude Sonnet 5, `claude-sonnet-5`). À partir de l'entrée 3.2 (08/10/2026) : Claude Opus 5.5 (`claude-opus-5-5`).
 
 ---
 
@@ -1991,6 +1991,306 @@ tests les moins chers à écrire et à maintenir ; pourquoi un middleware
 d'authentification qui ne vérifie que la signature d'un JWT (sans
 requête DB) permet de tester toute la chaîne de validation en amont sans
 jamais dépendre d'une vraie base de données.
+
+---
+
+### Entrée 3.2 — Mission 6 : progression de l'upload (08/10/2026)
+
+> Assistant : Claude Code, modèle **Claude Opus 5.5** (`claude-opus-5-5`),
+> nouvelle session (les entrées précédentes ont été faites avec Claude
+> Sonnet 5). Session reprise à partir des fichiers du dépôt
+> (`SUJET_ETUDIANT_TP3.md`, `compte-rendu/TP3.md`, `Tests.md`,
+> `analyse.md`, `API_CONTRACT.md`, `CLAUDE.md`).
+
+**Objectif.** Afficher la progression de l'upload d'une piste avec les
+événements HTTP d'Angular, en distinguant 4 états (aucun upload, en cours
+avec pourcentage, réussite, échec), avec les contrôles désactivés et sans
+double soumission pendant l'envoi.
+
+**Prompts principaux (recopiés tels quels) :**
+> [...] PREMIÈRE ACTION : lis les fichiers ci-dessus, fais `git status`,
+> puis résume-moi en quelques lignes où on en est. Ensuite on attaque la
+> Mission 6 (progression de l'upload), en commençant par m'expliquer
+> l'objectif et repérer le code.
+>
+> oui le plan est bon je valide et avec le point 5, juste a partir de
+> maintenant nouvelle regle, tout ce que tu recenses dans les docs, ajoute
+> la date a chaque fois que ce soit le rapport IA les rapports etc
+>
+> tu as fait les tests de ton cote ou pas ?
+>
+> jai reussi a tester ca mais pas le reste, fait le toi
+>
+> oui je valide, par contre faudrait que tu m'expliques les principes de
+> tests unitaires et l'autre type de tests
+>
+> c est toi qui utilise les ports 3000 et 4200 actuellement ?
+>
+> coupe les
+>
+> tiens les screen tu peux documenter
+
+**Nouvelle règle de travail (08/10/2026).** Toute entrée ajoutée dans la
+documentation (rapport IA, comptes-rendus, `analyse.md`, `Tests.md`) est
+désormais datée.
+
+**Plan proposé par l'agent (validé avec le point 5).**
+1. `TrackService.upload()` : options de progression + `observe: 'events'`.
+2. Garder les Signals existants (`uploading`, `uploadError`,
+   `uploadSuccess`) et ajouter un seul Signal `uploadProgress` ; les 4
+   états s'en déduisent.
+3. Dans le composant, trier les événements par `event.type`
+   (`UploadProgress` → pourcentage, `Response` → réussite) ; afficher
+   « Finalisation… » à 100 % (octets envoyés mais réponse pas encore
+   reçue).
+4. Template : `mat-progress-bar` + texte du pourcentage ; titre
+   (`title.disable()`), sélecteur et bouton désactivés pendant l'envoi.
+5. (facultatif, retenu) Vider le sélecteur de fichier après succès.
+6. Build + vérification navigateur avec throttling réseau.
+7. Documentation ; test automatisé n°7 seulement sur demande.
+
+**Vérifications réalisées.**
+- `npm run build` et `npm test` (15/15) après chaque modification.
+- **Harnais Playwright** réinstallé dans le scratchpad de la session
+  (jamais dans le dépôt), avec un vrai fichier WAV de ~3 Mo généré et un
+  réseau ralenti via le protocole DevTools de Chromium. Scénarios :
+  succès avec progression, contrôles désactivés + clic forcé (1 seul
+  `POST`), échec réseau (connexion réinitialisée, statut 0), erreur
+  serveur (400 simulée), non-régression (lecture audio, suppression),
+  absence du JWT et du mot de passe dans la console.
+- Captures Network faites par l'utilisateur (Slow 4G) : requête
+  `tracks` de type `xhr`, `(pending)` à 14 %, puis `201` après 43,36 s.
+- Nettoyage : les 6 pistes créées par le harnais sur le compte de test
+  ont été supprimées (6 × `DELETE` → `204`).
+
+**Erreurs ou bugs trouvés.**
+1. **Bug réel : la barre restait à 0 %.** La première implémentation
+   compilait, passait les tests unitaires et l'envoi réussissait, mais le
+   harnais a montré « Envoi : 0 % » pendant ~9 s puis un succès d'un coup.
+   Cause, vérifiée dans le code source d'`@angular/common` 22.1.4 : depuis
+   Angular 22, `provideHttpClient()` utilise **`fetch` par défaut**, et
+   `fetch` ne remonte pas la progression d'un envoi. De plus,
+   `reportProgress` est déprécié depuis la v22. Correction validée par
+   l'utilisateur : `withXhr()` dans `main.ts` et
+   `reportUploadProgress: true` dans le service (erreur explicite
+   d'Angular si `withXhr()` est retiré un jour).
+2. **Erreur de démarche de l'agent.** Après la première implémentation,
+   l'agent a demandé à l'utilisateur de tester sans avoir vérifié
+   lui-même dans un navigateur ; c'est la question « tu as fait les tests
+   de ton cote ou pas ? » qui a déclenché la vérification Playwright, et
+   donc la découverte du bug. Le succès vu par l'utilisateur (première
+   capture) ne montrait que l'état final, pas la progression.
+3. **Limite du harnais.** Le mode « Offline » de Chromium ne coupe pas une
+   requête déjà partie : le premier scénario « coupure réseau » a fini en
+   succès de l'upload puis en échec du rechargement de la liste. Remplacé
+   par une connexion réinitialisée (`route.abort('connectionreset')`).
+4. **Aparté.** Les serveurs `:3000`/`:4200` avaient été lancés à 12:17
+   par `npm start` dans un Git Bash, avant cette session (pas par
+   l'agent) ; arrêtés à la demande de l'utilisateur, puis relancés par
+   lui.
+
+**Fichiers effectivement modifiés.**
+`frontend-starter/src/main.ts` (`withXhr()`),
+`frontend-starter/src/app/shared/services/track.service.ts`,
+`frontend-starter/src/app/components/tracks-page/tracks-page.ts`,
+`tracks-page.html`, `tracks-page.css` ; 6 captures
+`compte-rendu/captures/tp3-mission6-*.png` ; `compte-rendu/TP3.md`,
+`frontend-starter/analyse.md`, `Tests.md`, `RAPPORT_IA_MODELE.md` (cette
+entrée). Backend et `API_CONTRACT.md` inchangés.
+
+**Preuve de fonctionnement.** Captures Network
+(`tp3-mission6-network-upload-en-cours.png`,
+`tp3-mission6-network-upload-201.png`) et captures du harnais
+(progression 36 %, échec réseau, erreur serveur), intégrées dans
+`compte-rendu/TP3.md`. Build et tests unitaires au vert.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi un upload avec
+progression émet plusieurs événements au lieu d'une seule réponse, et
+pourquoi la réussite correspond uniquement à l'événement `Response` ;
+comment le pourcentage est calculé (`loaded / total`) ; pourquoi la barre
+peut être à 100 % alors que le serveur n'a pas encore répondu ; pourquoi
+`fetch` (défaut d'Angular 22) ne suffit pas et qu'il faut `withXhr()` ;
+pourquoi un test unitaire avec `provideHttpClientTesting()` n'aurait pas
+détecté ce bug alors qu'un test dans un vrai navigateur l'a trouvé
+(différence test unitaire / test d'intégration) ; pourquoi
+`title.disable()` plutôt que `[disabled]` sur un contrôle de Reactive
+Forms.
+
+---
+
+### Entrée 3.3 — Mission 5 : suppression d'une piste (08/10/2026)
+
+> Assistant : Claude Code, modèle Claude Opus 5.5 (`claude-opus-5-5`).
+> La base (bouton, `MatDialog`, `deletingId`, rechargement, nettoyage du
+> lecteur) datait du TP2 ; cette entrée couvre ce qui manquait.
+
+**Objectif.** Compléter la suppression : messages de succès/erreur via
+`MatSnackBar`, gestion explicite d'une piste déjà supprimée ailleurs ou
+n'appartenant pas à l'utilisateur (le backend renvoie `404`), et
+explication de pourquoi le guard et l'interface ne suffisent pas à
+sécuriser la suppression.
+
+**Prompts principaux (recopiés tels quels) :**
+> oui passons a la mission 5
+>
+> oui fait tout ca
+
+**Plan proposé par l'agent (validé, y compris la création d'un second
+compte de test).** Lecture préalable de la route `DELETE` du backend
+(`findOneAndDelete({ _id, ownerId })` → `404` si rien trouvé, `500` si le
+fichier n'a pas pu être effacé du disque).
+1. `inject(MatSnackBar)` dans le composant.
+2. Méthode `afterTrackRemoved(track)` regroupant le nettoyage existant
+   (lecteur, recul de page, `load()`).
+3. Réaction selon le statut : `204` succès, `404` message « n'existe plus
+   ou ne vous appartient pas » + rechargement, `500` message du backend +
+   rechargement, `0`/autre « Suppression impossible » sans rechargement,
+   `401` laissé à l'intercepteur.
+4. Retirer le Signal `deleteError` (remplacé par la SnackBar).
+5. Garde anti double-clic dans `confirmDelete()` (deux fenêtres de
+   confirmation possibles).
+6. Vérifications : build, tests, Playwright (succès, 404 avec deux
+   onglets, réseau, lecteur, console), `curl` avec un second compte
+   (`claude-test-bot2@example.com`) pour le cas « pas à moi ».
+7. Documentation datée ; test automatisé n°6 seulement sur demande.
+
+**Vérifications réalisées.**
+- `npm run build` et `npm test` (15/15) après chaque modification.
+- `curl` avec deux comptes : bot2 supprime la piste de bot1 → `404`, et
+  bot1 lit toujours son audio (`200`) ; sans token → `401` ; token
+  falsifié → `401` ; bot1 supprime → `204`, puis une 2ᵉ fois → `404`.
+- Harnais Playwright (scratchpad, hors dépôt) : succès (`204`, SnackBar
+  verte, carte disparue) ; piste fantôme avec deux onglets (`404`,
+  SnackBar rouge, carte disparue dans l'onglet B) ; erreur réseau
+  (SnackBar, carte conservée, bouton réactivé) ; lecteur retiré quand on
+  supprime la piste en cours de lecture ; ni JWT ni mot de passe en
+  console.
+- **Garde anti double-clic prouvée par comparaison** : même scénario
+  (deux clics dans la même milliseconde) lancé sur le code **sans** la
+  garde (2 fenêtres) puis **avec** (1 fenêtre).
+- Nettoyage : toutes les pistes de test supprimées.
+
+**Erreurs ou bugs trouvés.**
+1. **Bouton « OK » de la SnackBar vert sur rouge.** La règle globale
+   `button` de `styles.css` excluait les boutons Material par leurs
+   attributs (`mat-button`…), mais Material 22 utilise `matButton` dans
+   la SnackBar. Correction : `:not(.mat-mdc-button-base)`. **Effet de bord
+   signalé à l'utilisateur** : les flèches du paginateur, qui avaient
+   reçu ce fond vert par erreur depuis le TP2, ont retrouvé leur style
+   Material normal.
+2. **Le vrai double-clic ne reproduisait pas le bug** : avec la souris,
+   le second clic tombe sur le fond grisé de la fenêtre, qui la referme
+   (0 fenêtre). Le bug n'apparaît qu'avec deux clics plus rapides que
+   l'affichage de la fenêtre ; scénario adapté en conséquence.
+3. **Erreur de l'agent dans le harnais** : le premier script de
+   nettoyage n'a supprimé qu'une piste sur quatre, car Python sous
+   Windows termine chaque id par un retour chariot (`\r`) qui cassait
+   l'URL ; des doublons ont fait échouer le relancement. Corrigé avec
+   `tr -d '\r'`.
+
+**Fichiers effectivement modifiés.**
+`frontend-starter/src/app/components/tracks-page/tracks-page.ts`,
+`tracks-page.html` (bloc `deleteError` retiré),
+`frontend-starter/src/styles.css` (styles SnackBar + exclusion des boutons
+Material) ; 5 captures `compte-rendu/captures/tp3-mission5-*.png` ;
+`compte-rendu/TP3.md`, `frontend-starter/analyse.md`, `Tests.md`,
+`RAPPORT_IA_MODELE.md` (cette entrée). Backend et `API_CONTRACT.md`
+inchangés. Compte de test `claude-test-bot2@example.com` créé dans la base
+de développement.
+
+**Preuve de fonctionnement.** Tableaux attendu/observé (`curl` et
+navigateur) et captures (confirmation, SnackBar de succès, piste fantôme
+404, erreur réseau) dans `compte-rendu/TP3.md`, plus la capture Network
+faite par l'étudiant (`DELETE /api/tracks/:id` → `204 No Content`,
+`tp3-mission5-network-delete.png`, aucun JWT visible).
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi le backend renvoie le
+même `404` pour « supprimée » et « pas à moi » (ne pas révéler
+l'existence d'une piste) ; pourquoi le frontend recharge la liste après
+un `404` mais pas après une erreur réseau ; pourquoi le guard et
+l'interface sont contournables et où se trouve la vraie protection (JWT
+signé + filtre `ownerId` issu du token) ; pourquoi une SnackBar a besoin
+d'un style global (rendue dans un overlay hors du composant) ; d'où
+venait le risque de double fenêtre de confirmation.
+
+---
+
+### Entrée 3.4 — Mission 7 (fin) : tests de composant et extension backend (08/10/2026)
+
+> Assistant : Claude Code, modèle Claude Opus 5.5 (`claude-opus-5-5`).
+
+**Objectif.** Écrire les 3 tests frontend restants du sujet (composant qui
+affiche une erreur, suppression, upload avec progression), maintenant que
+les Missions 5 et 6 sont implémentées, ainsi que les 6 tests backend
+facultatifs.
+
+**Prompt principal (recopié tel quel) :**
+> fait tout les tests
+
+**Plan suivi par l'agent.** Pas de nouveau plan à valider (demande
+explicite, cadre déjà fixé dans `Tests.md`) :
+1. Un fichier de test de composant `tracks-page.spec.ts` (convention du
+   projet : à côté du fichier testé), faux backend
+   `provideHttpClientTesting()`, `MatDialog` et `MatSnackBar` remplacés sur
+   l'instance réellement injectée dans le composant.
+2. Les tests backend dans le fichier existant `backend/test/api.test.js`,
+   **sans MongoDB** : tokens signés avec le secret de développement, et
+   méthodes du modèle `Track` simulées (`mock.method` de `node:test`) pour
+   la pagination et l'accès interdit. Code du backend non modifié.
+3. Vérification croisée par introduction volontaire de bugs.
+4. `npm test` (front + back), `npm run build`, documentation datée.
+
+**Vérifications réalisées.**
+- Frontend : 6 fichiers, **25 tests au vert** (10 nouveaux). Backend :
+  **8 tests au vert** (6 nouveaux). `npm run build` OK.
+- **Vérification croisée** (les tests étaient tous verts du premier coup,
+  ce qui ne prouve rien s'ils ne peuvent pas échouer) : 5 bugs introduits
+  un par un, chacun a fait échouer exactement le test attendu — `404` sans
+  rechargement, pourcentage sans `× 100`, garde anti double-envoi retirée
+  (front) ; `DELETE` sans filtre `ownerId`, `limit` non bornée (back).
+  Fichiers restaurés à l'identique, vérifié avec `cmp` et `git diff`.
+- Aucun fichier laissé dans `backend/data/uploads` par les tests (même
+  nombre de fichiers avant/après).
+- La vérification navigateur des fonctionnalités testées avait déjà été
+  faite (entrées 3.2 et 3.3) ; ces tests ne modifient pas le code de l'app.
+
+**Erreurs ou choix à signaler.**
+1. **Accès interdit sans vraie base.** `Tests.md` prévoyait que ce test
+   nécessitait MongoDB. Choix fait : simuler `Track.findOne` /
+   `findOneAndDelete` en reproduisant le filtre `{ _id, ownerId }`. Le
+   test prouve que la route utilise l'identité du **token** et réagit
+   correctement, mais pas que MongoDB applique le filtre ; cette partie
+   avait été prouvée par `curl` avec deux comptes (entrée 3.3). Écartés :
+   `mongodb-memory-server` (dépendance lourde pour un test facultatif) et
+   la base Atlas réelle (pollution des données).
+2. **Erreur de démarche de l'agent** : un premier jet du test « JWT
+   invalide » contenait une requête `DELETE /api/tracks` sans id (route
+   inexistante) acceptant `401` ou `404` — assertion trop lâche, retirée
+   avant exécution.
+3. Deux scripts d'édition de documentation ont échoué (découpage du
+   shell, puis une ligne de tableau mal sélectionnée) **avant** toute
+   écriture ; corrigés et relancés, aucune modification partielle.
+
+**Fichiers effectivement modifiés.**
+Création de `frontend-starter/src/app/components/tracks-page/tracks-page.spec.ts` ;
+`backend/test/api.test.js` (6 tests ajoutés, code applicatif du backend
+inchangé) ; `Tests.md` (inventaires, rapport attendu/observé, vérification
+croisée) ; `compte-rendu/TP3.md` ; `frontend-starter/analyse.md` ;
+`backend/analyse.md` (arborescence) ; `RAPPORT_IA_MODELE.md` (cette
+entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` : frontend
+`Test Files 6 passed (6) / Tests 25 passed (25)`, backend
+`tests 8 / pass 8 / fail 0`. Tableaux attendu/observé dans `Tests.md`.
+
+**Ce que je sais expliquer sans l'agent.** Comment simuler une réponse,
+une erreur HTTP ou un événement de progression avec `HttpTestingController`
+(`flush`, `error`, `event`) ; pourquoi chaque test commence par répondre au
+`GET` lancé par le constructeur ; pourquoi `httpMock.verify()` /
+`expectNone()` prouvent qu'aucune requête inattendue n'est partie ; ce
+qu'un mock de `Track` permet de prouver et ce qu'il ne prouve pas ;
+pourquoi des tests qui ne peuvent pas échouer ne valent rien, et comment
+la vérification croisée le montre.
 
 ---
 

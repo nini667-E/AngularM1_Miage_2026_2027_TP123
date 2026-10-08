@@ -38,7 +38,7 @@ backend/
 │       ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
 │       └── Track.js      # Schéma Mongoose Piste audio
 ├── data/uploads/         # Fichiers audio stockés sur disque (hors Git)
-├── test/api.test.js      # Tests (health, schémas)
+├── test/api.test.js      # Tests : health, schémas + 6 tests TP3 (08/10/2026) : 401, upload, MIME, pagination, accès interdit
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT)
 └── package.json
 ```
