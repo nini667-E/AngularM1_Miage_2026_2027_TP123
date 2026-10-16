@@ -371,7 +371,7 @@ l'identique ensuite. Détail dans `../Tests.md`.
 
 ## Vérifications finales
 
-- [x] Tests frontend lancés — 5 fichiers, 15 tests, tous au vert
+- [x] Tests frontend lancés — 6 fichiers, 25 tests, tous au vert (revérifié au check-up du 16/10/2026) ; backend 8/8
 - [x] Tests backend lancés — 2/2 toujours au vert (non modifiés)
 - [x] `npm run build` exécuté sans erreur (revérifié après la Mission 6, 08/10/2026)
 - [x] Aucune donnée sensible journalisée dans la console — vérifié après les Missions 6 et 5 (08/10/2026)
@@ -395,8 +395,22 @@ l'identique ensuite. Détail dans `../Tests.md`.
    des événements `HttpEventType.UploadProgress`, et on calcule
    `Math.round(100 * loaded / total)`. Il faut `withXhr()` : `fetch`
    (défaut d'Angular 22) ne fournit pas cette information.
-4. Pourquoi les tests HTTP n'ont pas besoin de MongoDB : …
-5. Ce que vérifie un test d'intercepteur ou de guard : …
+4. Pourquoi les tests HTTP n'ont pas besoin de MongoDB (16/10/2026) :
+   côté frontend, `provideHttpClientTesting()` remplace le réseau par un
+   faux backend : la requête ne quitte jamais le navigateur de test, on
+   vérifie juste ce qui part (URL, méthode, corps) et on choisit la
+   réponse. Côté backend, les cas `401`/`400` sont rejetés **avant**
+   toute requête en base (middleware `auth`, Multer), et pour la
+   pagination / l'accès interdit on simule les méthodes du modèle `Track`.
+   Les tests restent rapides, reproductibles et ne touchent pas aux
+   vraies données.
+5. Ce que vérifie un test d'intercepteur ou de guard (16/10/2026) :
+   l'intercepteur — l'en-tête `Authorization: Bearer <token>` est ajouté
+   quand un token existe, absent sinon (la déconnexion sur `401` n'est
+   pas couverte par un test automatisé, seulement vérifiée à la main au
+   TP1) ; le guard — sans token, redirection vers `/login`
+   (un `UrlTree`), avec token, accès autorisé. On teste la **règle**
+   (entrée → décision), sans vrai backend ni vraie navigation.
 6. Différence test unitaire / test d'intégration (08/10/2026) : le test
    unitaire teste une pièce isolée (ex. `TrackService`) avec des faux
    autour (faux backend HTTP) : rapide, précis, reproductible. Le test
@@ -409,7 +423,7 @@ l'identique ensuite. Détail dans `../Tests.md`.
 
 - [x] Suppression fonctionnelle d'une piste — 08/10/2026
 - [x] Progression d'upload (ou état d'upload géré à défaut) — 08/10/2026
-- [x] Au moins 3 tests frontend — 4/7 du sujet (Mission 7), constaté le 08/10/2026
+- [x] Au moins 3 tests frontend — 7/7 du sujet (Mission 7), 08/10/2026
 - [x] Rapport des tests (attendu vs observé) — `../Tests.md`, section « Rapport des tests », 08/10/2026
 - [x] Capture Network suppression + upload — 08/10/2026 (`captures/tp3-mission6-network-upload-*.png`, `captures/tp3-mission5-network-delete.png`)
 - [x] `npm run build` exécuté — dernier passage le 08/10/2026 (après les tests)

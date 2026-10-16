@@ -183,7 +183,7 @@ un outil de l'assistant, pas un livrable du TP.
 |---|---|---|---|
 | `auth.service.spec.ts` | `login()` | `POST /api/auth/login` avec `{email,password}` | ✅ |
 | `track.service.spec.ts` | `list(2, 10)` | `page=2`, `limit=10`, pas de `title` | ✅ |
-| `auth.interceptor.spec.ts` | token présent / absent / 401 | en-tête `Authorization` ajouté ou non ; logout sur 401 | ✅ |
+| `auth.interceptor.spec.ts` | token présent / absent | en-tête `Authorization` ajouté ou non | ✅ (correction du 16/10/2026 : le cas `401` → déconnexion n'est **pas** testé, contrairement à ce qu'indiquait la version du 08/10) |
 | `auth.guard.spec.ts` | sans / avec token | redirection `/login` / accès | ✅ |
 | `tracks-page.utils.spec.ts` | `serverErrorMessage`, `formatFileSize`, `formatAudioType` | conversions et messages | ✅ |
 | `tracks-page.spec.ts` | `GET` en `500` | message du backend affiché dans `p.error` | ✅ |
