@@ -2294,4 +2294,111 @@ la vérification croisée le montre.
 
 ---
 
-_Points suivants du TP3 à compléter au fur et à mesure._
+### Entrée 3.5 — Clôture du TP3 : commit, check-up, merge dans `main`, README unique (08/10/2026 et 16/10/2026)
+
+> Assistant : Claude Code, modèle Claude Opus 5.5 (`claude-opus-5-5`).
+
+**Objectif.** Livrer la partie TP1-TP3 : commiter et pousser le travail,
+faire un contrôle complet avant le merge, merger `TP3` dans `main`, puis
+préparer le versionnement (V1 = TP1-TP3, V2 = TP4-TP6) en commençant par
+un README unique qui explique l'organisation du projet.
+
+**Prompts principaux (recopiés tels quels) :**
+> commit et push tout ca mais garde la branche TP3 pour l instant
+>
+> ok fais un check up avant de merge et commit pour qu'on s'assure que tout
+> soit bon
+>
+> on est d'accord tout est commit et push dans le main ?
+>
+> c'est ok. Bon maintenant pour la suite, il y a les TP 4-5-6 dans lesquels
+> on va passer un cap et personnaliser beaucoup plus l'application. Mais je
+> dois d'abord rendre la partie 1-2-3. On va continuer à travailler sur ce
+> même projet donc je pense qu'il faudrait versionner le projet, l'état
+> actuel serait la V1, ensuite on travaille sur la partie 4-5-6 comme on a
+> procédé jusqu'ici et à la fin ce sera notre V2, comme ça j'aurais accès
+> aux deux versions à tout moment depuis github
+>
+> ok attends avant de faire ça, on va gérer les fichiers README. Déjà on va
+> en garder un seul à la racine, et c'est lui qui va expliquer comment on a
+> organisé notre travail avec les liens vers les bons fichiers, les comptes
+> rendu le rapport IA le tests.md et tout ce qui va bien avec une petite
+> explication à chaque fois
+>
+> avec b
+
+**Ce qui a été fait.**
+1. **08/10/2026 — commit `3b85a11`** sur `TP3` (Missions 5, 6, 7 + doc +
+   captures), poussé ; `main` non touché, comme demandé.
+2. **16/10/2026 — check-up avant merge** : arbre propre, `main` inchangé
+   depuis le TP2 (merge en avance rapide possible) ; tests frontend 25/25,
+   backend 8/8, build sans avertissement ; scénarios navigateur des
+   Missions 5 et 6 rejoués (serveurs lancés pour l'occasion puis arrêtés) ;
+   aucun secret dans ce qu'ajoute le TP3 ; `.env` non suivi ; backend
+   modifié uniquement dans `test/` et `analyse.md`.
+3. **Commit `fff3c41`** (corrections de doc trouvées au check-up), puis
+   **merge `TP3` → `main` en avance rapide**, comme pour TP1/TP2 ; les deux
+   branches poussées et identiques ; `TP3` conservée.
+4. **Versionnement proposé** : tag annoté `v1.0` sur `main` (puis `v2.0` à
+   la fin du TP6), une branche par TP ; la doc doit être mise à jour
+   **avant** de poser le tag pour que la V1 décrive sa propre version.
+   Mis en attente à la demande de l'utilisateur, le temps de refaire le
+   README.
+5. **README unique** : `README.md` racine réécrit (présentation, versions,
+   démarrage, tests, méthode de travail, carte des documents avec une
+   explication par fichier, les trois types de documents, conventions) ;
+   `compte-rendu/README.md` supprimé, son contenu utile (tableau
+   analyse / compte-rendu / rapport IA, conventions de captures) fusionné
+   dans le README racine.
+
+**Vérifications réalisées.** Variables d'environnement lues par le code
+(`MONGODB_URI`, `JWT_SECRET`, `PORT`) avant de les documenter ; `.env`
+bien ignoré par `backend/.gitignore` ; titres des comptes-rendus relus pour
+que les résumés du README soient exacts ; existence de chaque lien du
+README vérifiée ; aucune autre page ne liait `compte-rendu/README.md`
+(seules des mentions historiques dans l'entrée 0.3, laissées telles
+quelles).
+
+**Erreurs ou bugs trouvés.**
+1. **Erreur de l'agent dans `Tests.md`** (rapport du 08/10) : il
+   affirmait que le test de l'intercepteur couvrait le `401` →
+   déconnexion. Faux : seuls « token présent » et « token absent » sont
+   testés. Trouvé au check-up en relisant les tests avant de rédiger le
+   point oral 5, corrigé en le signalant dans le document. La gestion du
+   `401` avait bien été vérifiée à la main au TP1 (point 10).
+2. Chiffres périmés dans `compte-rendu/TP3.md` (« 4/7 », « 5 fichiers,
+   15 tests ») et points oraux 4 et 5 vides : corrigés.
+3. **`node_modules/` versionné à la racine** (559 fichiers, depuis le
+   commit « Fin TP1 », via un `package.json` racine ne contenant que
+   `mongodb`, utilisé par aucun code). Signalé ; l'utilisateur a choisi de
+   ne rien toucher.
+4. **Ancien README faux sur 4 points** : `cp .env.example .env` alors que
+   ce fichier n'existe plus (supprimé avant le TP1, signalé dès l'entrée
+   0.1), phrase tronquée, « aucun `node_modules` inclus » (faux),
+   `RAPPORT_IA_MODELE.md` présenté comme un modèle vide. Option retenue
+   par l'utilisateur (**b**) : ne pas recréer `.env.example`, décrire le
+   contenu de `.env` directement dans le README. `ATLAS_SETUP.md` (fourni
+   avec le sujet) mentionne toujours `.env.example` : non modifié, une
+   note dans le README l'explique.
+5. Les serveurs lancés pour le check-up ont survécu à l'arrêt de `npm`
+   (sous Windows, les processus `node` enfants restent actifs) : arrêtés
+   ensuite par leur port, après vérification de leur heure de démarrage.
+
+**Fichiers effectivement modifiés.** `Tests.md`, `compte-rendu/TP3.md`
+(check-up) ; `README.md` (réécrit) ; `compte-rendu/README.md` (supprimé) ;
+`RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** `git rev-parse` : `main`, `origin/main`,
+`TP3` et `origin/TP3` sur le même commit `fff3c41` après le merge. Sorties
+des tests et du build dans le check-up. README lisible sur la page
+d'accueil du dépôt GitHub.
+
+**Ce que je sais expliquer sans l'agent.** La différence entre une
+branche (qui avance) et un tag (fixe) ; pourquoi un merge en avance rapide
+ne crée pas de commit de merge ; pourquoi la doc doit être à jour avant de
+poser le tag d'une version ; pourquoi `.env` ne doit jamais être versionné
+et comment on le vérifie (`git check-ignore`) ; pourquoi relire les tests
+avant de les décrire.
+
+---
+
