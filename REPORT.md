@@ -8,8 +8,14 @@
 > Échanges avec l'assistant IA : [RAPPORT_IA_MODELE.md](RAPPORT_IA_MODELE.md), section V2.
 
 **État au 01/11/2026** : conception terminée (points 1 à 4 du sujet) ;
-étapes 0 (préparation) et 1 (nettoyage, identité, navigation) terminées.
-Prochaine étape : 2 (albums).
+étapes 0 (préparation), 1 (nettoyage, identité, navigation) et 2 (albums)
+terminées. Prochaine étape : 3 (cartes et classeur).
+
+**Fonctionnalités disponibles** : inscription, connexion, profil ;
+navigation ; **albums** (créer, modifier, supprimer ; thème facultatif
+type / série / extension choisi dans le catalogue TCGdex et vérifié par le
+serveur ; visibilité publique ou privée ; page « Mes albums » et page
+d'album avec classeur).
 
 ## 1. Le projet
 
@@ -26,7 +32,7 @@ et les composants d'interface. La partie audio de la V1 est retirée.
 
 | Domaine | Fonctionnalités | Exigence du sujet couverte |
 |---|---|---|
-| Albums | créer, modifier, supprimer ; thème = **type** et/ou **série** (avec **extension** facultative) | — |
+| Albums | créer, modifier, supprimer ; thème **facultatif** = **type** et/ou **série** (avec **extension** facultative) ; sans thème : collection libre | — |
 | Visibilité | **public** : visible par tous, trouvable par la recherche, affiché dans les récents ; **privé** : visible par moi et par les amis avec qui je le partage ; privé non partagé = brouillon | fichiers publics / privés |
 | Partage | partager un album privé avec des amis choisis un par un ; **arrêter un partage** à tout moment ; retirer un ami arrête ses partages | partage avec des amis, stopper un partage |
 | Cartes | photo de la carte + **carte choisie dans le catalogue TCGdex** ; badge catégorie (Pokémon / Dresseur / Énergie et sous-catégorie) ; filtre par catégorie dans l'album | upload de fichiers |
@@ -86,7 +92,7 @@ chargement, emplacements vides façon pochettes de classeur.
 |---|---|---|
 | 0 | Préparation : branche `V2`, règles, documents, base `card-vault` | ✅ 01/11/2026 |
 | 1 | Nettoyage de l'audio, identité Card Vault, thème sombre, navigation | ✅ 01/11/2026 |
-| 2 | Albums : CRUD, visibilité, thème | à faire |
+| 2 | Albums : CRUD, visibilité, thème | ✅ 01/11/2026 |
 | 3 | Cartes et classeur : catalogue, cohérence, photos, URL signées | à faire |
 | 4 | Amis | à faire |
 | 5 | Partage et arrêt du partage | à faire |
@@ -105,6 +111,7 @@ Détail (tableaux attendu / observé) : [Tests.md](Tests.md), section V2.
 | Étape | Backend | Frontend | Build | Navigateur |
 |---|---|---|---|---|
 | 1 (01/11/2026) | 6/6 | 23/23 (7 fichiers) | ✅ | ✅ 11 vérifications |
+| 2 (01/11/2026) | 29/29 (5 fichiers) | 56/56 (14 fichiers) | ✅ | ✅ 12 vérifications, vrai TCGdex, 2 comptes |
 
 **Méthode.** Les tests frontend simulent le backend
 (`provideHttpClientTesting()`) ; les tests backend n'utilisent pas MongoDB
@@ -118,3 +125,11 @@ Vitest du projet : un test « la page est protégée » ne pouvait donc pas
 détecter une page non protégée. Les assertions concernées ont été
 corrigées (comparaison exacte), et la règle est appliquée à tous les tests
 de la V2.
+
+**Enseignement de l'étape 2.** 13 bugs introduits volontairement : 12
+détectés d'emblée, le 13e (champ de thème vide envoyé au serveur) a révélé
+un cas non testé (album sans thème), ajouté. Et deux défauts ne pouvaient
+être vus que dans un vrai navigateur : l'absence de `<base href="/">`
+(ouvrir directement l'adresse d'un album donnait une page blanche) et une
+fenêtre de formulaire coupée. Les tests unitaires et la vérification
+navigateur sont complémentaires.

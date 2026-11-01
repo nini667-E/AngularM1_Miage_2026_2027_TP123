@@ -11,7 +11,7 @@
 
   /* Reflet « or métallique » : réutilisé par les cartes (étape 3), le
      logo, l'avatar et les titres. Le bleu est réservé aux accents unis. */
-  --cv-gold: linear-gradient(115deg, #8a6a2a 0%, #c9a24d 25%, #f3d98b 45%, #fff3d1 52%, #e2bd66 62%, #a47c34 100%);
+  --cv-gold: linear-gradient(115deg, #b08a3e 0%, #d6b05a 25%, #f3d98b 45%, #fff3d1 52%, #e2bd66 62%, #b8913f 100%);
 
   /* Couleurs des 11 types de cartes (noms TCGdex en français), pour les
      badges et les thèmes d'albums (étapes 2 et 3). */
@@ -40,8 +40,11 @@ body {
 
 a { color: var(--mat-sys-primary); }
 
-/* Texte en dégradé or métallique (logo, grands titres). */
+/* Texte en dégradé or métallique (logo, grands titres). inline-block : le
+   dégradé s'étend sur la largeur du texte, pas sur toute la ligne (sinon un
+   titre court ne reçoit que la partie sombre du dégradé). */
 .cv-gold-text {
+  display: inline-block;
   background: var(--cv-gold);
   background-size: 200% auto;
   -webkit-background-clip: text;

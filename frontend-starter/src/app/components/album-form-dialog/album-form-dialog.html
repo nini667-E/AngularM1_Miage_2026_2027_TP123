@@ -1,0 +1,97 @@
+<h2 mat-dialog-title>{{ editing ? 'Modifier l’album' : 'Nouvel album' }}</h2>
+
+<mat-dialog-content>
+  <form id="album-form" [formGroup]="form" (ngSubmit)="submit()">
+    <mat-form-field appearance="outline">
+      <mat-label>Titre</mat-label>
+      <input matInput formControlName="title" [maxlength]="titleMax" cdkFocusInitial />
+      <mat-hint align="end">{{ form.controls.title.value.length }} / {{ titleMax }}</mat-hint>
+      <mat-error>Titre requis</mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description (facultative)</mat-label>
+      <textarea matInput formControlName="description" rows="3" [maxlength]="descriptionMax"></textarea>
+      <mat-hint align="end">{{ form.controls.description.value.length }} / {{ descriptionMax }}</mat-hint>
+    </mat-form-field>
+
+    <section class="block" aria-labelledby="visibility-label">
+      <span id="visibility-label" class="label">Visibilité</span>
+      <mat-button-toggle-group formControlName="visibility" aria-labelledby="visibility-label">
+        <mat-button-toggle value="private"><mat-icon>lock</mat-icon> Privé</mat-button-toggle>
+        <mat-button-toggle value="public"><mat-icon>public</mat-icon> Public</mat-button-toggle>
+      </mat-button-toggle-group>
+      <p class="help">
+        @if (form.controls.visibility.value === 'public') {
+          Visible par tous les membres et trouvable dans la recherche.
+        } @else {
+          Visible uniquement par toi : idéal pour construire ton album avant de le montrer.
+        }
+      </p>
+    </section>
+
+    <section class="block">
+      <span class="label">Thème <small>(facultatif)</small></span>
+      <p class="help">Les cartes ajoutées devront correspondre au thème. Sans thème : collection libre.</p>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Type</mat-label>
+        <mat-select formControlName="type">
+          <mat-option value="">Aucun</mat-option>
+          @for (type of types(); track type) {
+            <mat-option [value]="type">
+              <mat-icon [style.color]="typeColor(type)">{{ typeIcon(type) }}</mat-icon>
+              {{ type }}
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>Série</mat-label>
+          <mat-select formControlName="serieId">
+            <mat-option value="">Aucune</mat-option>
+            @for (serie of series(); track serie.id) {
+              <mat-option [value]="serie.id">{{ serie.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Extension</mat-label>
+          <mat-select formControlName="setId">
+            <mat-option value="">Toute la série</mat-option>
+            @for (set of sets(); track set.id) {
+              <mat-option [value]="set.id">
+                <span class="set-option">
+                  @if (set.logo) {
+                    <img [src]="set.logo" alt="" loading="lazy" />
+                  }
+                  {{ set.name }}
+                </span>
+              </mat-option>
+            }
+          </mat-select>
+          @if (form.controls.setId.disabled) {
+            <mat-hint>Choisis d’abord une série</mat-hint>
+          }
+        </mat-form-field>
+      </div>
+    </section>
+
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+  </form>
+</mat-dialog-content>
+
+@if (saving()) {
+  <mat-progress-bar mode="indeterminate" aria-label="Enregistrement en cours" />
+}
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close type="button">Annuler</button>
+  <button mat-flat-button type="submit" form="album-form" [disabled]="form.invalid || saving()">
+    {{ editing ? 'Enregistrer' : 'Créer l’album' }}
+  </button>
+</mat-dialog-actions>

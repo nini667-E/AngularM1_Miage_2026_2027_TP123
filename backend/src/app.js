@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import fs from "node:fs";
 import path from "node:path";
 import { User } from "./models/User.js";
+import { albumRoutes } from "./routes/albums.js";
+import { catalogRoutes } from "./routes/catalog.js";
 
 // Dossier des fichiers envoyés par les utilisateurs. Vide depuis le retrait
 // de l'audio (V2, étape 1) ; il accueillera les photos de cartes (étape 3).
@@ -206,10 +208,18 @@ export function createApp() {
     }
   });
 
+  // Catalogue TCGdex (listes pour le thème des albums) et albums (V2, étape 2).
+  app.use("/api/catalog", catalogRoutes(auth));
+  app.use("/api/albums", albumRoutes(auth));
+
   /** Gestionnaire central des erreurs connues de l'application. */
   app.use((error, _req, res, next) => {
     console.error("[error] Erreur reçue par le gestionnaire central", error);
 
+    // Erreurs métier (src/errors.js) : 400, 404, 502…
+    if (error?.name === "HttpError") {
+      return res.status(error.status).json({ message: error.message });
+    }
     if (error?.name === "ValidationError") {
       return res.status(400).json({ message: error.message });
     }

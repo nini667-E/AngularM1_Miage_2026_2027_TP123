@@ -40,7 +40,7 @@ describe('AppComponent (barre du haut)', () => {
     httpMock.expectNone('/api/users/me');
   });
 
-  it('connecté : recharge le profil et affiche Accueil, Recherche, Amis et l’avatar', () => {
+  it('connecté : recharge le profil et affiche Accueil, Mes albums, Recherche, Amis et l’avatar', () => {
     localStorage.setItem('gpc_token', 'jwt-de-test');
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
@@ -54,6 +54,7 @@ describe('AppComponent (barre du haut)', () => {
     const links = Array.from(el.querySelectorAll('nav.links a')).map((a) => a.textContent?.trim());
     expect(links).toEqual([
       expect.stringContaining('Accueil'),
+      expect.stringContaining('Mes albums'),
       expect.stringContaining('Recherche'),
       expect.stringContaining('Amis'),
     ]);

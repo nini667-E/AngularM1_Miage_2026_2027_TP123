@@ -307,3 +307,81 @@ réellement garanti. La vérification croisée du TP3 ne
 l'avait pas révélé, car aucun des bugs introduits alors ne supprimait un
 élément affiché. Ces tests ont disparu avec l'audio ; la règle s'applique
 à tous les tests V2.
+
+### Étape 2 — Albums (01/11/2026)
+
+**Backend — 5 fichiers, 29 tests** (+23). Aucun ne touche MongoDB ni le
+vrai TCGdex :
+- `test/helpers.js` : serveur de test, tokens, et un **faux TCGdex**. Comme
+  le backend et les tests utilisent tous deux `fetch`, le faux `fetch` ne
+  répond qu'aux URL `api.tcgdex.net` et laisse passer les autres vers le
+  vrai `fetch` (capturé avant la simulation) ;
+- les modèles `Album` et `User` sont simulés avec `mock.method` ; de vrais
+  documents `Album` non sauvegardés servent de données (méthode
+  `toPublic()` réelle, `save()` simulé).
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `access.test.js` | `isOwner` (ObjectId vs chaîne, album/utilisateur absent), `canView` (propriétaire, autre, public, privé, album absent) | règles de la §4.3 de `backend/analyse.md` | ✅ (×4) |
+| `catalog.test.js` | sans JWT | `401`, aucun appel TCGdex | ✅ |
+| | séries | Pocket exclue, logos en `.png` | ✅ |
+| | deux demandes | **un seul** appel TCGdex (mémoire) | ✅ |
+| | extensions | nom, logo ou `null`, nombre de cartes | ✅ |
+| | série inconnue / Pocket / identifiant invalide | `404` ; Pocket et identifiant invalide **sans** appel TCGdex | ✅ |
+| | TCGdex injoignable | `502 Catalogue de cartes indisponible` | ✅ |
+| `albums.test.js` | création avec thème complet | `201`, privé par défaut, `ownerId` = token, noms et logos recopiés | ✅ |
+| | création sans thème | collection libre, aucun appel au catalogue | ✅ |
+| | 10 corps invalides (titre absent / blanc / 61 caractères, description 501, visibilité, type, extension sans série, Pocket, série inconnue, extension hors série) | `400` + message précis, `Album.create` jamais appelé | ✅ |
+| | thème avec TCGdex injoignable | `502`, rien d'enregistré | ✅ |
+| | mes albums | filtre `ownerId` du token, tri `updatedAt` décroissant, `limit` bornée à 48, `skip` correct | ✅ |
+| | lecture : propriétaire / privé d'un autre / inexistant / id invalide / public d'un autre | `200` avec nom du propriétaire / `404` ×3 / `200` | ✅ |
+| | modification partielle | seul le champ envoyé change, pas de revalidation du thème | ✅ |
+| | modification d'un album **public** d'un autre | `404`, rien d'enregistré | ✅ |
+| | titre vide | `400` | ✅ |
+| | suppression | filtre `{ _id, ownerId du token }` : `404` pour un autre, `204` pour le propriétaire | ✅ |
+
+**Frontend — 14 fichiers, 56 tests** (+33) : `card-types` (3),
+`AlbumService` (3), `CatalogService` (2, dont « une requête par liste »),
+`AlbumFormDialogComponent` (7 : privé par défaut, extension désactivée
+sans série, extension vidée au changement de série, corps envoyé, **sans
+thème → `theme: {}`**, titre vide, erreur serveur, pré-remplissage puis
+`PUT`), `AlbumsPageComponent` (5 : couvertures et liens, état vide,
+erreur sans état vide, création → SnackBar + rechargement, création
+annulée), `AlbumPageComponent` (7 : affichage, visiteur sans actions,
+propriétaire avec actions, 404, suppression confirmée, annulée,
+modification), `AlbumCoverComponent` (4 : accord du nombre de cartes,
+visibilité pour lecteurs d'écran, emblème logo/série/icône, collection
+libre) ; `app.spec` et `routes.spec` mis à jour (lien et routes albums).
+Règle de l'étape 1 appliquée : textes du DOM lus avec `?? ''`.
+
+**Vérification croisée (13 bugs introduits volontairement)** :
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| `canView` laisse tout voir | `canView : un autre…` + `lecture : album privé d'un autre -> 404` |
+| `PUT` autorisé à qui peut voir (au lieu du propriétaire) | `modification d'un album public d'un autre : 404` |
+| extension hors série acceptée | `création refusée (400)…` |
+| série Pocket non exclue | `séries : Pocket exclue…` + `création refusée (400)…` |
+| mémoire du catalogue désactivée | `mémoire : deux demandes, un seul appel` |
+| `DELETE` sans filtre propriétaire | `suppression : filtre { _id, ownerId du token }…` |
+| extension conservée au changement de série | `choisir une série… en changer vide l'extension` (+3) |
+| type vide envoyé au serveur | **aucun au premier essai** → test « sans thème » ajouté, qui échoue |
+| boutons propriétaire visibles par tous | `visiteur : ni Modifier ni Supprimer` |
+| 404 traité comme erreur générique | `404 … « Album introuvable »` |
+| liste non rechargée après création | `création réussie : SnackBar puis rechargement` |
+| « 1 cartes » | `nombre de cartes accordé…` |
+| catalogue redemandé à chaque fois | les 2 tests de `CatalogService` |
+
+Au passage : avec le bug « `canView` laisse tout voir », un test a mis 10 s
+à échouer — la route continuait jusqu'à `User.findById`, non simulé, et
+attendait une base absente. Simulation ajoutée : l'échec est immédiat.
+
+**Ce que les tests unitaires n'ont pas vu, trouvé dans le navigateur**
+(même leçon que le `fetch`/XHR du TP3) :
+1. **`<base href="/">` manquante dans `index.html`** : ouvrir directement
+   `/albums/:id` (lien, F5) chargeait les fichiers de l'application depuis
+   `/albums/` → page blanche. Les tests unitaires ne chargent pas
+   `index.html` ; seul le harnais (second compte ouvrant l'URL) l'a révélé.
+2. **Fenêtre de formulaire coupée à gauche** (largeur minimale du
+   formulaire supérieure à celle de la fenêtre) : défaut purement visuel,
+   vu sur capture d'écran.

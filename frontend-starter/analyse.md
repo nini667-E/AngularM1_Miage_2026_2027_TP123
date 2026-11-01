@@ -16,9 +16,10 @@ Application **Angular 22** en mode **standalone** (pas de `NgModule`),
 consommant l'API décrite dans `backend/analyse.md` et `API_CONTRACT.md`.
 Depuis la V2 (01/11/2026), l'application s'appelle **Card Vault** : un
 réseau de collectionneurs de cartes Pokémon (voir `../REPORT.md`). À
-l'étape 1, elle ne contient que l'authentification, le profil, la
-navigation et des pages d'attente ; les albums arrivent à l'étape 2 (voir
-§7 "État par rapport aux missions").
+l'étape 2, elle contient l'authentification, le profil, la navigation et
+les **albums** (création, thème, visibilité, page d'album) ; les cartes
+arrivent à l'étape 3, le social aux étapes 4 à 7 (voir §7 "État par
+rapport aux missions").
 
 ### 1.1 Stack technique
 
@@ -29,9 +30,9 @@ navigation et des pages d'attente ; les albums arrivent à l'étape 2 (voir
 | Formulaires | Reactive Forms (`FormGroup`, `FormControl`) + `MatFormField`/`matInput` (V2) | Saisie inscription/connexion/profil |
 | HTTP | `HttpClient` + intercepteur fonctionnel ; mécanisme XHR forcé par `withXhr()` (TP3, Mission 6, 08/10/2026) | Appels API, ajout du JWT, progression d'upload |
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
-| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés ; V2 étape 1 : 7 fichiers `*.spec.ts` / 23 tests au 01/11/2026) | `ng serve`, `ng build`, `ng test` |
+| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés ; V2 étape 2 : 14 fichiers `*.spec.ts` / 56 tests au 01/11/2026) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
-| Composants UI | Angular Material 22.2.1 + CDK | **V2 (01/11/2026)** : utilisé dans toute l'application — `MatToolbar`, `MatMenu`, `MatCard`, `MatFormField`, `MatButton`, `MatIcon` (police *Material Symbols Outlined*), `MatSnackBar`, `MatDivider`. Thème Material 3 **sombre or / bleu nuit** (`material-theme.scss`, palettes générées) + identité visuelle dans `styles.css` (reflet or métallique, couleurs des 11 types) |
+| Composants UI | Angular Material 22.2.1 + CDK | **V2 (01/11/2026)** : utilisé dans toute l'application — `MatToolbar`, `MatMenu`, `MatCard`, `MatFormField`, `MatButton`, `MatIcon` (police *Material Symbols Outlined*), `MatSnackBar`, `MatDivider` ; étape 2 : `MatDialog`, `MatSelect`, `MatButtonToggle`, `MatChips`, `MatTooltip`, `MatPaginator`, `MatProgressBar`. Thème Material 3 **sombre or / bleu nuit** (`material-theme.scss`, palettes générées) + identité visuelle dans `styles.css` (reflet or métallique, couleurs des 11 types) |
 
 ### 1.2 Arborescence
 
@@ -39,6 +40,7 @@ navigation et des pages d'attente ; les albums arrivent à l'étape 2 (voir
 frontend-starter/
 ├── proxy.conf.json                  # /api -> http://localhost:3000
 ├── src/
+│   ├── index.html                   # <base href="/"> (indispensable aux URL /albums/:id)
 │   ├── main.ts                      # bootstrap standalone + providers globaux
 │   ├── material-theme.scss          # thème Material 3 sombre (or / bleu nuit)
 │   ├── _theme-colors.scss           # palettes générées (ng generate @angular/material:theme-color)
@@ -47,17 +49,19 @@ frontend-starter/
 │   │   ├── routes.ts (+ .spec)      # déclaration des routes + guards
 │   │   ├── components/
 │   │   │   ├── app/                 # racine : barre MatToolbar + <router-outlet>
-│   │   │   ├── login-page/          # connexion (MatCard + MatFormField)
-│   │   │   ├── register-page/       # inscription
-│   │   │   ├── profile-page/        # profil (protégée)
+│   │   │   ├── login-page/, register-page/, profile-page/
+│   │   │   ├── albums-page/         # « Mes albums » : grille de couvertures (étape 2)
+│   │   │   ├── album-page/          # page d'un album : en-tête + classeur (étape 2)
+│   │   │   ├── album-form-dialog/   # création / modification d'un album (étape 2)
 │   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche, Amis)
 │   │   └── shared/
-│   │       ├── guards/auth.guard.ts         # bloque l'accès sans token
-│   │       ├── interceptors/auth.interceptor.ts  # ajoute Authorization: Bearer
-│   │       ├── i18n/french-paginator-intl.ts     # textes français de mat-paginator
-│   │       ├── models/              # User, AuthResponse, Page<T>
-│   │       ├── services/            # AuthService (seul point d'appel HTTP pour l'instant)
-│   │       └── utils/http-error.ts  # serverErrorMessage() (message d'erreur lisible)
+│   │       ├── components/          # album-cover, theme-chips, confirm-dialog (réutilisables)
+│   │       ├── guards/auth.guard.ts
+│   │       ├── interceptors/auth.interceptor.ts
+│   │       ├── i18n/french-paginator-intl.ts
+│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue
+│   │       ├── services/            # AuthService, AlbumService, CatalogService (seuls points d'appel HTTP)
+│   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
 ### 1.3 Diagramme de composants et flux général
@@ -66,37 +70,31 @@ frontend-starter/
 flowchart LR
     subgraph Angular["Frontend Angular (localhost:4200)"]
         App[AppComponent\nMatToolbar + menus]
-        Routes[routes.ts]
-        Guard[authGuard]
-        Login[LoginPageComponent]
-        Register[RegisterPageComponent]
-        Profile[ProfilePageComponent]
-        Placeholder[PlaceholderPageComponent\nAccueil · Recherche · Amis]
-        AuthSvc[AuthService\nsignals: token, currentUser]
+        Routes[routes.ts + authGuard]
+        Auth[Login / Register / Profile]
+        Albums[AlbumsPageComponent\nMes albums]
+        Album[AlbumPageComponent]
+        Form[AlbumFormDialogComponent]
+        Cover[AlbumCover / ThemeChips\n(partagés)]
+        AuthSvc[AuthService]
+        AlbumSvc[AlbumService]
+        CatSvc[CatalogService\nshareReplay]
         Interceptor[authInterceptor]
-        HttpClient[HttpClient]
-    end
-
-    subgraph Browser["Navigateur"]
-        LS[(localStorage\ngpc_token)]
     end
 
     subgraph API["Backend Express (proxy /api -> :3000)"]
-        Endpoints[/api/auth/*, /api/users/me/]
+        Endpoints[/api/auth, /api/users/me,\n/api/albums, /api/catalog/]
     end
 
-    App --> AuthSvc
-    Routes --> Guard
-    Guard -->|token absent| Login
-    Guard -->|token présent| Placeholder
-    Login --> AuthSvc
-    Register --> AuthSvc
-    Profile --> AuthSvc
-    AuthSvc --> HttpClient
-    HttpClient --> Interceptor
-    Interceptor -- lit --> AuthSvc
+    Routes --> Auth & Albums & Album
+    Albums --> Cover
+    Albums -- MatDialog --> Form
+    Album -- MatDialog --> Form
+    Auth --> AuthSvc
+    Albums & Album --> AlbumSvc
+    Form --> AlbumSvc & CatSvc
+    AuthSvc & AlbumSvc & CatSvc --> Interceptor
     Interceptor -- "Authorization: Bearer <token>" --> Endpoints
-    AuthSvc -- écrit/lit --> LS
 ```
 
 Le flux respecté partout dans le code : **composant → service → HttpClient →
@@ -140,6 +138,13 @@ affiche ses textes par défaut en anglais ("Items per page:", "0 of 0"),
 incohérent avec le reste de l'app — fourni globalement ici, ce qui le
 rend disponible pour les listes paginées de la V2 (albums, recherche).
 
+**`<base href="/">` (V2, étape 2, 01/11/2026).** Absente du starter et de
+la V1 : sans conséquence tant que toutes les URL n'avaient qu'un niveau
+(`/tracks`). Avec `/albums/:id`, ouvrir directement l'URL (lien partagé, F5)
+faisait charger `styles.css` et `main.js` depuis `/albums/` → 404 et page
+blanche. Trouvé par le harnais navigateur (second compte ouvrant l'URL d'un
+album), ajouté dans `index.html`.
+
 **Icônes (V2, étape 1, 01/11/2026).** `index.html` charge la police
 *Material Symbols Outlined*, mais `<mat-icon>` utilise par défaut la classe
 `material-icons`. `MAT_ICON_DEFAULT_OPTIONS` (`fontSet:
@@ -151,6 +156,8 @@ rend disponible pour les listes paginées de la V2 (albums, recherche).
 | Path | Composant | Protégée (`authGuard`) |
 |---|---|---|
 | `''` | `PlaceholderPageComponent` (Accueil, rempli à l'étape 7) | oui |
+| `/albums` | `AlbumsPageComponent` (Mes albums, étape 2) | oui |
+| `/albums/:id` | `AlbumPageComponent` (étape 2) | oui |
 | `/search` | `PlaceholderPageComponent` (Recherche, étape 7) | oui |
 | `/friends` | `PlaceholderPageComponent` (Amis, étape 4) | oui |
 | `/profile` | `ProfilePageComponent` | oui |
@@ -285,7 +292,7 @@ logout(): void {
   Material :
   - `MatToolbar` collante (`position: sticky`), logo « Card Vault » en
     dégradé or métallique ;
-  - **connecté** (`auth.token()`) : liens **Accueil · Recherche · Amis**
+  - **connecté** (`auth.token()`) : liens **Accueil · Mes albums · Recherche · Amis** (« Mes albums » ajouté à l'étape 2)
     (`mat-button` + `routerLinkActive`, lien actif surligné), puis un
     avatar (initiale du pseudo, `computed`) qui ouvre un `MatMenu` : pseudo
     et email, **Mon profil**, **Déconnexion** ;
@@ -340,17 +347,96 @@ return next(authorizedRequest).pipe(
 
 ---
 
-## 4. Albums et cartes
+## 4. Albums (V2, étape 2) et cartes (étape 3)
 
-_À venir (étapes 2 et 3 de la V2)._
+### 4.1 Services
 
-La bibliothèque audio de la V1 (`TracksPageComponent`, `TrackService`,
-pagination, upload avec progression, lecture, suppression) a été
-**retirée le 01/11/2026** (V2, étape 1). Ce qui en est réutilisé :
-`withXhr()` (progression d'upload), `Page<T>`, `FrenchPaginatorIntl`,
-`serverErrorMessage()` (déplacée dans `shared/utils/http-error.ts`), les
-patterns SnackBar et confirmation `MatDialog`. Description complète de la
-V1 : version taguée `v1.0` de ce fichier.
+| Service | Méthodes → requêtes | Particularité |
+|---|---|---|
+| `AlbumService` | `mine(page, limit)` → `GET /api/albums/mine` ; `get(id)` → `GET /api/albums/:id` ; `create(input)` → `POST /api/albums` ; `update(id, changes)` → `PUT` ; `delete(id)` → `DELETE` | identifiant encodé (`encodeURIComponent`) |
+| `CatalogService` | `types()`, `series()`, `sets(serieId)` → `/api/catalog/…` | **une requête par liste et par session** : `shareReplay(1)` + `Map` des Observables par URL. Vérifié dans le navigateur : 5 ouvertures du formulaire, 1 seul appel par liste |
+
+### 4.2 « Mes albums » (`AlbumsPageComponent`)
+
+Signals `albums`, `page`, `limit` (12), `total`, `loading`, `error`. Grille
+CSS `auto-fill` de `AlbumCoverComponent` ; `mat-paginator` affiché seulement
+s'il y a plus d'une page. **État vide** dédié (mini classeur 3×3 + bouton
+« Créer mon premier album »), jamais affiché en cas d'erreur de chargement
+(sinon on laisserait croire que l'utilisateur n'a aucun album). Après une
+création : SnackBar, retour à la page 1 (le nouvel album est le plus récent)
+et rechargement.
+
+### 4.3 Formulaire (`AlbumFormDialogComponent`, `MatDialog`)
+
+```mermaid
+sequenceDiagram
+    participant U as Utilisateur
+    participant D as AlbumFormDialog
+    participant C as CatalogService
+    participant A as AlbumService
+
+    U->>D: ouvre (data.album absent = création)
+    D->>C: types(), series() (mémoire de session)
+    U->>D: choisit une série
+    D->>D: setId vidé + désactivé
+    D->>C: sets(serieId)
+    C-->>D: extensions -> setId réactivé
+    U->>D: Créer l'album
+    D->>D: toInput() : thème avec les seuls champs choisis
+    D->>A: create(input) ou update(id, input)
+    alt succès
+        A-->>D: album
+        D->>D: dialogRef.close(album)
+    else erreur (400, 502…)
+        A-->>D: HttpErrorResponse
+        D->>D: message affiché, fenêtre ouverte, bouton réactivé
+    end
+```
+
+- Formulaire réactif : `title` (requis, 60 max), `description` (500 max,
+  compteurs `mat-hint`), `visibility` (`MatButtonToggle`, phrase
+  d'explication qui change selon le choix), `type` (`MatSelect`, pastille de
+  couleur), `serieId`, `setId` (logos des extensions dans les options).
+- **L'extension dépend de la série** : désactivée sans série, **vidée** à
+  chaque changement de série (l'ancienne n'appartient pas à la nouvelle).
+  En modification, le formulaire est pré-rempli et l'extension est
+  resélectionnée une fois la liste de la série chargée.
+- La fenêtre enregistre elle-même et se ferme avec l'album enregistré ;
+  taille commune `ALBUM_DIALOG_CONFIG` (`width: 640px, maxWidth: 95vw`).
+  Bug trouvé en vérification navigateur : une `min-width` sur le formulaire,
+  plus large que la fenêtre, coupait les champs à gauche.
+
+### 4.4 Page d'un album (`AlbumPageComponent`)
+
+- Identifiant lu dans `ActivatedRoute.paramMap` ; **404** (inexistant ou
+  privé d'un autre, indiscernables côté backend) → « Album introuvable » ;
+  autre erreur → message via `serverErrorMessage()`.
+- En-tête teinté par la couleur du type, emblème (logo de l'extension,
+  sinon de la série, sinon icône du type), visibilité, propriétaire,
+  description, puces du thème.
+- `isOwner` (`computed`) : `album.ownerId === auth.currentUser()?.id` →
+  boutons **Modifier** (même fenêtre, l'album affiché est mis à jour avec la
+  réponse, le propriétaire étant conservé) et **Supprimer**
+  (`ConfirmDialogComponent`, puis SnackBar et retour à `/albums`). Ces
+  boutons ne sont qu'un confort : c'est le backend qui refuse (`404`) toute
+  modification par un autre utilisateur.
+- **Classeur** : une page de 9 pochettes au format d'une carte
+  (`aspect-ratio: 63 / 88`), vides jusqu'à l'étape 3.
+
+### 4.5 Composants partagés (`shared/components`)
+
+| Composant | Rôle |
+|---|---|
+| `AlbumCoverComponent` | couverture façon classeur (cuir teinté par le type, dos, liseré doré), visibilité en icône **et** en texte pour les lecteurs d'écran, nombre de cartes accordé (« Aucune carte », « 1 carte », « N cartes ») ; réutilisée par l'accueil, la recherche et les profils aux étapes suivantes |
+| `ThemeChipsComponent` | puces `mat-chip` : type (couleur + icône), série, extension (logo) ; « Collection libre » sans thème |
+| `ConfirmDialogComponent` | confirmation générique (`MAT_DIALOG_DATA` : titre, message, libellé), bouton aux couleurs « erreur » du thème |
+
+`utils/card-types.ts` associe chaque type TCGdex (« Électrique »…) à sa
+variable de couleur `--cv-type-*` et à une icône Material Symbols, après
+suppression des accents (`typeSlug`).
+
+La bibliothèque audio de la V1 (retirée à l'étape 1) est décrite dans la
+version taguée `v1.0` de ce fichier.
 
 ---
 
@@ -439,6 +525,7 @@ mini projet.
 | TP3 · M6 | Progression d'upload (événements HTTP) | ✅ Fait (08/10/2026) — `reportUploadProgress` + `observe: 'events'`, Signal `uploadProgress`, `mat-progress-bar`, 4 états, contrôles désactivés ; `withXhr()` dans `main.ts` (`fetch`, défaut d'Angular 22, ne remonte pas la progression d'envoi) |
 | TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ✅ 7/7 (08/10/2026) — `AuthService`, `TrackService`, `authInterceptor`, `authGuard`, + `tracks-page.spec.ts` (erreur HTTP affichée, suppression, upload avec progression). Détail : `Tests.md` |
 | V2 · Étape 1 | Retrait de l'audio, identité Card Vault, thème sombre, navigation | ✅ Fait (01/11/2026) — pages audio supprimées ; `MatToolbar` + `MatMenu` (+ menu mobile) ; thème Material sombre or / bleu nuit ; connexion/inscription/profil en Material ; pages d'attente Accueil/Recherche/Amis ; 23 tests |
+| V2 · Étape 2 | Albums : création, modification, suppression, thème, visibilité | ✅ Fait (01/11/2026) — `AlbumService`, `CatalogService` (mémoire de session), « Mes albums » (couvertures, état vide, pagination), fenêtre de formulaire (extension dépendante de la série), page d'album (404, actions du propriétaire, classeur vide) ; `<base href="/">` ajouté ; 56 tests |
 
 ---
 
@@ -530,3 +617,8 @@ mini projet.
   `serverErrorMessage()` déplacée dans `shared/utils`, police d'icônes
   (`MAT_ICON_DEFAULT_OPTIONS`) (§1, §1.1, §1.2, §1.3, §2.1, §2.2, §3.4,
   §3.5, §4, §6, §7).
+- **01/11/2026** — V2, étape 2 : albums (`AlbumService`, `CatalogService`,
+  pages « Mes albums » et album, fenêtre de formulaire, composants partagés
+  couverture / puces / confirmation, `card-types.ts`), lien « Mes albums »
+  dans la barre, `<base href="/">` dans `index.html` (§1, §1.1, §1.2, §1.3,
+  §2.1, §2.2, §3.5, §4, §7).

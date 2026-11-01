@@ -1,0 +1,72 @@
+<section class="cv-page">
+  <a mat-button routerLink="/albums" class="back">
+    <mat-icon>arrow_back</mat-icon>
+    Mes albums
+  </a>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement de l'album" />
+  }
+
+  @if (notFound()) {
+    <div class="message">
+      <mat-icon aria-hidden="true">lock</mat-icon>
+      <h1>Album introuvable</h1>
+      <p>Cet album n'existe pas, ou il est privé.</p>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+
+  @if (album(); as album) {
+    <header class="banner" [style.--album-color]="color()">
+      <div class="emblem" aria-hidden="true">
+        @if (logo(); as logo) {
+          <img [src]="logo" alt="" />
+        } @else {
+          <mat-icon>{{ icon() }}</mat-icon>
+        }
+      </div>
+      <div class="details">
+        <p class="eyebrow">
+          <mat-icon aria-hidden="true">{{ album.visibility === 'public' ? 'public' : 'lock' }}</mat-icon>
+          {{ album.visibility === 'public' ? 'Album public' : 'Album privé' }} · par {{ album.owner.name }}
+        </p>
+        <h1 class="cv-gold-text">{{ album.title }}</h1>
+        @if (album.description) {
+          <p class="description">{{ album.description }}</p>
+        }
+        <app-theme-chips [theme]="album.theme" />
+        <p class="meta">
+          {{ album.cardCount }} carte{{ album.cardCount > 1 ? 's' : '' }} · mis à jour le
+          {{ album.updatedAt | date: 'dd/MM/yyyy' }}
+        </p>
+      </div>
+      @if (isOwner()) {
+        <div class="actions">
+          <button mat-stroked-button (click)="edit()">
+            <mat-icon>edit</mat-icon>
+            Modifier
+          </button>
+          <button mat-icon-button (click)="confirmDelete()" [disabled]="deleting()" matTooltip="Supprimer l'album" aria-label="Supprimer l'album">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      }
+    </header>
+
+    <div class="binder" aria-label="Classeur de l'album">
+      <div class="page">
+        @for (slot of slots; track slot) {
+          <span class="pocket" aria-hidden="true"></span>
+        }
+        <p class="binder-note">
+          <mat-icon aria-hidden="true">style</mat-icon>
+          L'ajout de cartes arrive à l'étape 3.
+        </p>
+      </div>
+    </div>
+  }
+</section>

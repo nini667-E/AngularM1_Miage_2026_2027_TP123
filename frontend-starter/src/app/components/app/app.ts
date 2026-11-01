@@ -30,6 +30,7 @@ export class AppComponent {
   // large) et le menu « burger » (mobile) pour ne les écrire qu'une fois.
   protected readonly links = [
     { path: '/', label: 'Accueil', icon: 'home', exact: true },
+    { path: '/albums', label: 'Mes albums', icon: 'collections_bookmark', exact: false },
     { path: '/search', label: 'Recherche', icon: 'search', exact: false },
     { path: '/friends', label: 'Amis', icon: 'group', exact: false },
   ];

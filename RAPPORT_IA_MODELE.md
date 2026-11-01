@@ -2652,3 +2652,92 @@ audio plutôt que le garder « au cas où » ; comment `mat.theme()` et
 composant de page d'attente piloté par `data` de route ; pourquoi la
 SnackBar exige un style global ; pourquoi un test qui ne peut pas échouer
 ne prouve rien, et comment `toContain` sur `undefined` en a produit un.
+
+### Entrée V2.2 — Étape 2 : albums (01/11/2026)
+
+**Objectif.** Permettre de créer, consulter, modifier et supprimer ses
+albums, avec un thème facultatif (type, série, extension issus du
+catalogue TCGdex et vérifiés par le serveur) et une visibilité (privé ou
+public). Les cartes arrivent à l'étape 3.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets) :**
+> oui tu peux push eet arreter les serveurs
+>
+> oui on passe a l etape 2
+>
+> [Thème : Facultatif] [Navigation : Dans la barre]
+> [Suppression : Confirmation simple]
+>
+> oui
+
+**Plan proposé par l'agent (validé).** Vérification préalable des données
+réelles de TCGdex (19 séries dont Pocket, extensions avec logos et nombre
+de cartes, 11 types, comportement 404, en-têtes de cache). Backend :
+service TCGdex avec mémoire 24 h et `502`, routes `/api/catalog`, modèle
+`Album`, validation du thème par le serveur, `canView`, CRUD
+`/api/albums` en `404` pour un non-propriétaire. Frontend : `AlbumService`,
+`CatalogService`, « Mes albums », fenêtre de formulaire (extension
+dépendante de la série), page d'album. Tests des deux côtés, vérification
+croisée, navigateur, documentation.
+
+**Vérifications réalisées.**
+- Backend 29/29 (sans MongoDB ni vrai TCGdex : faux `fetch` limité aux URL
+  TCGdex), frontend 56/56, build sans avertissement.
+- **Vérification croisée : 13 bugs introduits volontairement** (6 backend,
+  7 frontend), tous détectés après ajout d'un test (voir erreur 2).
+- Harnais Playwright (scratchpad, hors dépôt), **vrai catalogue TCGdex**,
+  deux comptes : 12 vérifications (création avec les 4 formes de thème,
+  modification pré-remplie, album public vu par un autre compte sans
+  actions, album privé introuvable, suppression, catalogue demandé une
+  seule fois pour 5 ouvertures du formulaire, mobile, console sans
+  secret).
+
+**Erreurs ou bugs trouvés.**
+1. **Bug réel : `<base href="/">` absente d'`index.html`** depuis le
+   starter. Ouvrir directement `/albums/:id` chargeait les fichiers de
+   l'application depuis `/albums/` → page blanche. Invisible pour le
+   premier compte (navigation interne), révélé par le second compte qui
+   ouvrait l'adresse directement ; l'API répondait pourtant `200` (vérifié
+   par `curl`), ce qui a orienté le diagnostic vers le navigateur
+   (console : « Refused to apply style from …/albums/styles.css »).
+2. **Test manquant (erreur de l'agent)** : la mutation « champ de thème
+   vide envoyé » n'a fait échouer aucun test, car tous choisissaient un
+   type. Test « création sans thème » ajouté.
+3. **Défauts visuels repérés par l'agent sur ses propres captures** :
+   fenêtre de formulaire coupée à gauche (`min-width` du formulaire
+   supérieure à la fenêtre → taille fixée à l'ouverture,
+   `ALBUM_DIALOG_CONFIG`) ; titre doré terne (dégradé étalé sur toute la
+   ligne → `inline-block`, extrémités du dégradé éclaircies).
+4. **Test lent** : avec le bug « `canView` laisse tout voir », un test mettait
+   10 s à échouer (requête vers une base absente) ; simulation ajoutée.
+5. **Erreur de manipulation de l'agent** : une commande mal écrite a lancé
+   le scénario navigateur deux fois, créant des albums en double sur le
+   compte de test ; nettoyés par l'API puis scénario relancé une fois.
+
+**Fichiers effectivement modifiés.**
+Backend : `src/app.js`, nouveaux `src/errors.js`, `src/access.js`,
+`src/models/Album.js`, `src/routes/albums.js`, `src/routes/catalog.js`,
+`src/services/tcgdex.js`, `src/services/theme.js` ; tests `test/helpers.js`,
+`access.test.js`, `catalog.test.js`, `albums.test.js` ; `analyse.md`.
+Frontend : `index.html`, `styles.css`, `routes.ts` (+ spec), `app.ts`
+(+ spec), nouveaux `albums-page/`, `album-page/`, `album-form-dialog/`,
+`shared/components/` (album-cover, theme-chips, confirm-dialog),
+`shared/models/album.model.ts`, `catalog.model.ts`,
+`shared/services/album.service.ts`, `catalog.service.ts`,
+`shared/utils/card-types.ts`, et leurs tests ; `analyse.md`.
+Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`, `compte-rendu/V2.md`,
+7 captures `v2-etape2-*.png`, `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` (29 et 56) et de
+`npm run build` ; tableau des vérifications navigateur et captures dans
+`compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi le catalogue est
+interrogé par le backend et pas par Angular ; pourquoi on recopie nom et
+logo dans l'album ; pourquoi un refus d'accès renvoie 404 et non 403 ;
+comment `shareReplay(1)` évite de redemander une liste ; pourquoi
+l'extension est vidée quand la série change ; à quoi sert `<base href>`
+et pourquoi son absence ne se voyait qu'avec des URL à plusieurs niveaux ;
+comment simuler `fetch` pour TCGdex sans casser les appels du test vers
+notre propre serveur.

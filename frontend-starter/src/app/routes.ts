@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './shared/guards/auth.guard';
+import { AlbumPageComponent } from './components/album-page/album-page';
+import { AlbumsPageComponent } from './components/albums-page/albums-page';
 import { LoginPageComponent } from './components/login-page/login-page';
 import { PlaceholderPageComponent, PlaceholderData } from './components/placeholder-page/placeholder-page';
 import { ProfilePageComponent } from './components/profile-page/profile-page';
@@ -9,6 +11,9 @@ export const routes: Routes = [
   { path: 'login', component: LoginPageComponent },
   { path: 'register', component: RegisterPageComponent },
   { path: 'profile', component: ProfilePageComponent, canActivate: [authGuard] },
+  // Albums (V2, étape 2).
+  { path: 'albums', component: AlbumsPageComponent, canActivate: [authGuard] },
+  { path: 'albums/:id', component: AlbumPageComponent, canActivate: [authGuard] },
   // Pages posées à l'étape 1 de la V2, remplies aux étapes indiquées.
   {
     path: '',

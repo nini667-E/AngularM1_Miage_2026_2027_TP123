@@ -1,0 +1,53 @@
+<section class="cv-page">
+  <header class="page-header">
+    <div>
+      <h1 class="cv-page-title">Mes albums</h1>
+      @if (total() > 0) {
+        <p class="subtitle">{{ total() }} album{{ total() > 1 ? 's' : '' }}</p>
+      }
+    </div>
+    <button mat-flat-button (click)="create()">
+      <mat-icon>add</mat-icon>
+      Nouvel album
+    </button>
+  </header>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement des albums" />
+  }
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+
+  @if (!loading() && !error() && albums().length === 0) {
+    <div class="empty">
+      <div class="empty-binder" aria-hidden="true">
+        @for (slot of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track slot) {
+          <span></span>
+        }
+      </div>
+      <h2>Ton coffre est encore vide</h2>
+      <p>Crée ton premier album pour commencer à ranger tes cartes.</p>
+      <button mat-flat-button (click)="create()">
+        <mat-icon>add</mat-icon>
+        Créer mon premier album
+      </button>
+    </div>
+  } @else {
+    <ul class="grid">
+      @for (album of albums(); track album.id) {
+        <li><app-album-cover [album]="album" /></li>
+      }
+    </ul>
+    @if (total() > limit()) {
+      <mat-paginator
+        [length]="total()"
+        [pageSize]="limit()"
+        [pageIndex]="page() - 1"
+        [pageSizeOptions]="[12, 24, 48]"
+        (page)="onPage($event)"
+      />
+    }
+  }
+</section>

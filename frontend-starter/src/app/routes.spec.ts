@@ -7,7 +7,7 @@ import { authGuard } from './shared/guards/auth.guard';
 describe('routes', () => {
   const byPath = (path: string) => routes.find((route) => route.path === path);
 
-  it.each(['', 'search', 'friends', 'profile'])('la page "/%s" est protégée par authGuard', (path) => {
+  it.each(['', 'albums', 'albums/:id', 'search', 'friends', 'profile'])('la page "/%s" est protégée par authGuard', (path) => {
     // toEqual et non toContain : constaté le 01/11/2026, expect(undefined)
     // .toContain(...) PASSE dans cette version de Vitest, donc une route
     // sans guard n'aurait pas été détectée.

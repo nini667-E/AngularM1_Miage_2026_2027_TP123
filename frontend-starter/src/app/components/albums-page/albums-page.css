@@ -1,0 +1,50 @@
+:host { display: block; }
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.page-header .cv-page-title { margin: 0; }
+.subtitle { margin: 0.25rem 0 0; color: var(--mat-sys-on-surface-variant); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+mat-paginator { margin-top: 1.5rem; background: transparent; }
+
+/* État vide : un petit classeur 3×3 aux pochettes vides. */
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 3rem 1rem;
+  text-align: center;
+  background: var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 16px;
+}
+.empty h2 { margin: 1rem 0 0; font: var(--mat-sys-title-large); }
+.empty p { margin: 0 0 1rem; color: var(--mat-sys-on-surface-variant); }
+.empty-binder {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgb(201 162 77 / 0.35);
+  border-radius: 10px;
+}
+.empty-binder span {
+  aspect-ratio: 63 / 88;
+  border: 1px dashed rgb(201 162 77 / 0.45);
+  border-radius: 4px;
+}

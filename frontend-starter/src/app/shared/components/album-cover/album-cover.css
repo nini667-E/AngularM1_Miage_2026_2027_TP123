@@ -1,0 +1,85 @@
+:host { display: block; }
+
+.album {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  background: var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 16px;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.album:hover,
+.album:focus-visible {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--mat-sys-primary) 55%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
+  outline: none;
+}
+
+/* Couverture façon classeur : cuir sombre teinté par le type, dos à gauche,
+   liseré doré. */
+.cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  background:
+    radial-gradient(circle at 60% 40%, color-mix(in srgb, var(--album-color) 35%, transparent), transparent 65%),
+    linear-gradient(160deg, color-mix(in srgb, var(--album-color) 25%, #141a2c), #0b0f1b);
+  box-shadow: inset 0 0 0 1px rgb(201 162 77 / 0.25);
+}
+.spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 14px;
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.45), rgb(255 255 255 / 0.04));
+  border-right: 1px solid rgb(201 162 77 / 0.35);
+}
+.emblem-logo {
+  max-width: 62%;
+  max-height: 46%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.6));
+}
+.emblem-icon {
+  width: 64px;
+  height: 64px;
+  font-size: 64px;
+  color: var(--album-color);
+  filter: drop-shadow(0 4px 12px rgb(0 0 0 / 0.6));
+}
+
+.visibility {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--mat-sys-on-surface);
+  background: rgb(13 18 32 / 0.75);
+  border-radius: 50%;
+}
+.visibility mat-icon { width: 18px; height: 18px; font-size: 18px; }
+
+.info { padding: 0.9rem 1rem 1rem; }
+h3 {
+  margin: 0;
+  overflow: hidden;
+  font: var(--mat-sys-title-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.count { margin: 0.2rem 0 0.6rem; color: var(--mat-sys-on-surface-variant); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

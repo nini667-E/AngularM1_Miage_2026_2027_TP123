@@ -2,6 +2,9 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
+    <!-- Racine de l'application : sans elle, ouvrir directement une URL à
+         plusieurs niveaux (/albums/:id) charge les fichiers depuis /albums/. -->
+    <base href="/" />
     <title>Card Vault</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
       <link rel="preconnect" href="https://fonts.googleapis.com">
