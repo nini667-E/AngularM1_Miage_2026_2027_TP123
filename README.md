@@ -1,8 +1,13 @@
-# Guitar Practice Cloud
+# Card Vault
 
-Application web de bibliothèque de *backing tracks* pour guitaristes :
-inscription et connexion, profil, import de fichiers audio (avec barre de
-progression), liste paginée et filtrable, lecture, suppression.
+Réseau social de collectionneurs de **cartes Pokémon** : chacun range les
+photos de ses cartes dans des albums présentés comme un classeur, choisit
+qui peut les voir, et échange avec ses amis. Version en cours : **V2**
+(mini projet TP4 à TP6), voir [REPORT.md](REPORT.md).
+
+La **V1** (TP1 à TP3, tag `v1.0`) était *Guitar Practice Cloud*, une
+bibliothèque de pistes audio pour guitaristes ; la V2 en réutilise le socle
+(authentification, upload avec progression, composants Material).
 
 - **Frontend** : Angular 22 (composants standalone, Signals, Reactive Forms,
   Angular Material) — dossier [`frontend-starter/`](frontend-starter/).
@@ -18,7 +23,7 @@ documenté en détail.
 | Version | Contenu | Où la trouver |
 |---|---|---|
 | **V1** | TP1 à TP3 : authentification, profil, bibliothèque, suppression, progression d'upload, tests automatisés | tag Git `v1.0` |
-| **V2** | TP4 à TP6 : personnalisation avancée de l'application | en cours, branche `main` |
+| **V2** | TP4 à TP6 : **Card Vault**, réseau de collectionneurs de cartes Pokémon (albums en classeur, amis, partage, recherche) — voir [REPORT.md](REPORT.md) | en cours (depuis le 01/11/2026), branche `V2` |
 
 Sur GitHub, choisir le tag `v1.0` dans le menu des branches pour consulter
 ou télécharger la V1 telle qu'elle a été rendue.
@@ -69,15 +74,14 @@ npm start          # http://localhost:4200
 
 Le proxy de développement (`proxy.conf.json`) redirige `/api` vers le
 backend. Compte de démonstration créé automatiquement :
-`demo@example.com` / `Demo1234!`. Des fichiers audio de test sont fournis
-dans [`frontend-starter/fichiers-audio-de-test/`](frontend-starter/fichiers-audio-de-test/).
+`demo@example.com` / `Demo1234!`.
 
 ### Tests
 
 ```bash
-cd frontend-starter && npm test     # 25 tests (Vitest)
+cd frontend-starter && npm test     # tests Vitest
 cd frontend-starter && npm run build
-cd backend && npm test              # 8 tests (node:test), sans MongoDB
+cd backend && npm test              # tests node:test, sans MongoDB
 ```
 
 Détail de ce qui est testé et pourquoi : [Tests.md](Tests.md).
@@ -85,7 +89,9 @@ Détail de ce qui est testé et pourquoi : [Tests.md](Tests.md).
 ## Méthode de travail
 
 - **Une branche Git par TP** (`TP2`, `TP3`, …), mergée dans `main` à la fin
-  du TP. Chaque version livrée reçoit un tag (`v1.0`, puis `v2.0`).
+  du TP. Chaque version livrée reçoit un tag (`v1.0`, puis `v2.0`). Le mini
+  projet V2 (TP4-TP6) se fait sur une seule branche, `V2`, découpée en
+  étapes.
 - **Pour chaque mission** :
   1. l'assistant explique l'objectif, repère les fichiers concernés et
      propose un plan ; **aucun code n'est écrit avant validation** ;
@@ -95,11 +101,13 @@ Détail de ce qui est testé et pourquoi : [Tests.md](Tests.md).
   4. documentation : compte-rendu, rapport IA, et `analyse.md` si le code
      a changé.
 - **Tests automatisés** : écrits après l'implémentation d'une
-  fonctionnalité, sur demande. Un test « complet » = tests backend (si
+  fonctionnalité, sur demande pour la V1 ; **obligatoires à chaque étape**
+  pour la V2 (exigence du sujet). Un test « complet » = tests backend (si
   l'API est touchée) + tests frontend + build + vérification navigateur.
 - **Commits et push** : uniquement sur demande explicite.
-- **Backend** : non modifié pour les missions obligatoires ; toute route
-  modifiée est documentée dans `API_CONTRACT.md` dans la même modification.
+- **Backend** : non modifié pour les missions obligatoires de la V1 ;
+  modifiable pour la V2. Toute route ajoutée ou modifiée est documentée
+  dans `API_CONTRACT.md` dans la même modification.
 
 ## Carte des documents
 
@@ -110,7 +118,9 @@ Détail de ce qui est testé et pourquoi : [Tests.md](Tests.md).
 | [compte-rendu/TP1.md](compte-rendu/TP1.md) | Compte-rendu du TP1 : architecture, authentification, profil, gestion du `401` | Pour suivre le TP1 mission par mission |
 | [compte-rendu/TP2.md](compte-rendu/TP2.md) | Compte-rendu du TP2 : bibliothèque paginée, upload et lecture audio, cards Material, améliorations facultatives (filtre par titre, suppression) | Pour suivre le TP2 mission par mission |
 | [compte-rendu/TP3.md](compte-rendu/TP3.md) | Compte-rendu du TP3 : suppression, progression d'upload, tests automatisés, réponses aux questions orales | Pour suivre le TP3 mission par mission |
-| [compte-rendu/captures/](compte-rendu/captures/) | Preuves en images (46 captures), nommées `tpX-missionY-sujet.png` | Liées depuis chaque compte-rendu |
+| [REPORT.md](REPORT.md) | **V2** — rapport demandé par le sujet : fonctionnalités, interfaces, choix techniques, découpage, résultats des tests | Pour une vue d'ensemble du mini projet |
+| [compte-rendu/V2.md](compte-rendu/V2.md) | **V2** — journal détaillé, étape par étape | Pour suivre la V2 en détail |
+| [compte-rendu/captures/](compte-rendu/captures/) | Preuves en images, nommées `tpX-missionY-sujet.png` (V1, 46 captures) puis `v2-etapeX-sujet.png` (V2) | Liées depuis chaque compte-rendu |
 | [RAPPORT_IA_MODELE.md](RAPPORT_IA_MODELE.md) | Rapport d'usage de l'IA : prompts recopiés tels quels, plans proposés, vérifications, erreurs trouvées ou rejetées, fichiers modifiés, ce que je sais expliquer seul | Pour voir comment l'assistant a été utilisé et contrôlé |
 | [Tests.md](Tests.md) | Stratégie de test, inventaire, rapport attendu / observé, vérification que les tests détectent vraiment les bugs | Pour comprendre ce qui est testé et ses limites |
 
@@ -126,7 +136,7 @@ Détail de ce qui est testé et pourquoi : [Tests.md](Tests.md).
 
 | Document | Contenu |
 |---|---|
-| [SUJET_ETUDIANT_TP1.md](SUJET_ETUDIANT_TP1.md), [TP2](SUJET_ETUDIANT_TP2.md), [TP3](SUJET_ETUDIANT_TP3.md) | Énoncés des TP |
+| [SUJET_ETUDIANT_TP1.md](SUJET_ETUDIANT_TP1.md), [TP2](SUJET_ETUDIANT_TP2.md), [TP3](SUJET_ETUDIANT_TP3.md), [TP4-6](SUJET_ETUDIANT_TP456.md) | Énoncés des TP (celui des TP4-6 est transcrit depuis le PDF de consignes) |
 | [ATLAS_SETUP.md](ATLAS_SETUP.md) | Création de la base MongoDB Atlas |
 | [CONSEILS_POUR_UTIISER_ASSISTANT_AI.md](CONSEILS_POUR_UTIISER_ASSISTANT_AI.md) | Bonnes pratiques d'usage d'un assistant IA |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `best-practices.md` dans [backend/](backend/) et [frontend-starter/](frontend-starter/) | Consignes lues par les assistants IA (règles du projet, conventions) |

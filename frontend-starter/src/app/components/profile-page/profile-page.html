@@ -1,14 +1,22 @@
-<section class="card">
-  <h1>Mon profil</h1>
-  <button type="button" (click)="load()">Charger mon profil</button>
+<section class="cv-page">
+  <h1 class="cv-page-title">Mon profil</h1>
   @if (auth.currentUser(); as user) {
-    <p>
-      <b>{{ user.name }}</b><br />{{ user.email }}<br />
-      Membre depuis {{ user.createdAt.slice(0, 10) }}
-    </p>
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <label>Nouveau nom<input formControlName="name" /></label>
-      <button type="submit">Enregistrer</button>
-    </form>
+    <mat-card appearance="outlined" class="profile-card">
+      <mat-card-header>
+        <div mat-card-avatar class="avatar" aria-hidden="true">{{ user.name.charAt(0).toUpperCase() }}</div>
+        <mat-card-title>{{ user.name }}</mat-card-title>
+        <mat-card-subtitle>{{ user.email }} · membre depuis le {{ user.createdAt | date: 'dd/MM/yyyy' }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <form [formGroup]="form" (ngSubmit)="save()">
+          <mat-form-field appearance="outline">
+            <mat-label>Pseudo</mat-label>
+            <input matInput formControlName="name" />
+            <mat-error>Pseudo requis</mat-error>
+          </mat-form-field>
+          <button mat-flat-button type="submit" [disabled]="form.invalid">Enregistrer</button>
+        </form>
+      </mat-card-content>
+    </mat-card>
   }
 </section>

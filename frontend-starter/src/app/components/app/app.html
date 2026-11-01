@@ -1,21 +1,70 @@
-<header>
-  <div>
-    <b>Guitar Practice Cloud</b>
-    <small>Le cloud qui manque à votre ampli</small>
-  </div>
-  @if (auth.currentUser(); as user) {
-    <span class="current-user">Connecté : {{ user.name }}</span>
+<mat-toolbar class="topbar">
+  <a class="brand" routerLink="/" aria-label="Card Vault, accueil">
+    <mat-icon class="brand-icon" aria-hidden="true">style</mat-icon>
+    <span class="cv-gold-text">Card Vault</span>
+  </a>
+
+  @if (auth.token()) {
+    <nav class="links" aria-label="Navigation principale">
+      @for (link of links; track link.path) {
+        <a
+          mat-button
+          [routerLink]="link.path"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: link.exact }"
+        >
+          <mat-icon aria-hidden="true">{{ link.icon }}</mat-icon>
+          {{ link.label }}
+        </a>
+      }
+    </nav>
+
+    <span class="spacer"></span>
+
+    <!-- Mobile : les liens passent dans un menu. -->
+    <button mat-icon-button class="burger" [matMenuTriggerFor]="navMenu" aria-label="Ouvrir la navigation">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #navMenu="matMenu">
+      @for (link of links; track link.path) {
+        <a mat-menu-item [routerLink]="link.path">
+          <mat-icon>{{ link.icon }}</mat-icon>
+          <span>{{ link.label }}</span>
+        </a>
+      }
+    </mat-menu>
+
+    <button
+      mat-icon-button
+      class="avatar-button"
+      [matMenuTriggerFor]="profileMenu"
+      [attr.aria-label]="'Menu du profil de ' + (auth.currentUser()?.name ?? 'l’utilisateur')"
+    >
+      <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+    </button>
+    <mat-menu #profileMenu="matMenu" xPosition="before">
+      @if (auth.currentUser(); as user) {
+        <div class="menu-header">
+          <b>{{ user.name }}</b>
+          <small>{{ user.email }}</small>
+        </div>
+        <mat-divider />
+      }
+      <a mat-menu-item routerLink="/profile">
+        <mat-icon>person</mat-icon>
+        <span>Mon profil</span>
+      </a>
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Déconnexion</span>
+      </button>
+    </mat-menu>
+  } @else {
+    <span class="spacer"></span>
+    <a mat-button routerLink="/login">Connexion</a>
+    <a mat-flat-button routerLink="/register">Inscription</a>
   }
-  <nav aria-label="Navigation principale">
-    @if (auth.token()) {
-      <a routerLink="/tracks">Backing tracks</a>
-      <a routerLink="/profile">Profil</a>
-      <button type="button" (click)="logout()">Déconnexion</button>
-    } @else {
-      <a routerLink="/login">Connexion</a>
-    }
-  </nav>
-</header>
+</mat-toolbar>
 
 <main>
   <router-outlet />

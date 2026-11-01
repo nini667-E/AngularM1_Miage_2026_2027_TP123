@@ -1,0 +1,16 @@
+:host { display: block; }
+
+.placeholder {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  background: var(--cv-surface);
+}
+
+.icon {
+  width: 56px;
+  height: 56px;
+  font-size: 56px;
+  color: var(--mat-sys-primary);
+}
+
+.step { color: var(--mat-sys-on-surface-variant); }

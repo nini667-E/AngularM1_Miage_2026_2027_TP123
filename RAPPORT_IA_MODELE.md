@@ -2402,3 +2402,253 @@ avant de les décrire.
 
 ---
 
+## V2 — Mini projet TP4 à TP6 : Card Vault
+
+> Travail effectué sur la branche Git `V2`. Assistant : Claude Code, modèle
+> Claude Opus 5.5 (`claude-opus-5-5`). Synthèse : `REPORT.md` ; journal :
+> `compte-rendu/V2.md`.
+
+### Entrée V2.0 — Conception du projet (points 1 à 4 du sujet) et étape 0 (23/10/2026 au 01/11/2026)
+
+**Objectif.** Appliquer la démarche imposée par le sujet : discuter avec
+l'assistant des fonctionnalités, des interfaces, des choix techniques et du
+découpage **avant** toute implémentation ; puis préparer le dépôt (étape 0).
+
+**Prompts principaux (recopiés tels quels, réponses aux questions à choix
+indiquées entre crochets) :**
+> ok du coup pour être sur on continue à travailler sur le projet tel qu'il
+> est et on créera la V2 à la fin ?
+>
+> ok c'est nickel comme ça, avant de commencer la partie 4-5-6 est un peu
+> particulière car c'est une partie un peu plus libre. Donc tout va se
+> faire en même temps. Je vais te partager le pdf des consignes puis on va
+> réfléchir à un plan et mettre à jour ce qu'il faut avant de travailler
+>
+> aussi crée toi un fichier sujet 4-5-6 en md à partir de ça pour rester
+> homogène *(avec le PDF de consignes joint)*
+>
+> [Orientation] Alors justement, il faut qu'on réfléchisse à quoi faire
+> exactement, j'ai quelqued idées mais je suis pas sûr. Je pensais partir
+> sur un réseau social avec partage de fichiers image sur. Ce qui est sûr
+> c'est que je veux rester sur un type de fichiers et que ça soit pas de la
+> musique ni de la vidéo.
+>
+> Le sur c'était une coquille un mot en trop. Mais du coup mon idée partait
+> autour des cartes pokémon. L'utilisateur aurait un profil sur lequel il
+> pourrait partager des albums photos de ses cartes pokémon avec certains
+> thèmes prédéfinis. Ses amis poiurraient consulter son profil, liker les
+> albums et laisser un petit commentaire.
+>
+> [Visibilité : Par album] [Thèmes : il y aurait plusieurs thèmes]
+> [Interactions : Amis uniquement]
+>
+> Attends avant de continuer à réfléchir à tout ça il faut voir si
+> techniquement certains points sont réalisables et pas trop compliqués à
+> mettre en place. Comment m'assurer que l'utilisateur upload uniquement
+> des "photos de cartes pokémon" ? que lorsqu'il crée son album les photos
+> correspondent bien au thème ?
+>
+> ok ça me va on part sur l'API publique TCGdex, on verra la solution de
+> repli plus tard. maintenant décidons nous sur les fonctionnalitées
+> attendues, je vais te faire un petit listing de ce que j'ai en tête et on
+> affinera au fur et à mesure.
+>
+> alors question social je pense qu'on va partir sur du paratge plutôt
+> full privé pour l'instant, seul mes amis peuvent voir mes albums les
+> liker et les commenter, seulement si l'album est public (ici public veut
+> donc dire visible par mes amis), dans le cas d'un album privé je suis le
+> seul à pouvoir le voir, ça pourrait être utile pour construire son album
+> petit à petit avant de laisser les autres le voir. Je peux bien sûr
+> supprimet les likes et commentaires que je met ainsi que ceux que je
+> reçois sur un de mes albums. concernant les thèmes, on va commencer
+> simple on ajoutera des choses plus tard, du coup type et/ou série (avec
+> l'extension si possible)
+>
+> 1. Oui on peut les autoriser même si le but n'est pas de construire un
+> deck il existe de belles cartes energies,dresseus objets etc mai faudrait
+> réfléchir à leur classification 2. Oui on exclut cette série. Et
+> concernant l'écart avec le sujet, ilfaut qu'on réadapte pour coller avec
+>
+> normalement les énergies ont toutes un type, c'est le principe énergie
+> feu pour un pokémon feu etc, sinon le reste me convient
+>
+> oui on passe au point 2
+>
+> [Album : Classeur 3×3] [Ajout de carte : Carte puis photo]
+> [Navigation : Barre du haut] [Nom : Card Vault] [Thème : Sombre « holo »]
+>
+> oui on peut y aller juste sur l'interface on va essayer d'utiliser un max
+> les materials de angular et faire quelque chose de vraiment propre, que
+> l'album soit vraiment beau à voir et que rendu des images soit embelli
+> par l'interface.
+>
+> [Images : URL signée + sharp] [Audio V1 : Le supprimer]
+> [Règles : Oui, toutes]
+>
+> n    nettoi tout ce qui concerne l'audio et les utilisateurs aussi
+>
+> [Données : Nouvelle base card-vault] [Compte démo : Le garder]
+
+**Démarche suivie par l'agent.** Transcription fidèle du PDF dans
+`SUJET_ETUDIANT_TP456.md` (sans rien ajouter), puis les 4 points du sujet
+dans l'ordre, avec des questions à choix pour chaque décision
+structurante. Chaque affirmation technique a été **vérifiée avant d'être
+proposée** : appels réels à l'API TCGdex (recherche, cartes, séries,
+extensions, types, échantillon aléatoire de 25 Énergies), test de l'API
+concurrente pokemontcg.io (erreur 500 ce jour-là), inventaire de la base
+MongoDB en lecture seule avant toute suppression.
+
+**Décisions** (détail et justifications : `REPORT.md`, sections 2 à 5) :
+Card Vault, albums en classeur 3×3, public (tous) / privé (partage avec
+des amis choisis, arrêt possible), réactions réservées aux amis, cartes
+choisies dans TCGdex via le backend, règle de cohérence de thème, URL
+signées + `sharp`, suppression de l'audio, 9 étapes.
+
+**Erreurs, désaccords et corrections.**
+1. **Le premier modèle social de l'utilisateur ne couvrait pas le sujet**
+   (« public » visible par les amis seulement, pas de partage choisi, pas
+   d'arrêt de partage). Signalé par l'agent avec un tableau phrase par
+   phrase et trois options ; l'utilisateur a choisi de réadapter.
+2. **Correction de l'utilisateur sur les Énergies** : l'agent proposait de
+   les traiter comme « sans type » à cause de données TCGdex incomplètes ;
+   l'utilisateur a rappelé que toute Énergie a un type. Vérification sur
+   un échantillon : le type manque souvent dans les données mais figure
+   dans le nom → règle « `types`, sinon déduit du nom, sinon sans type ».
+3. **Faisabilité** : l'agent a déconseillé de vérifier par IA de vision
+   qu'une photo montre une carte Pokémon (hors périmètre, payant, non
+   déterministe, difficile à tester) au profit du catalogue TCGdex.
+4. **Suppression des données** : la demande « nettoie tout ce qui concerne
+   l'audio et les utilisateurs » était irréversible (5 comptes, dont deux
+   de l'utilisateur). Inventaire fait d'abord, puis proposition d'une
+   alternative sans perte retenue par l'utilisateur : nouvelle base
+   `card-vault`. Découverte au passage : l'URI ne contenait pas de nom de
+   base, l'application V1 utilisait la base par défaut `test`.
+5. Deux erreurs de script de l'agent, sans conséquence : identifiants
+   suivis d'un retour chariot (Windows) cassant les URL TCGdex, et script
+   d'inventaire lancé hors du dossier `backend/` (module `mongoose`
+   introuvable). Corrigés.
+
+**Fichiers effectivement modifiés (étape 0).** Création de
+`SUJET_ETUDIANT_TP456.md`, `REPORT.md`, `compte-rendu/V2.md` ;
+mise à jour de `README.md`, `Tests.md`, `frontend-starter/AGENTS.md`,
+`frontend-starter/CLAUDE.md`, `RAPPORT_IA_MODELE.md` (cette section).
+Hors dépôt : `backend/.env` (nom de base → `card-vault`, URI jamais
+affichée ; copie temporaire supprimée après vérification).
+
+**Preuve de fonctionnement.** Connexion vérifiée à la base `card-vault`,
+vide. Branche `V2` créée depuis `main` (`b793e8e`, tag `v1.0`).
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi on ne peut pas
+vérifier facilement le contenu d'une photo, et ce qu'on vérifie à la
+place ; pourquoi le contrôle du thème doit être fait côté serveur ;
+pourquoi `<img>` impose des URL signées pour des images privées ; ce que
+retirent les métadonnées EXIF ; pourquoi changer de base plutôt que
+supprimer les données ; l'écart entre mon premier modèle social et le
+sujet, et comment il a été corrigé.
+
+### Entrée V2.1 — Étape 1 : retrait de l'audio, identité Card Vault, navigation (01/11/2026)
+
+**Objectif.** Repartir d'une base propre : supprimer toute la partie audio
+(backend, frontend, tests, fichiers), donner à l'application son identité
+Card Vault (thème Material sombre « holo », navigation) et poser les pages
+d'attente des étapes suivantes.
+
+**Prompts principaux (recopiés tels quels, réponse à choix entre
+crochets) :**
+> on passe à l'étape 1 c'est bon
+>
+> [Palette : Violet / cyan]
+>
+> oui go
+>
+> essaye le theme bleu dore que tu m avais propose celui la fait trop 'IA'
+> generique
+>
+> un bleu moins hoographique peut etre
+>
+> bon ca va comme ca pour l instant on pourra readapter plus tard si besoin
+
+**Plan proposé par l'agent (validé).** Après un inventaire du code audio
+(57 lignes concernées dans `app.js`, 14 fichiers frontend) :
+1. backend : supprimer `Track`, les routes `/api/tracks`, la configuration
+   Multer audio, `escapeRegExp` (plutôt que garder du code mort) et les
+   5 fichiers audio ; réorienter les tests `401` vers `/api/users/me` ;
+2. frontend : supprimer la page de pistes, `TrackService`, `Track`, les
+   MP3 de test ; garder `withXhr()`, `Page<T>`, `FrenchPaginatorIntl` ;
+   déplacer `serverErrorMessage()` dans `shared/utils` ;
+3. identité : thème Material sombre, `styles.css` refait, `MatToolbar`
+   + `MatMenu` + menu mobile, formulaires en Material, pages d'attente ;
+4. nouveaux tests (barre du haut, connexion, routes) ;
+5. build, navigateur, documentation.
+Avant d'exécuter, l'agent a redemandé confirmation pour les deux
+suppressions irréversibles ou hors Git (fichiers de `data/uploads`).
+
+**Vérifications réalisées.**
+- Backend 6/6, frontend 23/23, build sans avertissement.
+- **Vérification croisée** : 5 bugs introduits volontairement, chacun
+  devant faire échouer un test (voir l'erreur 1 ci-dessous).
+- Harnais Playwright (scratchpad, hors dépôt), base `card-vault` vierge :
+  11 vérifications (redirection visiteur, thème et police d'icônes
+  calculés, inscription, navigation et lien actif, menu profil, SnackBar,
+  mobile 390 px, ancienne URL `/tracks`, déconnexion, compte de
+  démonstration recréé, console sans secret).
+- Relecture des captures : deux, prises pendant l'animation d'ouverture
+  (menu, SnackBar), ont été refaites ; mots de passe uniquement sous forme
+  de points.
+
+**Erreurs ou bugs trouvés.**
+1. **Un test qui ne pouvait pas échouer (erreur de l'agent).** Le test
+   « la page Recherche est protégée » passait encore une fois le guard
+   retiré. Diagnostic par un test volontairement en échec :
+   `expect(undefined).toContain(x)` **réussit** avec la version de Vitest
+   du projet. Corrigé (`toEqual([authGuard])`) ; même correction pour les
+   tests du message d'erreur de connexion (`?? ''`), puis mutation
+   « message non affiché » pour le prouver. En remontant l'historique,
+   l'agent a trouvé **5 assertions de la V1** (TP3) écrites avec ce même
+   motif : l'affichage qu'elles prétendaient vérifier n'était pas
+   garanti. Documenté dans `Tests.md` ; une première rédaction de l'agent
+   annonçait « trois » assertions compensées par une vérification d'état,
+   corrigée à « deux » après relecture du code.
+2. **Une ligne de vérification surévaluée (erreur de l'agent)** :
+   « avatar mis à jour » alors que l'initiale n'avait pas changé
+   (*ClaudeTestBot* → *ClaudeTestBot V2*). Remplacé par ce qui était
+   réellement prouvé : le nouveau pseudo affiché.
+3. **Icônes** : `index.html` charge *Material Symbols Outlined* mais
+   `<mat-icon>` utilise par défaut `material-icons` ;
+   `MAT_ICON_DEFAULT_OPTIONS` ajouté, police vérifiée dans le navigateur.
+4. Le fichier `.gitkeep` de `data/uploads` n'avait jamais été versionné :
+   sans conséquence, le dossier est créé au démarrage.
+5. **Thème rejeté par l'utilisateur après essai.** Le violet / cyan
+   « holo » (recommandé par l'agent) a été jugé trop « IA générique ».
+   Passage à l'option or / bleu nuit : les palettes Material prédéfinies
+   n'ayant pas de doré (`yellow` = jaune citron, vérifié dans
+   `_palettes.scss`), l'agent a utilisé le générateur officiel
+   `ng generate @angular/material:theme-color` (or `#C9A24D`, bleu
+   `#4A78C2`, neutre bleu nuit `#1B2236`). Second retour (« un bleu moins
+   holographique ») : le bleu pastel irisé du dégradé remplacé par un
+   reflet or métallique ; variables renommées `--cv-gold` / `.cv-gold-text`
+   pour que le code reste juste. Captures refaites.
+
+**Fichiers effectivement modifiés.**
+Backend : `src/app.js`, `src/models/Track.js` (supprimé),
+`test/api.test.js`, `analyse.md` ; `data/uploads` vidé (hors Git).
+Frontend : `main.ts`, `index.html`, `material-theme.scss`, `styles.css`,
+`_theme-colors.scss` (généré), `routes.ts` (+ `routes.spec.ts`), composants `app` (+ spec),
+`login-page` (+ spec), `register-page`, `profile-page`,
+`placeholder-page` (nouveau), `shared/utils/http-error.ts` (+ spec),
+`auth.interceptor.spec.ts`, `page.model.ts`, `analyse.md` ; supprimés :
+`tracks-page/`, `track.service(.spec).ts`, `track.model.ts`,
+`fichiers-audio-de-test/`. Racine : `API_CONTRACT.md`, `README.md`,
+`Tests.md`, `REPORT.md`, `compte-rendu/V2.md`, 5 captures
+`v2-etape1-*.png`, `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` (back 6/6, front
+23/23) et de `npm run build` ; tableau des vérifications navigateur et
+captures dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi supprimer le code
+audio plutôt que le garder « au cas où » ; comment `mat.theme()` et
+`color-scheme: dark` produisent un thème sombre ; pourquoi un seul
+composant de page d'attente piloté par `data` de route ; pourquoi la
+SnackBar exige un style global ; pourquoi un test qui ne peut pas échouer
+ne prouve rien, et comment `toContain` sur `undefined` en a produit un.

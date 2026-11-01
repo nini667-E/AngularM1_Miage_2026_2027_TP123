@@ -32,9 +32,9 @@ describe('authInterceptor', () => {
   it('ajoute Authorization: Bearer <token> quand un token existe', () => {
     auth.token.set('mon-jwt');
 
-    http.get('/api/tracks').subscribe();
+    http.get('/api/users/me').subscribe();
 
-    const req = httpMock.expectOne('/api/tracks');
+    const req = httpMock.expectOne('/api/users/me');
     expect(req.request.headers.get('Authorization')).toBe('Bearer mon-jwt');
     req.flush({});
   });

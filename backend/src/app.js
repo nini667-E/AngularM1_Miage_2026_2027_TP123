@@ -1,16 +1,12 @@
 import express from "express";
 import cors from "cors";
-import multer from "multer";
 import jwt from "jsonwebtoken";
 import fs from "node:fs";
-import fsPromises from "node:fs/promises";
 import path from "node:path";
-import crypto from "node:crypto";
 import { User } from "./models/User.js";
-import { Track } from "./models/Track.js";
 
-// Les fichiers audio restent sur le disque du serveur dans ce TP.
-// MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
+// Dossier des fichiers envoyés par les utilisateurs. Vide depuis le retrait
+// de l'audio (V2, étape 1) ; il accueillera les photos de cartes (étape 3).
 const UPLOADS = path.resolve("data/uploads");
 
 try {
@@ -25,28 +21,6 @@ try {
 
 // Ce secret reste côté serveur. Il ne doit jamais être copié dans Angular.
 const SECRET = process.env.JWT_SECRET || "tp1-development-secret";
-
-// La taille maximale d'un fichier audio est de 25 Mo. Les fichiers plus gros
-// sont refusés par Multer avant d'être écrits sur le disque.
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
-
-// Les types MIME autorisés correspondent aux formats demandés dans le sujet.
-const allowed = new Set([
-  "audio/mpeg",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/x-m4a",
-]);
-
-// Échappe les caractères spéciaux d'une regex avant de l'injecter dans une
-// requête Mongo : sans ça, un titre recherché comme ".*" ou "(a+)+"
-// pourrait soit matcher n'importe quoi, soit faire exploser le temps de
-// calcul (ReDoS) côté serveur.
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -83,49 +57,6 @@ function auth(req, res, next) {
     return res.status(401).json({ message: "Jeton invalide ou expiré" });
   }
 }
-
-/*
- * Multer transforme une requête HTTP multipart/form-data en données exploitables
- * par Express et traite les fichiers envoyés par un formulaire HTML.
- * Documentation officielle : https://github.com/expressjs/multer
- *
- * diskStorage indique que Multer écrit directement le fichier sur disque.
- * Chaque callback doit appeler cb(error, value) : null signifie qu'il n'y a
- * pas d'erreur. Le nom aléatoire évite les collisions entre utilisateurs.
- */
-const storage = multer.diskStorage({
-  destination: (_request, _file, callback) => {
-    console.debug(`[multer] Destination sélectionnée : ${UPLOADS}`);
-    callback(null, UPLOADS);
-  },
-  filename: (_request, file, callback) => {
-    const filename =
-      crypto.randomUUID() + path.extname(file.originalname).toLowerCase();
-    console.log(`[multer] Nom de stockage généré pour ${file.originalname}`);
-    callback(null, filename);
-  },
-});
-
-/*
- * limits.fileSize protège le serveur contre les fichiers trop volumineux.
- * fileFilter est appelé avant l'enregistrement : accepter le fichier appelle
- * callback(null, true), le refuser transmet une vraie Error à Express.
- */
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_FILE_SIZE },
-  fileFilter: (_request, file, callback) => {
-    // Seuls les types MIME audio demandés dans le sujet sont acceptés.
-    if (allowed.has(file.mimetype)) {
-      console.log(`[multer] Type accepté : ${file.mimetype}`);
-      return callback(null, true);
-    }
-
-    const error = new Error("Format audio non accepté");
-    console.error(`[multer] Type refusé : ${file.mimetype}`, error);
-    return callback(error);
-  },
-});
 
 /**
  * Construit l'application Express sans ouvrir de port.
@@ -275,196 +206,10 @@ export function createApp() {
     }
   });
 
-  /** Retourne une page des pistes appartenant exclusivement à l'utilisateur. */
-  app.get("/api/tracks", auth, async (req, res, next) => {
-    try {
-      const page = Math.max(1, Number(req.query.page) || 1);
-      const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 5));
-      const title = typeof req.query.title === "string" ? req.query.title.trim() : "";
-      const filter = { ownerId: req.auth.sub };
-
-      // Filtre facultatif par titre : recherche insensible à la casse,
-      // sur une sous-chaîne (pas une égalité stricte).
-      if (title) {
-        filter.title = { $regex: escapeRegExp(title), $options: "i" };
-      }
-
-      console.log(
-        `[tracks] Lecture page=${page}, limit=${limit}, title=${title || "(aucun)"}, user=${req.auth.sub}`,
-      );
-
-      // La lecture des pistes et le comptage total sont parallélisés pour réduire la latence.
-      // on utilise Promise.all pour exécuter les deux opérations en parallèle. 
-      // Track.find() récupère les pistes de l'utilisateur avec pagination, 
-      // tandis que Track.countDocuments() compte le nombre total de pistes pour cet utilisateur.
-      // Promise.all attend que les deux opérations soient terminées avant de continuer et les résultats
-        // sont stockés dans les variables items et total.
-      const [items, total] = await Promise.all([
-        Track.find(filter)
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .select("-storedName")
-          .lean(),
-        Track.countDocuments(filter),
-      ]);
-
-      // items.map(track) crée un nouveau tableau publicItems en transformant chaque piste pour inclure 
-      // uniquement les champs nécessaires à l'API.
-      // L'identifiant MongoDB (_id) est converti en chaîne de caractères (id) pour être plus lisible 
-      // côté frontend.
-      // Le champ _id (généré par MongoDB) est supprimé pour éviter de l'exposer dans la réponse JSON.
-      const publicItems = items.map((track) => ({
-        ...track,
-        id: String(track._id),
-        _id: undefined,
-      }));
-
-      console.log(`[tracks] ${publicItems.length} piste(s) envoyée(s) sur ${total}`);
-
-      // envoi de la réponse JSON avec les pistes publiques, la page actuelle, la limite par page, 
-      // le nombre total de pistes et le nombre total de pages.
-      res.json({
-        items: publicItems,
-        page,
-        limit,
-        total,
-        pages: Math.max(1, Math.ceil(total / limit)),
-      });
-    } catch (error) {
-      console.error("[tracks] Erreur de pagination", error);
-      next(error);
-    }
-  });
-
-  /**
-   * Reçoit le champ multipart audio et le champ texte title.
-   * upload.single("audio") traite un seul fichier et le place dans req.file,
-   * tandis que req.body.title contient le champ texte associé.
-   * C'est ici qu'est fait l'upload de fichiers sur le serveur. 
-   * Le middleware auth vérifie le JWT avant d'accepter l'upload.
-   * Le middleware upload.single("audio") traite le fichier audio envoyé dans le champ "audio" du formulaire
-   * ou de l'appel depuis le frontend avec un objet FormData.
-   * Si le fichier est accepté, il est stocké sur le disque et ses métadonnées sont enregistrées 
-   * dans MongoDB.
-   */
-  app.post(
-    "/api/tracks",
-    auth,
-    upload.single("audio"),
-    async (req, res, next) => {
-      try {
-        if (!req.file) {
-          console.warn(`[tracks] Upload sans fichier par ${req.auth.sub}`);
-          return res.status(400).json({ message: "Fichier audio requis" });
-        }
-
-        const track = await Track.create({
-          ownerId: req.auth.sub,
-          title: req.body.title || req.file.originalname,
-          originalName: req.file.originalname,
-          storedName: req.file.filename,
-          mimeType: req.file.mimetype,
-          size: req.file.size,
-        });
-
-        console.log(`[tracks] Upload enregistré : ${track.id}`);
-        res.status(201).json(track.toPublic());
-      } catch (error) {
-        console.error("[tracks] Erreur après l'enregistrement du fichier", error);
-
-        // Si MongoDB échoue après l'écriture sur disque, on tente de nettoyer
-        // le fichier orphelin. L'erreur de nettoyage est elle aussi loguée.
-        if (req.file) {
-          const uploadedPath = path.join(UPLOADS, req.file.filename);
-          try {
-            await fsPromises.unlink(uploadedPath);
-            console.log(`[tracks] Fichier temporaire supprimé : ${uploadedPath}`);
-          } catch (cleanupError) {
-            console.error(
-              `[tracks] Impossible de supprimer le fichier temporaire ${uploadedPath}`,
-              cleanupError,
-            );
-          }
-        }
-        next(error);
-      }
-    },
-  );
-
-  /** Envoie le contenu binaire d'une piste après vérification de sa propriété. */
-  app.get("/api/tracks/:id/audio", auth, async (req, res, next) => {
-    try {
-      const track = await Track.findOne({
-        _id: req.params.id,
-        ownerId: req.auth.sub,
-      }).select("+storedName");
-
-      if (!track) {
-        console.warn(`[tracks] Audio introuvable ou interdit : ${req.params.id}`);
-        return res.status(404).json({ message: "Piste inconnue" });
-      }
-
-      const audioPath = path.join(UPLOADS, track.storedName);
-      res.type(track.mimeType);
-      // Ce callback permet de loguer le succès ou l'erreur du transfert.
-      res.sendFile(audioPath, (error) => {
-        if (error) {
-          console.error(`[tracks] Erreur d'envoi audio ${track.id}`, error);
-          if (!res.headersSent) next(error);
-          return;
-        }
-        console.log(`[tracks] Audio envoyé : ${track.id}`);
-      });
-    } catch (error) {
-      console.error("[tracks] Erreur de préparation du flux audio", error);
-      next(error);
-    }
-  });
-
-  /** Supprime la métadonnée et le fichier physique correspondant. */
-  app.delete("/api/tracks/:id", auth, async (req, res, next) => {
-    try {
-      const track = await Track.findOneAndDelete({
-        _id: req.params.id,
-        ownerId: req.auth.sub,
-      }).select("+storedName");
-
-      if (!track) {
-        console.warn(`[tracks] Suppression impossible : ${req.params.id}`);
-        return res.status(404).json({ message: "Piste inconnue" });
-      }
-
-      const audioPath = path.join(UPLOADS, track.storedName);
-      try {
-        await fsPromises.unlink(audioPath);
-        console.log(`[tracks] Fichier supprimé : ${audioPath}`);
-      } catch (error) {
-        // L'exception n'est volontairement pas ignorée : l'administrateur doit
-        // voir ce fichier orphelin si sa suppression échoue.
-        console.error(`[tracks] Fichier audio non supprimé : ${audioPath}`, error);
-        return res.status(500).json({
-          message: "Métadonnée supprimée, mais fichier audio non supprimé",
-        });
-      }
-
-      res.status(204).end();
-    } catch (error) {
-      console.error("[tracks] Erreur de suppression", error);
-      next(error);
-    }
-  });
-
   /** Gestionnaire central des erreurs connues de l'application. */
   app.use((error, _req, res, next) => {
     console.error("[error] Erreur reçue par le gestionnaire central", error);
 
-    if (
-      error instanceof multer.MulterError ||
-      error?.message === "Format audio non accepté"
-    ) {
-      return res.status(400).json({ message: error.message });
-    }
     if (error?.name === "ValidationError") {
       return res.status(400).json({ message: error.message });
     }

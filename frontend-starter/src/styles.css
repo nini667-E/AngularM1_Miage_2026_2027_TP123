@@ -1,91 +1,77 @@
+/* Styles globaux de Card Vault (V2, étape 1).
+   Le thème des composants vient d'Angular Material (material-theme.scss) ;
+   ce fichier ne garde que l'identité visuelle propre à l'application. */
+
 :root {
-  font-family: Inter, system-ui, sans-serif;
-  color: #17312a;
-  background: #f3f7f5;
+  /* Fond « bleu nuit » et surfaces légèrement plus claires. */
+  --cv-bg: #0d1220;
+  --cv-surface: #161d33;
+  --cv-surface-high: #1f2843;
+  --cv-border: rgb(255 255 255 / 0.08);
+
+  /* Reflet « or métallique » : réutilisé par les cartes (étape 3), le
+     logo, l'avatar et les titres. Le bleu est réservé aux accents unis. */
+  --cv-gold: linear-gradient(115deg, #8a6a2a 0%, #c9a24d 25%, #f3d98b 45%, #fff3d1 52%, #e2bd66 62%, #a47c34 100%);
+
+  /* Couleurs des 11 types de cartes (noms TCGdex en français), pour les
+     badges et les thèmes d'albums (étapes 2 et 3). */
+  --cv-type-feu: #ef5a3c;
+  --cv-type-eau: #3b9ae1;
+  --cv-type-plante: #4fb35b;
+  --cv-type-electrique: #f2c94c;
+  --cv-type-psy: #b56ad9;
+  --cv-type-combat: #c0703a;
+  --cv-type-obscurite: #5b5f80;
+  --cv-type-metal: #9aa7b4;
+  --cv-type-fee: #f28fc4;
+  --cv-type-dragon: #c9a227;
+  --cv-type-incolore: #d8d4cb;
 }
 
 * { box-sizing: border-box; }
-/* material-theme.scss (chargé avant ce fichier) pose un fond/texte via les
-   tokens système Material sur body ; on reprend explicitement les couleurs
-   de marque de l'app pour ne pas en hériter. */
-body { margin: 0; background: #f3f7f5; color: #17312a; }
-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5vw; color: white; background: #123d32; }
-header small { opacity: 0.7; }
-nav { display: flex; gap: 1rem; }
-a { color: #1d755e; }
-header a { color: white; }
-header nav a, header nav button {
-  padding: 0.7rem 1rem;
-  color: white;
-  background: #1d755e;
-  border: 0;
-  border-radius: 8px;
-  text-decoration: none;
-  cursor: pointer;
-}
-.current-user { font-size: 0.85rem; opacity: 0.85; }
-main { max-width: 1050px; margin: 2rem auto; padding: 0 1rem; }
-.hero { margin-bottom: 1rem; padding: 2rem; color: white; background: linear-gradient(120deg, #123d32, #276c57); border-radius: 20px; }
-.eyebrow { letter-spacing: 0.15em; font-size: 0.75rem; }
-.grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
-.card { padding: 1.3rem; background: white; border-radius: 16px; box-shadow: 0 8px 25px #17312a14; }
-.card form, label { display: grid; gap: 0.4rem; }
-label { margin: 0.8rem 0; }
-input { padding: 0.75rem; border: 1px solid #b8cbc5; border-radius: 8px; }
-/* Les boutons Material (mat-icon-button, etc.) gèrent déjà leur propre
-   apparence ; on ne leur applique pas le style "bouton vert" fait maison. */
-button:not([mat-icon-button]):not([mat-button]):not([mat-raised-button]):not([mat-flat-button]):not([mat-stroked-button]):not([mat-fab]):not([mat-mini-fab]):not(.mat-mdc-button-base) {
-  padding: 0.7rem 1rem;
-  color: white;
-  background: #1d755e;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-button:disabled { opacity: 0.45; }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.filter-row { display: flex; gap: 0.6rem; margin: 0.8rem 0; }
-.filter-row input { flex: 1; }
-.tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
-.track small { display: block; color: #61756f; }
-.track-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.track-info mat-card-title { font-size: 1.05rem; margin-bottom: 0.2rem; }
-.track-info mat-card-subtitle { margin-bottom: 0.3rem; }
-/* Le vert "primary" généré par Material à partir de mat.$green-palette ne
-   correspond pas exactement au vert de marque (#1d755e) ; on fixe les
-   couleurs directement plutôt que de passer par color="primary". Le
-   !important est nécessaire pour l'emporter sur les variables CSS internes
-   du composant mat-mini-fab. */
-.play-fab {
-  background-color: #f8faf9 !important;
-  color: #1d755e !important;
-}
-.play-fab:hover { background-color: #eef3f1 !important; }
-.track-actions { display: flex; align-items: center; gap: 0.4rem; }
-mat-paginator { background: transparent; margin: 0.5rem 0; }
-audio { width: 100%; }
-.track-audio { margin-top: 0.75rem; }
-.error { color: #a33; }
-.success { color: #1d755e; }
-.track small.now-playing { color: #1d755e; font-weight: 600; }
-.track small.error { color: #a33; font-weight: 600; }
 
-@media (max-width: 720px) {
-  header, .grid { display: block; }
-  nav { margin-top: 1rem; }
-  .grid .card { margin-bottom: 1rem; }
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgb(201 162 77 / 0.10), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgb(74 120 194 / 0.06), transparent 60%),
+    var(--cv-bg);
+  background-attachment: fixed;
 }
 
-/* SnackBar de la suppression (TP3, Mission 5) : la SnackBar est rendue dans
-   un overlay hors du composant, d'où un style global. Couleurs reprises de
-   .success / .error. */
+a { color: var(--mat-sys-primary); }
+
+/* Texte en dégradé or métallique (logo, grands titres). */
+.cv-gold-text {
+  background: var(--cv-gold);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Conteneur de page standard. */
+.cv-page {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.cv-page-title {
+  margin: 0 0 1.5rem;
+  font: var(--mat-sys-headline-medium);
+}
+
+.error { color: var(--mat-sys-error); }
+
+/* SnackBar (rendue dans un overlay hors des composants, d'où un style
+   global) : vert pour un succès, rouge pour une erreur. */
 .mat-mdc-snack-bar-container.snack-success {
-  --mat-snack-bar-container-color: #1d755e;
+  --mat-snack-bar-container-color: #1f7a5c;
   --mat-snack-bar-supporting-text-color: #fff;
   --mat-snack-bar-button-color: #fff;
 }
 .mat-mdc-snack-bar-container.snack-error {
-  --mat-snack-bar-container-color: #a33;
+  --mat-snack-bar-container-color: #b3261e;
   --mat-snack-bar-supporting-text-color: #fff;
   --mat-snack-bar-button-color: #fff;
 }

@@ -3,6 +3,7 @@ import { provideAnimationsAsync } from "@angular/platform-browser/animations/asy
 import { provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
 import { provideRouter } from "@angular/router";
 import { MatPaginatorIntl } from "@angular/material/paginator";
+import { MAT_ICON_DEFAULT_OPTIONS } from "@angular/material/icon";
 import { AppComponent } from './app/components/app/app';
 import { routes } from './app/routes';
 import { authInterceptor } from './app/shared/interceptors/auth.interceptor';
@@ -16,5 +17,8 @@ bootstrapApplication(AppComponent, {
     provideHttpClient(withXhr(), withInterceptors([authInterceptor])),
     provideAnimationsAsync(),
     { provide: MatPaginatorIntl, useClass: FrenchPaginatorIntl },
+    // index.html charge la police « Material Symbols Outlined » : on indique
+    // à <mat-icon> d'utiliser sa classe CSS plutôt que « material-icons ».
+    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-outlined' } },
   ],
 }).catch(console.error);

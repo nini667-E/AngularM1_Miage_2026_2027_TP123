@@ -1,17 +1,23 @@
-# Analyse du frontend — Guitar Practice Cloud (frontend-starter)
+# Analyse du frontend — Card Vault (frontend-starter)
 
 > Généré à partir du code source dans `frontend-starter/src/`. Ce document
-> décrit l'architecture Angular actuelle (état de départ, avant TP), les
-> workflows, et sert de référence technique mise à jour au fil des missions
-> des TP1/TP2/TP3. Pour le backend, voir `backend/analyse.md`.
+> décrit l'architecture Angular **actuelle** et sert de référence technique
+> mise à jour au fil des missions (TP1 à TP3), puis des étapes de la V2
+> (mini projet **Card Vault**, TP4 à TP6). Pour le backend, voir
+> `backend/analyse.md`.
+>
+> **01/11/2026 — V2, étape 1** : la partie audio de la V1 (page de pistes,
+> `TrackService`, lecteur) a été retirée ; sa description détaillée reste
+> consultable dans la version taguée `v1.0` de ce fichier.
 
 ## 1. Vue d'ensemble
 
 Application **Angular 22** en mode **standalone** (pas de `NgModule`),
 consommant l'API décrite dans `backend/analyse.md` et `API_CONTRACT.md`.
-L'état de départ fourni ("starter") implémente déjà un socle fonctionnel
-minimal pour l'authentification et la bibliothèque de pistes ; les missions
-des TP consistent à le compléter, le fiabiliser et l'enrichir (voir
+Depuis la V2 (01/11/2026), l'application s'appelle **Card Vault** : un
+réseau de collectionneurs de cartes Pokémon (voir `../REPORT.md`). À
+l'étape 1, elle ne contient que l'authentification, le profil, la
+navigation et des pages d'attente ; les albums arrivent à l'étape 2 (voir
 §7 "État par rapport aux missions").
 
 ### 1.1 Stack technique
@@ -19,13 +25,13 @@ des TP consistent à le compléter, le fiabiliser et l'enrichir (voir
 | Domaine | Technologie | Rôle |
 |---|---|---|
 | Framework | Angular 22 (standalone components) | UI, routage, DI |
-| Rendu réactif | Signals (`signal`, pas de `computed`/`effect` pour l'instant) | État local et partagé |
-| Formulaires | Reactive Forms (`FormGroup`, `FormControl`) | Saisie inscription/connexion/profil/upload |
+| Rendu réactif | Signals (`signal`, `computed`, `toSignal` depuis la V2) | État local et partagé |
+| Formulaires | Reactive Forms (`FormGroup`, `FormControl`) + `MatFormField`/`matInput` (V2) | Saisie inscription/connexion/profil |
 | HTTP | `HttpClient` + intercepteur fonctionnel ; mécanisme XHR forcé par `withXhr()` (TP3, Mission 6, 08/10/2026) | Appels API, ajout du JWT, progression d'upload |
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
-| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés, 6 fichiers `*.spec.ts` / 25 tests au 08/10/2026) | `ng serve`, `ng build`, `ng test` |
+| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés ; V2 étape 1 : 7 fichiers `*.spec.ts` / 23 tests au 01/11/2026) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
-| Composants UI | Angular Material 22.2.1 + CDK (ajoutés TP2, Mission 3) | `mat-card`, `mat-paginator`, `mat-dialog`, `mat-button`/`mat-icon`, `mat-progress-bar` + `MatSnackBar` (TP3, 08/10/2026) — uniquement sur `TracksPageComponent` pour l'instant, thème Material 3 custom (`material-theme.scss`, palette verte) |
+| Composants UI | Angular Material 22.2.1 + CDK | **V2 (01/11/2026)** : utilisé dans toute l'application — `MatToolbar`, `MatMenu`, `MatCard`, `MatFormField`, `MatButton`, `MatIcon` (police *Material Symbols Outlined*), `MatSnackBar`, `MatDivider`. Thème Material 3 **sombre or / bleu nuit** (`material-theme.scss`, palettes générées) + identité visuelle dans `styles.css` (reflet or métallique, couleurs des 11 types) |
 
 ### 1.2 Arborescence
 
@@ -34,19 +40,24 @@ frontend-starter/
 ├── proxy.conf.json                  # /api -> http://localhost:3000
 ├── src/
 │   ├── main.ts                      # bootstrap standalone + providers globaux
+│   ├── material-theme.scss          # thème Material 3 sombre (or / bleu nuit)
+│   ├── _theme-colors.scss           # palettes générées (ng generate @angular/material:theme-color)
+│   ├── styles.css                   # identité Card Vault : fond, reflet or, types
 │   ├── app/
-│   │   ├── routes.ts                # déclaration des routes + guards
+│   │   ├── routes.ts (+ .spec)      # déclaration des routes + guards
 │   │   ├── components/
-│   │   │   ├── app/                 # composant racine (header + <router-outlet>)
-│   │   │   ├── login-page/          # formulaire de connexion
-│   │   │   ├── register-page/       # formulaire d'inscription
-│   │   │   ├── profile-page/        # lecture/édition du profil (protégée)
-│   │   │   └── tracks-page/         # bibliothèque : liste, upload, lecture (protégée)
+│   │   │   ├── app/                 # racine : barre MatToolbar + <router-outlet>
+│   │   │   ├── login-page/          # connexion (MatCard + MatFormField)
+│   │   │   ├── register-page/       # inscription
+│   │   │   ├── profile-page/        # profil (protégée)
+│   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche, Amis)
 │   │   └── shared/
 │   │       ├── guards/auth.guard.ts         # bloque l'accès sans token
 │   │       ├── interceptors/auth.interceptor.ts  # ajoute Authorization: Bearer
-│   │       ├── models/              # interfaces TS (User, Track, Page<T>, AuthResponse)
-│   │       └── services/            # AuthService, TrackService (seuls points d'appel HTTP)
+│   │       ├── i18n/french-paginator-intl.ts     # textes français de mat-paginator
+│   │       ├── models/              # User, AuthResponse, Page<T>
+│   │       ├── services/            # AuthService (seul point d'appel HTTP pour l'instant)
+│   │       └── utils/http-error.ts  # serverErrorMessage() (message d'erreur lisible)
 ```
 
 ### 1.3 Diagramme de composants et flux général
@@ -54,14 +65,14 @@ frontend-starter/
 ```mermaid
 flowchart LR
     subgraph Angular["Frontend Angular (localhost:4200)"]
+        App[AppComponent\nMatToolbar + menus]
         Routes[routes.ts]
         Guard[authGuard]
         Login[LoginPageComponent]
         Register[RegisterPageComponent]
         Profile[ProfilePageComponent]
-        Tracks[TracksPageComponent]
+        Placeholder[PlaceholderPageComponent\nAccueil · Recherche · Amis]
         AuthSvc[AuthService\nsignals: token, currentUser]
-        TrackSvc[TrackService]
         Interceptor[authInterceptor]
         HttpClient[HttpClient]
     end
@@ -71,17 +82,17 @@ flowchart LR
     end
 
     subgraph API["Backend Express (proxy /api -> :3000)"]
-        Endpoints[/api/auth/*, /api/users/me,\n/api/tracks*/]
+        Endpoints[/api/auth/*, /api/users/me/]
     end
 
+    App --> AuthSvc
     Routes --> Guard
     Guard -->|token absent| Login
+    Guard -->|token présent| Placeholder
     Login --> AuthSvc
     Register --> AuthSvc
     Profile --> AuthSvc
-    Tracks --> TrackSvc
     AuthSvc --> HttpClient
-    TrackSvc --> HttpClient
     HttpClient --> Interceptor
     Interceptor -- lit --> AuthSvc
     Interceptor -- "Authorization: Bearer <token>" --> Endpoints
@@ -126,20 +137,32 @@ etc.) ; sans lui ces composants fonctionnent mais sans retour visuel
 d'interaction. `MatPaginatorIntl` est surchargé par `FrenchPaginatorIntl`
 (`shared/i18n/french-paginator-intl.ts`) : sans ça, `mat-paginator`
 affiche ses textes par défaut en anglais ("Items per page:", "0 of 0"),
-incohérent avec le reste de l'app — fourni globalement ici plutôt que
-localement sur `TracksPageComponent`, pour couvrir tout usage futur de
-`mat-paginator` ailleurs sans avoir à y repenser.
+incohérent avec le reste de l'app — fourni globalement ici, ce qui le
+rend disponible pour les listes paginées de la V2 (albums, recherche).
+
+**Icônes (V2, étape 1, 01/11/2026).** `index.html` charge la police
+*Material Symbols Outlined*, mais `<mat-icon>` utilise par défaut la classe
+`material-icons`. `MAT_ICON_DEFAULT_OPTIONS` (`fontSet:
+'material-symbols-outlined'`) aligne les deux : vérifié dans le navigateur
+(police calculée « Material Symbols Outlined », icônes de 24 px).
 
 ### 2.2 Table des routes (`routes.ts`)
 
 | Path | Composant | Protégée (`authGuard`) |
 |---|---|---|
-| `''` | redirect → `tracks` | — |
+| `''` | `PlaceholderPageComponent` (Accueil, rempli à l'étape 7) | oui |
+| `/search` | `PlaceholderPageComponent` (Recherche, étape 7) | oui |
+| `/friends` | `PlaceholderPageComponent` (Amis, étape 4) | oui |
+| `/profile` | `ProfilePageComponent` | oui |
 | `/login` | `LoginPageComponent` | non |
 | `/register` | `RegisterPageComponent` | non |
-| `/profile` | `ProfilePageComponent` | oui |
-| `/tracks` | `TracksPageComponent` | oui |
-| `**` | redirect → `tracks` | — |
+| `**` | redirect → `''` (dont l'ancienne URL `/tracks`) | — |
+
+**Page d'attente commune (V2, étape 1).** Plutôt que trois composants
+quasi identiques, une seule `PlaceholderPageComponent` lit son titre, son
+icône, sa description et le numéro d'étape dans la propriété `data` de la
+route (`toSignal(ActivatedRoute.data)`). Chaque route sera remplacée par
+son vrai composant à l'étape indiquée.
 
 `authGuard` (fonctionnel, `CanActivateFn`) vérifie simplement
 `auth.token()` (un Signal) : présent → accès autorisé, absent → redirection
@@ -185,7 +208,7 @@ sequenceDiagram
     I-->>S: réponse
     S->>S: tap: storeAuthentication()\n-> localStorage.setItem + token.set + currentUser.set
     S-->>C: next()
-    C->>C: router.navigateByUrl('/tracks')
+    C->>C: router.navigateByUrl('/')
 ```
 
 En cas d'échec (401), l'`Observable` émet une erreur : `LoginPageComponent`
@@ -225,9 +248,9 @@ token rejeté par le backend — détail en §3.6.
 
 | Composant | Formulaire | Champs + validateurs | Comportement |
 |---|---|---|---|
-| `LoginPageComponent` | `form` (email, password) | `required`, `email` (pas de `minLength` sur le mot de passe : le backend ne vérifie une longueur qu'à l'inscription) | Pré-rempli avec le compte démo ; bouton `[disabled]="form.invalid"` ; message d'erreur par champ sous `email`/`password`, affiché dès `touched \|\| dirty` ; `submit()` bloque aussi si invalide (`markAllAsTouched()`) avant d'appeler `auth.login()`, redirige vers `/tracks` au succès, affiche `error` au 401 |
+| `LoginPageComponent` | `form` (email, password) | `required`, `email` (pas de `minLength` sur le mot de passe : le backend ne vérifie une longueur qu'à l'inscription) | Pré-rempli avec le compte démo ; bouton `[disabled]="form.invalid"` ; messages par champ en `<mat-error>` (V2) ; `submit()` bloque aussi si invalide (`markAllAsTouched()`) avant d'appeler `auth.login()`, redirige vers **`/`** au succès (V2 ; `/tracks` en V1), affiche l'erreur via `serverErrorMessage()` (message de repli si le serveur ne répond pas) |
 | `RegisterPageComponent` | `form` (name, email, password) | `required` (+ `email` sur l'email, **+ `minLength(8)`** sur le mot de passe depuis Mission 1 TP1, aligné sur la contrainte du backend) | Bouton `[disabled]="form.invalid"` ; message d'erreur par champ sous `name`/`email`/`password` (`touched \|\| dirty`) ; `submit()` bloque aussi si invalide avant d'appeler `auth.register()`, redirige vers `/profile` au succès |
-| `ProfilePageComponent` | `form` (name) | `required` | Chargement automatique au constructeur (`GET /api/users/me` dès l'arrivée sur `/profile`, Mission 1 point 8) ; bouton "Charger mon profil" pour rafraîchir manuellement ; `save()` appelle `auth.update()` (`PUT /api/users/me`) |
+| `ProfilePageComponent` | `form` (name) | `required` | Chargement automatique au constructeur (`GET /api/users/me` dès l'arrivée sur `/profile`, Mission 1 point 8) ; le bouton "Charger mon profil" du TP1 a été retiré en V2 (redondant) ; `save()` appelle `auth.update()` (`PUT /api/users/me`) et confirme par une `MatSnackBar` (succès ou erreur) |
 
 ### 3.5 `AppComponent` — état de connexion global (header)
 
@@ -258,14 +281,18 @@ logout(): void {
   F5. Le `error: () => {}` reste volontairement minimal ici : la gestion
   globale d'un token invalide/expiré (401) est centralisée dans
   `authInterceptor` depuis le point 10 (§3.6), pas dupliquée à cet endroit.
-- **Affichage conditionnel du nav** (`app.html`) : `Connecté : {{ user.name }}`
-  visible si `auth.currentUser()` est renseigné ; les liens "Backing
-  tracks"/"Profil" et le bouton "Déconnexion" ne s'affichent que si
-  `auth.token()` est vrai ; sinon seul le lien "Connexion" reste visible.
-- **Style.** Les liens du nav et le bouton "Déconnexion" partagent
-  désormais le même rendu visuel (`header nav a, header nav button` dans
-  `styles.css`) — unification purement visuelle, `<a>` (navigation) et
-  `<button>` (action) restent sémantiquement distincts en HTML.
+- **Barre du haut (V2, étape 1, 01/11/2026)** — `app.html`, en Angular
+  Material :
+  - `MatToolbar` collante (`position: sticky`), logo « Card Vault » en
+    dégradé or métallique ;
+  - **connecté** (`auth.token()`) : liens **Accueil · Recherche · Amis**
+    (`mat-button` + `routerLinkActive`, lien actif surligné), puis un
+    avatar (initiale du pseudo, `computed`) qui ouvre un `MatMenu` : pseudo
+    et email, **Mon profil**, **Déconnexion** ;
+  - **visiteur** : **Connexion** et **Inscription** uniquement ;
+  - **mobile** (< 720 px) : les liens passent dans un menu « burger ».
+    Les liens sont définis une seule fois dans `links` et réutilisés par
+    la barre et par le menu mobile.
 - **Déconnexion sans requête réseau.** `logout()` ne fait qu'un nettoyage
   client (`localStorage` + Signals) : un JWT est stateless, le backend ne
   garde aucune trace des tokens émis et n'expose aucune route `logout`
@@ -313,398 +340,17 @@ return next(authorizedRequest).pipe(
 
 ---
 
-## 4. Bibliothèque de pistes (`TracksPageComponent`)
+## 4. Albums et cartes
 
-### 4.1 `TrackService` — API consommée
+_À venir (étapes 2 et 3 de la V2)._
 
-| Méthode | Requête HTTP | Utilisation |
-|---|---|---|
-| `list(page, limit=5, title='')` | `GET /api/tracks?page=&limit=&title=` | Pagination serveur + filtre par titre (facultatif, ajouté TP2) |
-| `upload(file, title)` | `POST /api/tracks` (`FormData`: `audio`, `title`), options `{ reportUploadProgress: true, observe: 'events' }` → `Observable<HttpEvent<Track>>` (TP3, Mission 6) | Envoi d'un fichier audio avec suivi de progression |
-| `audio(id)` | `GET /api/tracks/:id/audio` (`responseType: 'blob'`) | Récupération du binaire audio |
-| `delete(id)` | `DELETE /api/tracks/:id` | Suppression (Mission 3 TP2 ; réactions par statut + SnackBar en TP3, Mission 5) |
-
-### 4.2 État réactif du composant
-
-Signals exposés par `TracksPageComponent` :
-`tracks`, `page`, `total`, `limit`, `loading`, `error` (ajouté Mission 2,
-TP2 — voir ci-dessous), `uploadError`, `uploadSuccess`, `uploading`,
-`playingTrack`, `playbackFailed`, `audioError` (ajoutés Mission 3, TP2 —
-voir plus bas), `uploadProgress` (ajouté TP3, Mission 6, 08/10/2026 —
-pourcentage 0-100, significatif seulement pendant `uploading()`), `deletingId` (ajouté avec la suppression ; `deleteError` a été retiré en TP3, Mission 5, remplacé par une `MatSnackBar`,
-Mission 3) et `audioUrl`, plus deux `FormControl` : `title` (formulaire
-d'upload) et `titleFilter` (champ de recherche, amélioration facultative
-TP2 — à ne pas confondre malgré le nom proche), et une propriété classique
-`file?: File` (choix de fichier, pas encore un Signal) et une référence
-`@ViewChild('fileInput')` vers l'`<input type="file">` (TP3, Mission 6 :
-pour le vider après un envoi réussi). Le
-Signal `pages` (nombre total de pages, stocké manuellement depuis
-`response.pages`) a été remplacé par `total` (nombre total de pistes,
-`response.total`) : `mat-paginator` recalcule lui-même le nombre de pages
-à partir de `total()`/`limit()`.
-
-**Signal `error` (Mission 2, TP2).** Avant, un échec de `GET /api/tracks`
-dans `load()` ne produisait qu'un `console.error`, invisible pour
-l'utilisateur — la liste restait affichée telle quelle, potentiellement
-obsolète, sans explication. `error = signal('')` est désormais remis à
-vide en début de `load()` et rempli (`error.error?.message`, ou un message
-par défaut) dans le callback d'erreur ; affiché dans le template juste
-sous le bouton "Actualiser" (`@if (error())`, classe `.error` déjà
-utilisée en TP1 sur `/login`/`/register`). Comportement volontaire :
-`tracks` n'est modifié que dans le callback `next`, donc la dernière liste
-connue **reste visible** sous le message d'erreur plutôt que de
-disparaître.
-
-### 4.3 Diagramme de séquence — Pagination
-
-```mermaid
-sequenceDiagram
-    participant U as Utilisateur
-    participant C as TracksPageComponent
-    participant S as TrackService
-    participant API as GET /api/tracks
-
-    Note over C: constructor() appelle load() au chargement
-    U->>C: interaction mat-paginator -> (page)="onPage($event)"
-    C->>C: page.set(event.pageIndex + 1), limit.set(event.pageSize)
-    C->>C: load()
-    C->>C: loading.set(true)
-    C->>S: service.list(page(), limit())
-    S->>API: GET /api/tracks?page=N&limit=M
-    API-->>S: { items, page, limit, total, pages }
-    S-->>C: réponse
-    C->>C: tracks.set(items), total.set(total), loading.set(false)
-    Note over C: mat-paginator recalcule lui-même le nombre de pages<br/>à partir de [length]="total()" / [pageSize]="limit()"
-```
-
-Chaque changement de page déclenche une **nouvelle requête serveur** (pas de
-découpage local d'une liste déjà chargée) — conforme à l'exigence de
-Mission 2 du TP2. Depuis l'AVANCÉ Mission 2 (`mat-paginator`, TP2),
-l'utilisateur peut aussi changer la taille de page via le menu déroulant
-(`[pageSizeOptions]="[5, 10, 20]"`) — ce changement passe par le même
-événement `(page)` et déclenche donc aussi une requête fraîche, jamais un
-recalcul local.
-
-### 4.4 Diagramme de séquence — Upload puis lecture
-
-```mermaid
-sequenceDiagram
-    participant U as Utilisateur
-    participant C as TracksPageComponent
-    participant S as TrackService
-    participant API as Backend
-
-    U->>C: sélectionne un fichier -> choose(event)
-    C->>C: valide type MIME + taille (25 Mo max)
-    alt fichier invalide
-        C->>C: uploadError.set(message), file reste undefined
-    else fichier valide
-        C->>C: this.file = input.files[0]
-    end
-    U->>C: clic "Envoyer" -> upload()
-    C->>C: garde if (!file || uploading()) return
-    C->>C: uploading.set(true), uploadProgress.set(0)
-    C->>C: uploadError.set(''), uploadSuccess.set(''), title.disable()
-    C->>S: service.upload(file, title)
-    S->>S: FormData: append('audio', file), append('title', title)
-    S->>API: POST /api/tracks (multipart/form-data, XHR)
-    loop pendant l'envoi (plusieurs HttpEvent)
-        S-->>C: HttpEventType.UploadProgress {loaded, total}
-        C->>C: uploadProgress.set(round(100 * loaded / total))
-    end
-    Note over C: à 100 % : "Finalisation…" (Multer + MongoDB<br/>pas encore terminés côté serveur)
-    alt succès
-        API-->>S: 201 track
-        S-->>C: HttpEventType.Response (body = track)
-        C->>C: uploading.set(false), title.enable()
-        C->>C: reset title/file + fileInput.value = '', page.set(1), load(), uploadSuccess.set(message)
-    else échec
-        API-->>S: 400/... ou aucune réponse (backend injoignable)
-        S-->>C: erreur (callback error)
-        C->>C: uploading.set(false), title.enable()
-        C->>C: uploadError.set(serverErrorMessage(error, repli))
-    end
-
-    U->>C: clic ▶ sur une piste -> play(track)
-    C->>C: audioError.set(''), playbackFailed.set(false), uploadSuccess.set('')
-    C->>S: service.audio(track.id)
-    S->>API: GET /api/tracks/:id/audio (responseType: blob)
-    alt requête réussie
-        API-->>S: flux binaire audio
-        S-->>C: Blob
-        C->>C: revoke ancien ObjectURL (s'il existe)
-        C->>C: audioUrl.set(URL.createObjectURL(blob))
-        C->>C: playingTrack.set(track)
-        Note over C: <audio (error)="onAudioError()">
-        alt décodage échoue (fichier illisible)
-            C->>C: onAudioError() -> audioError.set(...), playbackFailed.set(true)
-        end
-    else requête échoue (404/réseau)
-        API-->>S: erreur
-        S-->>C: erreur
-        Note over C: playingTrack non touché : une piste différente<br/>déjà en lecture n'est pas affectée
-        C->>C: audioError.set(serverErrorMessage(error, repli))
-    end
-    Note over C: template : badge "En cours de lecture" ou "⚠ Erreur de lecture"<br/>selon playbackFailed, lecteur <audio> affiché dans la card de la piste
-```
-
-**Validation frontend du fichier (Mission 3, TP2).** `choose()` reproduit
-côté client les mêmes règles que `backend/src/app.js` (constantes
-`ALLOWED_AUDIO_TYPES` : les 6 mêmes types MIME que le `Set allowed` du
-backend, et `MAX_FILE_SIZE` : 25 Mo). Si le fichier échoue l'une des deux
-règles, `this.file` n'est **pas** renseigné (reste `undefined`) et le
-Signal `uploadError` est rempli avec un message dédié — le bouton
-"Envoyer" (`[disabled]="!file || uploading()"`) reste donc désactivé sans
-logique supplémentaire. Cette validation est un confort d'UX : elle ne
-remplace jamais `fileFilter`/`limits.fileSize` côté backend, seul rempart
-réel puisque le frontend est entièrement contournable (ex. `curl` direct
-sur `POST /api/tracks`).
-
-**État de chargement + anti double-soumission (Mission 3, TP2).** Signal
-`uploading`, mis à `true` au début de `upload()` et à `false` dans les
-deux callbacks (`next`/`error`). La garde
-`if (!this.file || this.uploading()) return;` en tête de `upload()` et le
-`[disabled]="!file || uploading()"` du bouton partagent la **même**
-condition côté logique et côté UI — évite une double soumission par clic
-répété pendant qu'une requête est déjà en cours, sans deux logiques à
-synchroniser séparément.
-
-**Progression de l'upload (TP3, Mission 6, 08/10/2026).** Avec
-`observe: 'events'` + `reportUploadProgress`, l'Observable de
-`TrackService.upload()` n'émet plus une seule réponse finale mais une
-**suite d'`HttpEvent`** : `Sent`, plusieurs `UploadProgress`,
-`ResponseHeader`, `Response`. Le `next` est donc appelé plusieurs fois et
-trie selon `event.type` :
-- `UploadProgress` → `uploadProgress.set(Math.round(100 * loaded / total))`,
-  seulement si `total` est connu (sinon on garde le dernier pourcentage
-  plutôt que `NaN`) ;
-- `Response` → réussite (seul cet événement contient la piste créée) ;
-- les autres types sont ignorés.
-
-Les 4 états demandés se déduisent des Signals existants : aucun upload
-(`uploading()` faux, pas de message), en cours (`uploading()` vrai,
-`mat-progress-bar` en mode `determinate` + « Envoi : N % »), réussite
-(`uploadSuccess()`), échec (`uploadError()`). À 100 %, le texte devient
-« Finalisation… » : tous les octets sont partis mais le serveur doit
-encore écrire le fichier (Multer) et enregistrer la piste (MongoDB) avant
-de répondre `201`. Pendant l'envoi, le champ Titre est désactivé par
-`title.disable()`/`enable()` (API du `FormControl`, recommandée plutôt
-qu'un `[disabled]` sur un contrôle réactif), le sélecteur de fichier et le
-bouton par `[disabled]="uploading()"`. Après succès, `fileInput.nativeElement.value = ''`
-vide le sélecteur (avant, `file` était remis à `undefined` mais le nom du
-fichier restait affiché). Nécessite `withXhr()` dans `main.ts` (§2.1) :
-c'était la cause d'un bug « barre bloquée à 0 % » trouvé en vérification
-navigateur, invisible pour les tests unitaires (`provideHttpClientTesting()`
-remplace complètement le mécanisme HTTP du navigateur).
-
-**Message de succès + erreurs serveur, et bug "Failed to fetch" corrigé
-(Mission 3, TP2).** `uploadSuccess` (nouveau) et `uploadError` (réutilisé,
-déjà présent pour la validation de fichier) sont remplis respectivement
-dans les callbacks `next`/`error` de `upload()`, et vidés au début de
-chaque tentative. Un bug a été trouvé pendant le test avec le backend
-coupé : le code faisait confiance à `error.error?.message` dans tous les
-cas, ce qui laissait fuiter un message technique du navigateur
-(`TypeError: Failed to fetch`) plutôt qu'un message applicatif quand
-**aucune réponse** n'arrivait du serveur. Correction, factorisée en
-fonction utilitaire :
-
-```ts
-function serverErrorMessage(error: HttpErrorResponse, fallback: string): string {
-  return error.status > 0 ? (error.error?.message ?? fallback) : fallback;
-}
-```
-
-`error.status === 0` signale une absence totale de réponse HTTP (backend
-injoignable) — dans ce cas, `error.error` est une erreur technique
-(`ProgressEvent`/`TypeError` selon le navigateur), pas le JSON `{ message }`
-applicatif renvoyé par le backend sur une vraie erreur (`400`, etc.). Cette
-fonction est utilisée à la fois par `upload()` **et par `load()`**
-(Mission 2), qui avait la même faille latente non encore observée.
-
-`uploadSuccess` est en plus vidé en tout début de `load()` **et** de
-`play()` — donc dès qu'une autre action se produit sur la page
-(Actualiser, pagination, lecture), pas seulement au prochain envoi. Ça a
-nécessité de réordonner `upload()` : `this.load()` est appelé **avant**
-`this.uploadSuccess.set(...)`, sinon le vidage en tout début de `load()`
-effacerait le message qu'on vient tout juste de fixer.
-
-**Affichage du morceau en cours de lecture (Mission 3, TP2).** Signal
-`playingTrack` stockant la **piste entière** (pas juste son id), rempli
-dans le callback `next` de `play()` en même temps que `audioUrl` (donc
-toujours cohérent avec ce qui est réellement chargé). Choix de stocker
-la piste plutôt qu'un id : évite d'avoir à la rechercher dans `tracks()`,
-qui est paginé et pourrait ne plus contenir la piste jouée si la page a
-changé entre-temps. Deux affichages dérivés, tous deux dans la **card de
-la piste concernée** (pas un bloc global sous la liste, cf. ajustement
-UX plus bas) : un badge sous le titre (`@if (track.id ===
-playingTrack()?.id)`) — texte, pas seulement une couleur, pour rester
-perceptible avec un lecteur d'écran — et le lecteur `<audio>` lui-même.
-
-**Erreur audio compréhensible + Signal `playbackFailed` (Mission 3,
-TP2).** Deux sources d'erreur distinctes : l'échec de la requête HTTP
-(`GET /api/tracks/:id/audio`, catché dans `subscribe()`, message posé
-via `serverErrorMessage()`) et l'échec de **décodage** par le
-navigateur, détecté via l'événement natif `(error)` de l'élément
-`<audio>` (`onAudioError()`) — un fichier peut être téléchargé avec
-succès (le `Blob` arrive) sans pour autant être un audio valide.
-
-Un piège trouvé en testant avec un fichier volontairement illisible :
-`playingTrack` est rempli dès que le `Blob` est téléchargé (avant même
-de savoir si le navigateur peut le lire), donc le badge "En cours de
-lecture" restait affiché même en cas d'échec de décodage. Solution :
-**`playbackFailed`, un Signal séparé de `playingTrack`**, mis à `true`
-uniquement par `onAudioError()` — jamais par un échec HTTP, car celui-ci
-concerne une tentative sur une piste qui **n'a pas** pu remplacer
-`playingTrack` ; si une piste différente jouait déjà, elle ne doit pas
-être faussement marquée en erreur par l'échec d'un clic sur une autre
-piste. Le badge choisit entre les deux textes selon `playbackFailed()`.
-
-**Pourquoi un `Blob` + `ObjectURL` plutôt qu'une URL directe dans `src`** :
-le endpoint `/api/tracks/:id/audio` est **protégé par JWT**. Un attribut
-HTML `src="/api/tracks/xxx/audio"` déclenche une requête navigateur qui ne
-passe **pas** par `authInterceptor` (celui-ci n'agit que sur les requêtes
-faites via `HttpClient`) et n'aurait donc pas l'en-tête `Authorization` →
-401. La solution : télécharger le fichier via `HttpClient` (qui, lui, passe
-par l'intercepteur), obtenir un `Blob` en mémoire, puis créer une URL locale
-temporaire (`blob:...`) que le navigateur peut utiliser directement dans
-`<audio src>` sans requête réseau supplémentaire.
-
-**Révocation à la destruction du composant (Mission 3, TP2).** `play()`
-révoque déjà l'ObjectURL **précédente** à chaque nouvelle lecture, mais
-la **dernière** créée restait en mémoire si l'utilisateur quittait
-`/tracks` sans relire une autre piste — `URL.createObjectURL` garde le
-`Blob` référencé indépendamment du cycle de vie du composant Angular.
-`TracksPageComponent implements OnDestroy` ; `ngOnDestroy()` révoque
-`audioUrl()` s'il existe encore. Vérifié en pratique : récupérer l'URL
-du lecteur, changer de route, puis tenter un `fetch()` dessus depuis la
-console — échoue (`TypeError: Failed to fetch`) si la révocation a bien
-eu lieu.
-
-**Cards responsives et accessibles, avec Angular Material (Mission 3,
-TP2).** Chaque piste est un `<mat-card appearance="outlined" class="track">`,
-dans une `<ul class="tracks">`/`<li>` sémantique (métadonnées : titre,
-nom original, format lisible via `formatAudioType()`, taille lisible via
-`formatFileSize()`, date via `DatePipe`). Structure interne volontairement
-simplifiée (un seul `mat-card-content` en flex-row plutôt que
-`mat-card-header`/`mat-card-actions` séparés, qui laissaient un grand
-vide vertical — paddings Material empilés). Bouton de lecture en
-`mat-mini-fab` ; sa couleur est fixée explicitement (`.play-fab`,
-`!important`) plutôt que via `color="primary"`, car la palette Material
-générée à partir de `mat.$green-palette` ne correspond pas exactement au
-vert de marque (`#1d755e`).
-
-**Lecteur audio dans la card, pas dans un bloc global (ajustement UX,
-Mission 3, TP2).** Le lecteur `<audio>` est affiché **dans la card de la
-piste concernée**, pas dans un bloc partagé sous la liste :
-```html
-@if (track.id === playingTrack()?.id && audioUrl()) {
-  <audio class="track-audio" [src]="audioUrl()" controls autoplay (error)="onAudioError()"></audio>
-}
-```
-Fonctionne avec les Signals globaux existants (`playingTrack`,
-`audioUrl`) sans Signal par piste : chaque `@if` compare l'id de sa
-propre piste à `playingTrack()?.id`, donc un seul lecteur s'affiche
-jamais à la fois, peu importe le nombre de cards dans la liste.
-
-**Suppression avec confirmation (améliorations facultatives, Mission 3,
-TP2).** `TrackService.delete(id)` (`DELETE /api/tracks/:id`). Confirmation
-via `MatDialog.open()` sur un `<ng-template>` local (pas de composant
-séparé) plutôt qu'un `window.confirm()`, cohérent avec le reste de la
-page en Material. Après un `204` : nettoyage du lecteur si la piste
-supprimée était celle en cours de lecture (`URL.revokeObjectURL` +
-remise à vide de `audioUrl`/`playingTrack`), recul d'une page si c'était
-la dernière piste d'une page non-1, puis `load()` dans tous les cas —
-regroupe dans la même implémentation les deux points facultatifs du
-sujet "suppression avec confirmation" et "rafraîchissement après
-suppression", qui décrivent en réalité la même action.
-
-**Suppression complétée (TP3, Mission 5, 08/10/2026).**
-
-```mermaid
-sequenceDiagram
-    participant U as Utilisateur
-    participant C as TracksPageComponent
-    participant S as TrackService
-    participant API as Backend
-
-    U->>C: clic poubelle -> confirmDelete(track)
-    C->>C: garde : deletingId() ou fenêtre déjà ouverte -> return
-    C->>U: MatDialog "Supprimer « X » ?"
-    U->>C: Supprimer -> performDelete(track)
-    C->>C: deletingId.set(track.id) (bouton désactivé)
-    C->>S: service.delete(track.id)
-    S->>API: DELETE /api/tracks/:id (JWT via intercepteur)
-    Note over API: findOneAndDelete({ _id, ownerId: req.auth.sub })
-    alt 204
-        C->>C: SnackBar verte + afterTrackRemoved(track)
-    else 404 (supprimée ailleurs OU pas au propriétaire)
-        C->>C: SnackBar rouge "n'existe plus ou ne vous appartient pas" + afterTrackRemoved(track)
-    else 500 (métadonnée supprimée, fichier resté)
-        C->>C: SnackBar rouge (message backend) + afterTrackRemoved(track)
-    else 401
-        Note over C: authInterceptor -> logout + /login
-    else 0 / autre (réseau)
-        C->>C: SnackBar rouge "Suppression impossible", liste inchangée
-    end
-    C->>C: deletingId.set(null)
-```
-
-- `afterTrackRemoved(track)` regroupe le nettoyage qui n'existait qu'en
-  cas de succès (lecteur coupé + `revokeObjectURL`, recul d'une page,
-  `load()`) : il est maintenant aussi appelé pour `404` et `500`, cas où
-  la piste n'existe plus côté serveur. Avant, une carte « fantôme »
-  restait affichée après un `404`.
-- Le backend renvoie volontairement le **même** `404` pour une piste
-  supprimée et pour la piste d'un autre utilisateur (ne pas révéler son
-  existence) : le frontend ne les distingue pas, un seul message.
-- `notify(message, isError)` ouvre la `MatSnackBar` avec une
-  `panelClass` (`snack-success` / `snack-error`). La SnackBar est rendue
-  dans un **overlay CDK** hors du composant : ses styles sont donc dans
-  `src/styles.css` (tokens `--mat-snack-bar-*`), pas dans
-  `tracks-page.css` (encapsulé).
-- Garde anti double-clic en tête de `confirmDelete()` :
-  `deletingId` ne bloque qu'**après** la confirmation ; deux clics plus
-  rapides que l'affichage de la fenêtre en ouvraient deux.
-  `this.dialog.openDialogs.length` empêche d'en ouvrir une seconde.
-- Sécurité : le guard et l'interface ne protègent rien (contournables par
-  `curl`) ; la protection réelle est côté backend (signature du JWT +
-  filtre `ownerId` issu du token). Voir `backend/analyse.md` §4.3.
-
-**Style global des boutons (TP3, Mission 5, 08/10/2026).** La règle
-`button:not([mat-icon-button]):not([mat-button])…` de `styles.css` excluait
-les boutons Material par leurs **attributs**, mais Material 22 utilise
-aussi `matButton` (ex. le bouton « OK » de la SnackBar), qui recevait le
-fond vert. Ajout de `:not(.mat-mdc-button-base)`, classe portée par tous
-les boutons Material. Effet de bord : les flèches de `mat-paginator`, qui
-recevaient elles aussi ce fond vert, ont retrouvé le style Material.
-
-**Filtre par titre (amélioration facultative, TP2) — premier changement
-backend de la session.** `title` ajouté en paramètre optionnel de
-`GET /api/tracks` (`backend/src/app.js`), recherche par sous-chaîne
-insensible à la casse (`$regex`/`$options: "i"` Mongo), combinée au
-filtre `ownerId` existant ; entrée échappée via `escapeRegExp()` avant
-injection dans la regex (sécurité : éviter qu'un motif spécial ne
-matche tout ou ne fasse exploser le temps de calcul côté serveur).
-`API_CONTRACT.md` mis à jour dans la même modification.
-`TrackService.list(page, limit, title)` ajoute `title` aux query params
-seulement s'il est non vide. Signal `titleFilter`, méthode
-`applyFilter()` (remet `page` à 1 avant de recharger).
-
-**Piège trouvé et corrigé : `ngSubmit` sans `FormsModule`/`[formGroup]`.**
-Premier essai avec `<form (ngSubmit)="applyFilter()">` : la recherche ne
-filtrait jamais, alors que la requête partait bien (sans `title`,
-confirmé via DevTools Network). `ngSubmit` n'est fourni que par `NgForm`
-(`FormsModule`) ou `FormGroupDirective` (`[formGroup]`,
-`ReactiveFormsModule`, non utilisé ici) — le composant n'important que
-`ReactiveFormsModule` sans `[formGroup]` sur ce `<form>`, ni l'une ni
-l'autre directive ne s'y attachait. `(ngSubmit)` ne se liait donc à rien
-côté Angular ; le clic déclenchait la soumission **native** du
-navigateur, qui rechargeait toute l'application (perdant le champ de
-recherche) — d'où la requête sans filtre observée, en réalité un tout
-nouveau chargement initial post-rechargement, pas un vrai appel à
-`applyFilter()`. Corrigé en supprimant le `<form>` : `(keyup.enter)` sur
-l'input et `(click)` sur le bouton appellent directement `applyFilter()`,
-sans aucune soumission de formulaire.
+La bibliothèque audio de la V1 (`TracksPageComponent`, `TrackService`,
+pagination, upload avec progression, lecture, suppression) a été
+**retirée le 01/11/2026** (V2, étape 1). Ce qui en est réutilisé :
+`withXhr()` (progression d'upload), `Page<T>`, `FrenchPaginatorIntl`,
+`serverErrorMessage()` (déplacée dans `shared/utils/http-error.ts`), les
+patterns SnackBar et confirmation `MatDialog`. Description complète de la
+V1 : version taguée `v1.0` de ce fichier.
 
 ---
 
@@ -735,25 +381,38 @@ FormGroup/FormControl (typé, nonNullable) --template [formGroup]/formControlNam
 
 ## 6. Style, accessibilité, configuration
 
-- CSS minimal par composant (`:host { display: block; max-width: ... }`),
-  pas de librairie de composants (Angular Material n'est pas installé —
-  c'est une option "AVANCÉ" du TP2).
-  Les cards actuelles (`tracks-page.html`) sont de simples `<div class="track">`.
+- **Thème (V2, étape 1, 01/11/2026)** : `material-theme.scss` applique
+  `mat.theme()` (Material 3) avec des palettes **générées** par
+  `ng generate @angular/material:theme-color` (`_theme-colors.scss`) : or
+  `#C9A24D` (principale), bleu `#4A78C2` (accents), neutre bleu nuit
+  `#1B2236` (surfaces et menus teintés de bleu, pas de gris). Les palettes
+  prédéfinies de Material n'offrent pas de doré (`yellow` est un jaune
+  citron). `color-scheme: dark` sur `body` sélectionne la version sombre
+  des couleurs `light-dark()` générées par Material. Premier essai
+  violet / cyan abandonné (jugé trop générique).
+- **Identité** (`styles.css`) : fond bleu nuit avec halos discrets or et
+  bleu, variables `--cv-surface`, `--cv-gold` (dégradé or métallique,
+  classe `.cv-gold-text`), et **11 variables de couleur de type** (`--cv-type-feu`,
+  `--cv-type-eau`…) prêtes pour les badges des étapes 2 et 3. L'ancien
+  style « bouton vert » fait maison de la V1 a été supprimé : les boutons
+  sont tous des boutons Material.
+- **SnackBar** : rendue dans un overlay CDK hors des composants, son style
+  (`snack-success` / `snack-error`) est donc global.
+- **Accessibilité** : liens et boutons Material focusables au clavier,
+  `aria-label` sur les boutons à icône (menu, avatar), icônes décoratives
+  en `aria-hidden`, erreurs de formulaire en `<mat-error>` et `role="alert"`.
 - `proxy.conf.json` redirige `/api` vers `http://localhost:3000` en
-  développement (`ng serve --proxy-config proxy.conf.json`), ce qui évite un
-  problème CORS et permet d'écrire des chemins relatifs (`/api/...`) dans
-  les services au lieu d'une URL absolue.
-- Aucun environnement (`environment.ts`) n'est utilisé : l'URL de l'API
-  n'est jamais codée en dur côté Angular, tout passe par `/api/...` et le
-  proxy (ou, en production, un reverse proxy équivalent).
+  développement : chemins relatifs (`/api/...`) dans les services, pas de
+  problème CORS. Aucun `environment.ts`.
 
 ---
 
 ## 7. État actuel par rapport aux missions des TP (repères)
 
-Ce tableau reflète l'état du **starter fourni**, avant toute modification
-réalisée pendant les séances. Il sera mis à jour à la fin de chaque mission
-réellement complétée.
+Ce tableau suit, mission par mission, ce qui a été réalisé. Les lignes
+TP1 à TP3 décrivent la V1 (tag `v1.0`) ; les fonctionnalités audio qu'elles
+mentionnent ont été retirées en V2. Les lignes V2 suivent les étapes du
+mini projet.
 
 | Mission | Exigence | État dans le starter |
 |---|---|---|
@@ -779,6 +438,7 @@ réellement complétée.
 | TP3 · M5 | Suppression : SnackBar, piste déjà supprimée / pas au propriétaire (404), anti double-clic | ✅ Fait (08/10/2026) — base TP2 + `MatSnackBar` (`notify()`), réaction par statut (204/404/500/0, 401 laissé à l'intercepteur), `afterTrackRemoved()`, garde `openDialogs` dans `confirmDelete()` |
 | TP3 · M6 | Progression d'upload (événements HTTP) | ✅ Fait (08/10/2026) — `reportUploadProgress` + `observe: 'events'`, Signal `uploadProgress`, `mat-progress-bar`, 4 états, contrôles désactivés ; `withXhr()` dans `main.ts` (`fetch`, défaut d'Angular 22, ne remonte pas la progression d'envoi) |
 | TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ✅ 7/7 (08/10/2026) — `AuthService`, `TrackService`, `authInterceptor`, `authGuard`, + `tracks-page.spec.ts` (erreur HTTP affichée, suppression, upload avec progression). Détail : `Tests.md` |
+| V2 · Étape 1 | Retrait de l'audio, identité Card Vault, thème sombre, navigation | ✅ Fait (01/11/2026) — pages audio supprimées ; `MatToolbar` + `MatMenu` (+ menu mobile) ; thème Material sombre or / bleu nuit ; connexion/inscription/profil en Material ; pages d'attente Accueil/Recherche/Amis ; 23 tests |
 
 ---
 
@@ -864,3 +524,9 @@ réellement complétée.
 - **08/10/2026** — TP3, Mission 7 terminée : `tracks-page.spec.ts`
   (10 tests de composant : erreur HTTP, suppression, upload/progression) ;
   6 fichiers / 25 tests (§1.1, §7).
+- **01/11/2026** — V2, étape 1 : retrait de l'audio (section 4 réduite à un
+  renvoi vers le tag `v1.0`), identité Card Vault, thème Material sombre,
+  barre de navigation `MatToolbar`/`MatMenu`, pages d'attente,
+  `serverErrorMessage()` déplacée dans `shared/utils`, police d'icônes
+  (`MAT_ICON_DEFAULT_OPTIONS`) (§1, §1.1, §1.2, §1.3, §2.1, §2.2, §3.4,
+  §3.5, §4, §6, §7).

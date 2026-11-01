@@ -1,17 +1,22 @@
-# Analyse du backend — Guitar Practice Cloud API
+# Analyse du backend — Card Vault API
 
 > Généré à partir du code source dans `backend/src/`. Ce document décrit
-> l'architecture, les technologies, l'authentification, la gestion des
-> uploads et les échanges avec la base de données.
+> l'architecture **actuelle**, les technologies, l'authentification et les
+> échanges avec la base de données. Mis à jour à chaque étape de la V2
+> (journal en §9).
+>
+> **01/11/2026 — V2, étape 1** : la partie audio de la V1 (modèle `Track`,
+> routes `/api/tracks`, upload Multer audio) a été retirée ; sa description
+> reste consultable dans la version taguée `v1.0` de ce fichier.
 
 ## 1. Vue d'ensemble
 
 Le backend est une **API REST** minimaliste en **Node.js / Express 5**, avec
-persistance **MongoDB** (via Mongoose) et stockage des fichiers audio
-**sur le disque local du serveur**. Elle sert une application Angular
-(`frontend-starter/`) qui permet à un utilisateur de s'inscrire, se
-connecter, et gérer ses pistes audio de pratique guitare (upload, liste
-paginée, lecture, suppression).
+persistance **MongoDB** (via Mongoose, base `card-vault` depuis la V2).
+Elle sert l'application Angular **Card Vault** (`frontend-starter/`). À
+l'étape 1 de la V2, elle ne gère que l'inscription, la connexion et le
+profil ; les albums, les photos de cartes (stockées sur le disque local)
+et les fonctions sociales arrivent aux étapes suivantes.
 
 ### 1.1 Stack technique
 
@@ -19,11 +24,11 @@ paginée, lecture, suppression).
 |---|---|---|
 | Runtime | Node.js (ESM, `"type": "module"`) | Exécution du serveur |
 | Framework HTTP | Express 5.1 | Routage, middlewares |
-| Base de données | MongoDB Atlas (cloud) | Persistance des métadonnées |
+| Base de données | MongoDB Atlas (cloud), base `card-vault` (V2) | Persistance des données |
 | ODM | Mongoose 9 | Schémas, validation, requêtes |
 | Authentification | jsonwebtoken (JWT) | Sessions sans état |
 | Hachage mot de passe | bcryptjs | Stockage sécurisé des mots de passe |
-| Upload fichiers | Multer 2 (`diskStorage`) | Réception des fichiers audio multipart |
+| Upload fichiers | Multer 2 | Dépendance conservée mais **plus utilisée** depuis le retrait de l'audio (V2, étape 1) ; réutilisée pour les photos de cartes (étape 3) |
 | CORS | cors | Autoriser les appels depuis Angular (localhost:4200) |
 | Tests | `node:test` + `node:assert/strict` | Tests unitaires/API légers |
 
@@ -35,11 +40,10 @@ backend/
 │   ├── app.js            # Construction de l'app Express (routes, middlewares)
 │   ├── server.js         # Point d'entrée : connexion Mongo + écoute HTTP
 │   └── models/
-│       ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
-│       └── Track.js      # Schéma Mongoose Piste audio
-├── data/uploads/         # Fichiers audio stockés sur disque (hors Git)
-├── test/api.test.js      # Tests : health, schémas + 6 tests TP3 (08/10/2026) : 401, upload, MIME, pagination, accès interdit
-├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT)
+│       └── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
+├── data/uploads/         # Fichiers envoyés (hors Git) ; vide depuis l'étape 1, photos à l'étape 3
+├── test/api.test.js      # 6 tests (V2, étape 1) : health, schéma User, 401 ×2, JWT valide, /api/tracks retirée
+├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
 
@@ -55,22 +59,18 @@ flowchart LR
         MW1[CORS]
         MW2[express.json]
         MWAuth[Middleware auth\nJWT]
-        MWUp[Middleware Multer\nupload.single]
         Routes[Routes /api/*]
         Err[Middleware erreurs]
     end
 
     subgraph Storage["Stockage"]
-        FS[(Disque local\ndata/uploads/)]
-        DB[(MongoDB Atlas\nusers, tracks)]
+        DB[(MongoDB Atlas\nbase card-vault\nusers)]
     end
 
-    UI -- "HTTP JSON / multipart\n+ Authorization: Bearer <JWT>" --> MW1
+    UI -- "HTTP JSON\n+ Authorization: Bearer <JWT>" --> MW1
     MW1 --> MW2 --> Routes
     Routes -. protège .-> MWAuth
-    Routes -. traite fichier .-> MWUp
-    MWUp -- écrit --> FS
-    Routes -- lit/écrit métadonnées --> DB
+    Routes -- lit/écrit --> DB
     Routes --> Err
     Err -- réponse JSON erreur --> UI
     Routes -- réponse JSON --> UI
@@ -98,18 +98,6 @@ erDiagram
         date createdAt
         date updatedAt
     }
-    TRACK {
-        ObjectId _id PK
-        ObjectId ownerId FK "ref User, index"
-        string title
-        string originalName
-        string storedName "select:false, UUID.ext"
-        string mimeType
-        number size
-        date createdAt
-        date updatedAt
-    }
-    USER ||--o{ TRACK : "possède (ownerId)"
 ```
 
 - **User** (`src/models/User.js`) : le mot de passe en clair n'est **jamais
@@ -118,32 +106,19 @@ erDiagram
   `passwordHash` a `select: false` : il n'est renvoyé par une requête que si
   on le demande explicitement avec `.select('+passwordHash')` (utilisé au
   login).
-- **Track** (`src/models/Track.js`) : `storedName` (nom du fichier sur
-  disque, un UUID) a aussi `select: false` — il n'est exposé que côté
-  serveur, jamais dans les réponses publiques. Un index composé
-  `{ ownerId: 1, createdAt: -1 }` accélère la pagination des pistes d'un
-  utilisateur triées par date décroissante.
-- Chaque modèle expose une méthode `toPublic()` qui construit l'objet
-  réellement envoyé au frontend (transforme `_id` en `id` string, retire les
-  champs sensibles).
+- `toPublic()` construit l'objet réellement envoyé au frontend (transforme
+  `_id` en `id` string, retire les champs sensibles).
+- Le modèle `Track` (pistes audio) a été supprimé à l'étape 1 de la V2.
+  Les modèles `Album`, `Card`, `Friendship`, `Like`, `Comment` et
+  `Activity` arriveront aux étapes 2 à 7 (voir `../REPORT.md`, §4).
 
 ### 2.2 Cycle de vie d'une requête base de données
 
 ```text
 requête HTTP → route Express → middleware(s) → handler async
-             → appel Mongoose (User.xxx / Track.xxx) → driver MongoDB
-             → réponse JSON (via toPublic() / projection .select())
+             → appel Mongoose (User.xxx) → driver MongoDB
+             → réponse JSON (via toPublic())
 ```
-
-Bonnes pratiques observées dans le code :
-- `.lean()` sur les lectures de liste (`GET /api/tracks`) : retourne des
-  objets JS simples plus légers, sans overhead des documents Mongoose.
-- `.select("-storedName")` / `.select("+storedName")` : contrôle explicite
-  des champs exposés.
-- `Promise.all([...])` pour paralléliser la lecture paginée et le comptage
-  total (`Track.find()` + `Track.countDocuments()`).
-- Nettoyage best-effort : si l'écriture MongoDB échoue **après** l'écriture
-  du fichier sur disque, le fichier orphelin est supprimé (`fsPromises.unlink`).
 
 ---
 
@@ -201,8 +176,8 @@ flowchart TD
     F --> G[next\ncontinue vers le handler]
 ```
 
-Le middleware `auth` (src/app.js:56) est appliqué explicitement à chaque
-route qui en a besoin (`/api/users/me`, `/api/tracks*`) — pas globalement —
+Le middleware `auth` (src/app.js:38) est appliqué explicitement à chaque
+route qui en a besoin (`/api/users/me` ; les routes d'albums et sociales des étapes suivantes) — pas globalement —
 ce qui laisse `/api/health`, `/api/auth/register` et `/api/auth/login`
 publiques. L'identité utilisée dans les handlers vient **toujours de
 `req.auth.sub`** (extrait du JWT vérifié), jamais d'un champ envoyé par le
@@ -219,86 +194,15 @@ client, ce qui empêche un utilisateur d'agir au nom d'un autre.
 
 ---
 
-## 4. Upload de fichiers audio (Multer)
+## 4. Upload de fichiers
 
-### 4.1 Configuration
+_Retiré à l'étape 1 de la V2 (01/11/2026), réintroduit à l'étape 3 pour
+les photos de cartes (`sharp` : vérification de l'image, miniature,
+suppression des métadonnées EXIF ; URL signées pour l'affichage)._
 
-- Stockage sur disque (`multer.diskStorage`) dans `data/uploads/`
-  (`fs.mkdirSync` au démarrage si le dossier n'existe pas).
-- Nom de fichier **régénéré** en UUID (`crypto.randomUUID() + extension`) —
-  jamais le nom original du client — pour éviter collisions et
-  path traversal.
-- Limite de taille : **25 Mo** (`limits.fileSize`).
-- Filtrage par type MIME (`fileFilter`) : seuls
-  `audio/mpeg, audio/wav, audio/x-wav, audio/ogg, audio/mp4, audio/x-m4a`
-  sont acceptés ; tout autre type déclenche une `Error` interceptée par le
-  middleware d'erreurs central (400).
-
-### 4.2 Flux d'upload — POST /api/tracks
-
-```mermaid
-sequenceDiagram
-    participant FE as Angular
-    participant Auth as Middleware auth
-    participant Multer as Middleware Multer
-    participant FS as Disque (data/uploads)
-    participant Handler as Handler POST /api/tracks
-    participant Mongo as MongoDB
-
-    FE->>Auth: POST /api/tracks (multipart/form-data)\nAuthorization: Bearer <JWT>
-    Auth->>Auth: jwt.verify -> req.auth
-    Auth->>Multer: next()
-    Multer->>Multer: fileFilter (type MIME autorisé ?)
-    alt type refusé ou fichier > 25 Mo
-        Multer-->>FE: 400 (via middleware d'erreurs)
-    else fichier accepté
-        Multer->>FS: écrit <uuid>.ext
-        Multer->>Handler: req.file rempli, next()
-        Handler->>Mongo: Track.create({ownerId, title,\noriginalName, storedName,\nmimeType, size})
-        alt échec MongoDB
-            Handler->>FS: unlink(fichier orphelin)
-            Handler-->>FE: erreur (400/500 via middleware)
-        else succès
-            Mongo-->>Handler: track créé
-            Handler-->>FE: 201 track.toPublic()
-        end
-    end
-```
-
-Le fichier physique n'est écrit **qu'après** authentification et validation
-du type/de la taille. Les métadonnées (titre, nom d'origine, nom stocké,
-type MIME, taille) sont ensuite persistées dans MongoDB, liées au
-propriétaire (`ownerId`). Le fichier binaire lui-même **ne transite jamais
-par MongoDB**.
-
-### 4.3 Lecture et suppression d'une piste
-
-- `GET /api/tracks/:id/audio` (protégée) : recherche la piste **filtrée par
-  `ownerId = req.auth.sub`** (empêche d'accéder aux pistes d'un autre
-  utilisateur même en devinant un id), reconstruit le chemin disque à partir
-  de `storedName`, et sert le fichier avec `res.sendFile`.
-- `DELETE /api/tracks/:id` (protégée) : supprime le document Mongo
-  (`findOneAndDelete` filtré par propriétaire) **puis** le fichier sur
-  disque. Si la suppression disque échoue, l'API répond 500 en signalant
-  explicitement le fichier orphelin (pas d'échec silencieux).
-- `GET /api/tracks` (protégée) : liste paginée (`page`, `limit`, max 20 par
-  page) des pistes de l'utilisateur connecté uniquement. **Depuis TP2
-  (amélioration facultative "filtre par titre")** : paramètre `title`
-  optionnel, recherche par sous-chaîne insensible à la casse (`$regex`
-  Mongo, `$options: "i"`), combiné au filtre `ownerId` existant. L'entrée
-  utilisateur est échappée (`escapeRegExp()`) avant d'être injectée dans
-  la regex, pour éviter qu'une recherche ne casse la requête ou ne fasse
-  exploser le temps de calcul (ReDoS).
-
-### 4.4 Table des routes "tracks"
-
-| Méthode | Route | Protégée | Description |
-|---|---|---|---|
-| GET | `/api/tracks` | oui | Liste paginée des pistes de l'utilisateur, filtrable par `title` (TP2) |
-| POST | `/api/tracks` | oui | Upload d'un fichier audio + métadonnées |
-| GET | `/api/tracks/:id/audio` | oui | Téléchargement/lecture du fichier binaire |
-| DELETE | `/api/tracks/:id` | oui | Suppression piste + fichier disque |
-| GET | `/api/health` | non | Vérification que l'API répond |
+L'upload audio de la V1 (Multer `diskStorage`, filtre MIME audio, 25 Mo,
+nettoyage du fichier orphelin si MongoDB échoue) est décrit dans la
+version taguée `v1.0` de ce fichier.
 
 ---
 
@@ -311,7 +215,6 @@ HTTP cohérents :
 ```mermaid
 flowchart TD
     E[Erreur interceptée] --> M{Type d'erreur}
-    M -- MulterError ou\n'Format audio non accepté' --> R1[400 Bad Request]
     M -- ValidationError\n(Mongoose) --> R2[400 Bad Request]
     M -- CastError\n(id MongoDB invalide) --> R3[404 Not Found]
     M -- autre --> R4[next(error)\n-> gestionnaire par défaut Express]
@@ -337,6 +240,10 @@ flowchart TD
     E --> F[API prête\nhttp://localhost:PORT/api/health]
 ```
 
+Depuis la V2 (01/11/2026), l'URI de `.env` désigne la base **`card-vault`**
+(vierge au départ) ; les données de la V1 sont restées dans la base `test`,
+utilisée par défaut quand l'URI ne contient pas de nom de base.
+
 Le serveur **refuse de démarrer** sans URI MongoDB valide et sans connexion
 effective — il n'accepte jamais de requêtes dans un état "base
 indisponible". Un compte de démonstration (`demo@example.com`) est créé
@@ -348,24 +255,16 @@ automatiquement au premier démarrage s'il n'existe pas déjà.
 
 - **Secrets en clair localement** : `backend/.env` contient une URI MongoDB
   Atlas complète (avec identifiants) et un `JWT_SECRET` réels. Le fichier est
-  bien exclu par `.gitignore`, mais `backend/.env.example` a été supprimé
-  (visible dans `git status`) — à recréer avec des valeurs factices pour
-  respecter `best-practices.md` ("fournir des valeurs d'exemple dans
-  `.env.example`").
+  bien exclu par `.gitignore`. `backend/.env.example` n'existe plus ; choix
+  fait le 16/10/2026 : le README racine décrit directement le contenu
+  attendu de `.env` au lieu de recréer ce fichier.
 - **JWT_SECRET par défaut** : si `JWT_SECRET` n'est pas défini,
   `src/app.js` retombe sur la valeur codée en dur
   `"tp1-development-secret"` — acceptable en développement uniquement.
 - **Pas de rate limiting** ni de protection anti-bruteforce sur
   `/api/auth/login`.
-- **`Range` non géré explicitement** sur `GET /api/tracks/:id/audio`, mais
-  **confirmé en pratique** (TP2, Mission 3) : la réponse contient bien
-  l'en-tête `Accept-Ranges: bytes` (capture Network,
-  `compte-rendu/captures/tp2-mission3-audio-response-headers.png`), preuve
-  que `res.sendFile` streame le fichier depuis le disque via
-  `fs.createReadStream()` plutôt que de le charger entièrement en mémoire
-  — Express ajoute cet en-tête automatiquement pour ce mode d'envoi.
 - **Aucune limite de nombre de fichiers par utilisateur** ni de quota total
-  de stockage disque.
+  de stockage disque (à garder en tête pour les photos, étape 3).
 
 ---
 
@@ -375,14 +274,19 @@ automatiquement au premier démarrage s'il n'existe pas déjà.
 flowchart LR
     A[Utilisateur Angular] -->|1. register/login| B[/api/auth/*/]
     B -->|JWT| A
-    A -->|2. upload piste\n+ Bearer JWT| C[/api/tracks POST/]
-    C --> D[(Disque: fichier audio)]
-    C --> E[(MongoDB: métadonnées)]
-    A -->|3. liste paginée\n+ Bearer JWT| F[/api/tracks GET/]
-    F --> E
-    A -->|4. écoute piste\n+ Bearer JWT| G[/api/tracks/:id/audio/]
-    G --> D
-    A -->|5. suppression\n+ Bearer JWT| H[/api/tracks/:id DELETE/]
-    H --> D
-    H --> E
+    A -->|2. profil\n+ Bearer JWT| C[/api/users/me GET, PUT/]
+    C --> E[(MongoDB card-vault:\nusers)]
 ```
+
+Les flux albums, cartes et social seront ajoutés au fil des étapes de la V2.
+
+---
+
+## 9. Journal des mises à jour de ce document
+
+- **Version initiale** (Phase 0) — analyse du backend fourni.
+- **TP2** — filtre `title` sur `GET /api/tracks` ; **TP3** — tests backend.
+- **01/11/2026** — V2, étape 1 : retrait de l'audio (modèle `Track`,
+  routes `/api/tracks`, configuration Multer), base `card-vault`, tests
+  réorientés vers `/api/users/me` (§1, §1.1, §1.2, §1.3, §2, §4, §5, §6,
+  §7, §8).

@@ -21,6 +21,15 @@
    unitaires frontend, `npm run build`, et vérification dans un vrai
    navigateur (pas seulement "ça compile").
 
+**Mise à jour V2 (01/11/2026) — remplace la règle 1 pour le mini projet
+(TP4-TP6).** Le sujet (`SUJET_ETUDIANT_TP456.md`) exige des tests
+unitaires **pour toutes les nouvelles fonctionnalités**. Les tests ne
+sont donc plus « sur demande » : chaque étape de la V2 inclut ses tests
+backend et frontend, écrits juste après l'implémentation de l'étape et
+avant sa clôture. Les règles 2 et 3 restent valables. Les tests de la V1
+liés à l'audio seront supprimés avec l'audio (étape 1) ; la V1 et ses
+tests restent consultables via le tag `v1.0`.
+
 ## État des lieux (trouvé avant d'écrire le moindre test)
 
 `npm test` côté frontend ne fonctionnait **pas du tout**, pour deux
@@ -223,3 +232,78 @@ restauré à l'identique (vérifié avec `cmp` / `git diff`) :
 | Garde `uploading()` retirée de `upload()` | `ignore un second clic pendant l'envoi` |
 | `DELETE` backend sans filtre `ownerId` | `accès interdit à la piste d'un autre utilisateur` |
 | `limit` backend non bornée à 20 | `pagination …` |
+
+---
+
+## V2 — Card Vault (mini projet TP4-TP6)
+
+Tests obligatoires pour toute nouvelle fonctionnalité (règle V2 en tête
+de document). Une section par étape.
+
+### Étape 1 — Retrait de l'audio, identité, navigation (01/11/2026)
+
+**Tests supprimés avec l'audio** (toujours consultables au tag `v1.0`) :
+`tracks-page.spec.ts` (10), `track.service.spec.ts` (1), la partie
+`formatFileSize`/`formatAudioType` de `tracks-page.utils.spec.ts` (5) ;
+backend : upload sans fichier, type MIME, pagination, accès interdit à la
+piste d'un autre utilisateur, schéma `Track`. Les tests de
+`serverErrorMessage()` sont conservés, déplacés avec la fonction dans
+`shared/utils/http-error.spec.ts`.
+
+**Frontend — 7 fichiers, 23 tests** :
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `app.spec.ts` **(nouveau)** | visiteur | Connexion + Inscription, aucune navigation, aucun appel `/api/users/me` | ✅ |
+| | connecté | profil rechargé ; liens Accueil, Recherche, Amis ; initiale en majuscule dans l'avatar | ✅ |
+| | Déconnexion via le menu profil (overlay `MatMenu` réellement ouvert et cliqué) | token, `currentUser` et `localStorage` vidés ; redirection `/login` | ✅ |
+| `login-page.spec.ts` **(nouveau)** | connexion réussie | redirection vers `/` | ✅ |
+| | `401` | message du backend affiché, pas de redirection | ✅ |
+| | backend injoignable | message de repli (pas « Failed to fetch ») | ✅ |
+| `routes.spec.ts` **(nouveau)** | `/`, `/search`, `/friends`, `/profile` | `canActivate` exactement `[authGuard]` | ✅ (×4) |
+| | `/login`, `/register` | publiques | ✅ (×2) |
+| | URL inconnue ; ancienne `/tracks` | redirection vers `''` ; route absente | ✅ (×2) |
+| `http-error.spec.ts` (déplacé) | `serverErrorMessage()` | message backend / repli si statut 0 / repli si pas de message | ✅ (×3) |
+| `auth.service`, `auth.interceptor`, `auth.guard` (inchangés, URL de l'intercepteur → `/api/users/me`) | — | — | ✅ (×6) |
+
+**Backend — 6 tests** : health ; schéma `User` ; `401` sans JWT ; `401`
+avec JWT invalide (×3 : signature, expiré, malformé) ; **JWT valide** : la
+route reçoit l'identité du token (`User.findById` simulé, appelé avec le
+`sub` du token) ; **`/api/tracks` répond `404`** (route bien retirée).
+
+**Vérification croisée (bugs introduits volontairement) :**
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| redirection vers `/tracks` après connexion | `après une connexion réussie, redirige vers l'accueil /` |
+| navigation affichée sans token | `visiteur : propose Connexion / Inscription…` |
+| déconnexion sans redirection | `Déconnexion (menu profil)…` |
+| page Recherche sans `authGuard` | **aucun, au premier essai** → voir la leçon ci-dessous ; détecté après correction |
+| message d'erreur de connexion non affiché | les 2 tests d'erreur de `login-page.spec.ts` (après correction) |
+
+### Leçon : `toContain` laisse passer `undefined` (01/11/2026)
+
+La vérification croisée a révélé qu'avec la version de Vitest du projet,
+**`expect(undefined).toContain(x)` réussit** au lieu d'échouer (constaté
+par un test de diagnostic). Conséquence : une assertion comme
+`expect(route?.canActivate).toContain(authGuard)` ou
+`expect(el.querySelector('.error')?.textContent).toContain('…')` **ne
+détecte pas l'absence** de ce qu'elle vérifie (route sans guard, message
+non affiché).
+
+**Règle adoptée** :
+- comparer exactement quand c'est possible (`toEqual([authGuard])`) ;
+- pour un texte du DOM, se ramener à une chaîne :
+  `querySelector('.error')?.textContent ?? ''`, qui fait échouer
+  `toContain` si l'élément est absent.
+
+**Impact rétroactif sur la V1 (tag `v1.0`)** : 5 assertions de
+`tracks-page.spec.ts` utilisaient ce motif (lignes 63, 71, 182, 187, 219).
+Deux étaient doublées par une assertion sur l'état du composant
+(ligne 62 `component.error()`, ligne 181 `component.uploadProgress()`) ;
+les trois autres (message de repli, « Finalisation… », erreur d'upload)
+ne l'étaient pas. Dans tous les cas, l'**affichage** lui-même n'était pas
+réellement garanti. La vérification croisée du TP3 ne
+l'avait pas révélé, car aucun des bugs introduits alors ne supprimait un
+élément affiché. Ces tests ont disparu avec l'audio ; la règle s'applique
+à tous les tests V2.

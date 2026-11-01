@@ -1,1 +1,5 @@
-:host { display: block; max-width: 520px; margin: 0 auto; }
+:host { display: block; max-width: 440px; margin: 4rem auto; padding: 0 1rem; }
+
+.auth-card { padding: 1rem; background: var(--cv-surface); }
+mat-card-title { font: var(--mat-sys-headline-small); font-weight: 700; }
+form { display: grid; gap: 0.5rem; margin-top: 1rem; }

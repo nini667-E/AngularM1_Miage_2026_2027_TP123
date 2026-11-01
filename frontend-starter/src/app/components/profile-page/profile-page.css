@@ -1,1 +1,15 @@
-:host { display: block; max-width: 700px; margin: 0 auto; }
+:host { display: block; }
+
+.profile-card { max-width: 640px; padding: 1rem; background: var(--cv-surface); }
+
+.avatar {
+  display: grid;
+  place-items: center;
+  color: var(--cv-bg);
+  font-weight: 700;
+  font-size: 1.2rem;
+  background: var(--cv-gold);
+}
+
+form { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1rem; margin-top: 1.25rem; }
+mat-form-field { flex: 1; min-width: 220px; }
