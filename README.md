@@ -10,9 +10,11 @@ bibliothèque de pistes audio pour guitaristes ; la V2 en réutilise le socle
 (authentification, upload avec progression, composants Material).
 
 - **Frontend** : Angular 22 (composants standalone, Signals, Reactive Forms,
-  Angular Material) — dossier [`frontend-starter/`](frontend-starter/).
-- **Backend** : Node.js, Express 5, Mongoose / MongoDB Atlas, JWT, Multer —
-  dossier [`backend/`](backend/).
+  Angular Material, ngx-image-cropper pour le recadrage des photos) — dossier [`frontend-starter/`](frontend-starter/).
+- **Backend** : Node.js, Express 5, Mongoose / MongoDB Atlas, JWT, Multer,
+  sharp (photos) — dossier [`backend/`](backend/).
+- **Catalogue de cartes** : API publique [TCGdex](https://tcgdex.dev)
+  (en français), interrogée par le backend.
 
 Projet réalisé dans le cadre des TP de programmation web (M1 MIAGE
 2026-2027), avec l'aide d'un assistant IA (Claude Code), dont l'usage est

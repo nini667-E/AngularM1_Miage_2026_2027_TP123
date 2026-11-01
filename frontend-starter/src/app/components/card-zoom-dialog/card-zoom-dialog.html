@@ -1,0 +1,49 @@
+@let card = data.card;
+<h2 mat-dialog-title>{{ card.name }}</h2>
+
+<mat-dialog-content>
+  <div class="images">
+    <figure>
+      <img class="photo" [src]="card.photo.full" [alt]="'Photo de ' + card.name" />
+      <figcaption>Ta photo</figcaption>
+    </figure>
+    @if (card.officialImage.large) {
+      <figure>
+        <img class="official" [src]="card.officialImage.large" [alt]="'Carte officielle ' + card.name" loading="lazy" />
+        <figcaption>Carte officielle (TCGdex)</figcaption>
+      </figure>
+    }
+  </div>
+
+  <dl class="facts">
+    <div><dt>Catégorie</dt><dd>{{ card.category }}{{ card.subCategory ? ' · ' + card.subCategory : '' }}</dd></div>
+    @if (card.types.length) {
+      <div>
+        <dt>Type</dt>
+        <dd>
+          @for (type of card.types; track type) {
+            <span class="type" [style.--chip-color]="typeColor(type)">
+              <mat-icon aria-hidden="true">{{ typeIcon(type) }}</mat-icon>{{ type }}
+            </span>
+          }
+        </dd>
+      </div>
+    }
+    @if (card.rarity) {
+      <div><dt>Rareté</dt><dd>{{ card.rarity }}</dd></div>
+    }
+    <div><dt>Extension</dt><dd>{{ card.set?.name }} · n° {{ card.localId }}</dd></div>
+    <div><dt>Série</dt><dd>{{ card.serie?.name }}</dd></div>
+    <div><dt>Ajoutée le</dt><dd>{{ card.createdAt | date: 'dd/MM/yyyy' }}</dd></div>
+  </dl>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (data.canDelete) {
+    <button mat-button class="danger" [mat-dialog-close]="'delete'">
+      <mat-icon>delete</mat-icon>
+      Retirer du classeur
+    </button>
+  }
+  <button mat-flat-button mat-dialog-close>Fermer</button>
+</mat-dialog-actions>

@@ -1,0 +1,25 @@
+.images { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; }
+figure { display: grid; justify-items: center; gap: 0.4rem; margin: 0; }
+figure img {
+  width: min(320px, 70vw);
+  aspect-ratio: 63 / 88;
+  object-fit: cover;
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 0.55);
+}
+.photo { border: 1px solid rgb(201 162 77 / 0.5); }
+.official { opacity: 0.92; }
+figcaption { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); }
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 1.5rem 0 0;
+}
+.facts dt { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-label-medium); }
+.facts dd { margin: 0.15rem 0 0; }
+.type { display: inline-flex; align-items: center; gap: 0.25rem; margin-right: 0.5rem; }
+.type mat-icon { width: 18px; height: 18px; font-size: 18px; color: var(--chip-color); }
+
+.danger { --mat-button-text-label-text-color: var(--mat-sys-error); }

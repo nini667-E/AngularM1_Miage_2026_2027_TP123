@@ -385,3 +385,158 @@ attendait une base absente. Simulation ajoutée : l'échec est immédiat.
 2. **Fenêtre de formulaire coupée à gauche** (largeur minimale du
    formulaire supérieure à celle de la fenêtre) : défaut purement visuel,
    vu sur capture d'écran.
+
+### Étape 3 — Cartes, photos, classeur (01/11/2026)
+
+**Backend — 7 fichiers de test, 66 tests** (+37), toujours sans MongoDB ni vrai
+TCGdex. Le faux TCGdex (`helpers.js`) connaît maintenant quelques cartes
+réelles (un Pokémon Feu, un Pokémon Eau, un Dresseur, une Énergie **sans**
+`types`, une carte Pocket) et simule la recherche par nom. Les photos sont de
+**vraies images** générées par `sharp`, supprimées après chaque test.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `card-info.test.js` (9) | découpage des noms en mots | « GrassFireWater » → grass, fire, water | ✅ |
+| | type des Énergies d'après le nom (10 noms réels, français et anglais) | Feu, Eau, Électrique… | ✅ |
+| | Énergie spéciale, multi-types, faux ami « Cadeau » | aucun type | ✅ |
+| | `types` TCGdex prioritaire, Dresseur sans type | — | ✅ |
+| | cohérence : type (Pokémon, deux types, Énergie typée), Dresseurs et Énergies sans type acceptés, série et extension pour tous, sans thème, raisons cumulées | règles de la décision du 01/11/2026 | ✅ |
+| `images.test.js` (7) | photo de test : orientation 6 + GPS | bien présents au départ | ✅ |
+| | `processPhoto` | WebP, **redressée** (portrait), **sans EXIF ni GPS**, 400 px / 1600 px | ✅ |
+| | faux fichier, fichier vide, GIF | `400`, aucun fichier écrit | ✅ |
+| | URL signées : même URL pendant l'heure, validité 1-2 h ; carte, taille, échéance ou signature modifiées ; échéance non numérique ; expirée | refusées | ✅ |
+| `cards.test.js` (21) | recherche : 2 caractères, extension nommée, Pocket retirée, vignette ; album de série (incompatibles marquées, **compatibles en tête**) ; album d'extension (filtre transmis à TCGdex) ; album d'un autre (`404`) | — | ✅ |
+| | détail : Énergie typée par son nom + verdict, Dresseur accepté ; carte inconnue ou Pocket `404` | — | ✅ |
+| | ajout : `201`, fiche recopiée, fichiers écrits, `cardCount` +1, URL signées valides **sans nom de fichier** | — | ✅ |
+| | ajout refusé : hors thème (raison, aucun fichier), sans photo, carte inconnue, faux fichier, > 10 Mo, album d'un autre même public (aucun appel au catalogue) | `400` / `404` | ✅ |
+| | **ordre des contrôles** : carte hors thème + fichier invalide | c'est le thème qui est signalé | ✅ |
+| | classeur : 9 par page, ordre d'ajout, URL signées ; filtre et catégorie invalide ; album privé d'un autre (`404`, aucune URL délivrée) | — | ✅ |
+| | image : signée → `200 image/webp`, cache privé ; modifiée ou sans signature → `403` | — | ✅ |
+| | suppression d'une carte (propriétaire, fichiers effacés, `cardCount` −1) ; d'un album (cartes et fichiers) | — | ✅ |
+| | changement de thème : `409` si une carte ne le respecte plus, accepté sinon | — | ✅ |
+
+**Frontend — 17 fichiers, 78 tests** (+22) : `CardService` (4 : URL,
+paramètres, multipart avec progression), `AddCardDialogComponent` (8 :
+pas de requête sous 2 caractères puis une seule après 300 ms — horloge
+simulée `vi.useFakeTimers()` —, erreur de recherche, carte acceptée, carte
+refusée qui bloque « Suivant » et l'envoi, format et taille de photo,
+progression + fenêtre non fermable + fermeture avec la carte, erreur
+serveur, double clic), `CardZoomDialogComponent` (2), `AlbumPageComponent`
+réécrit (15 : en-tête, 404 sans demande de cartes, 9 pochettes,
+squelettes, filtre, pagination, photo expirée rechargée une seule fois,
+ajout → bonne page, retrait depuis le zoom, zoom fermé, suppression et
+modification de l'album).
+
+**Vérification croisée (22 bugs introduits volontairement : 12 backend, 10 frontend)** :
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| type des Énergies par lettres (faux ami « Cadeau ») | `pas de type : … faux ami « Cadeau »` |
+| type exigé aussi des Dresseurs | 2 tests de cohérence + `changement de thème` |
+| photo non redressée | `processPhoto : … redressés, sans EXIF ni GPS` |
+| métadonnées (GPS) conservées | idem |
+| échéance des signatures ignorée | `signature expirée refusée` |
+| ajout autorisé à qui peut **voir** l'album | `ajout dans l'album d'un autre (même public) : 404` |
+| photo traitée **avant** le contrôle du thème | **aucun au premier essai** (le nettoyage rendait le résultat identique) → test `ordre des contrôles` ajouté, qui échoue |
+| cartes Pocket dans la recherche | 2 tests de recherche |
+| changement de thème sans contrôle | `changement de thème : refusé (409)…` |
+| suppression de carte sans filtre propriétaire | `suppression d'une carte : propriétaire seulement…` |
+| images servies sans vérifier la signature | `image : URL signée -> 200 … modifiée -> 403` |
+| pas de tri des compatibles | `recherche : cartes compatibles en tête…` |
+| verdict ignoré (carte refusée acceptée) | `carte refusée : … impossible de passer à la photo` |
+| pas de délai de frappe | `recherche : … une requête après 300 ms de pause` |
+| format de photo non vérifié | `photo : format ou taille refusés…` |
+| fenêtre fermable pendant l'envoi | 3 tests d'envoi |
+| double envoi possible | `second clic pendant l'envoi : une seule requête` |
+| 8 pochettes au lieu de 9 | 3 tests du classeur |
+| mauvaise page après ajout (`floor` au lieu de `ceil`) | `carte ajoutée : … page contenant la nouvelle carte` |
+| rechargements en boucle sur photo expirée | `photo expirée : … une seule fois` |
+| filtre sans retour à la page 1 | `filtre par catégorie : … retour à la page 1` |
+| « Retirer du classeur » proposé à un visiteur | `« Retirer du classeur » réservé au propriétaire` |
+
+**Particularités rencontrées**
+- **Windows et `sharp`** : un test qui ouvrait les fichiers produits avec
+  `sharp(chemin)` les gardait ouverts (cache de `sharp`), et Windows
+  refusait ensuite de les supprimer (`EBUSY`). Les tests lisent désormais
+  les fichiers en mémoire avant de les analyser. Le code de l'application
+  n'ouvre jamais de photo par son chemin avec `sharp` : non concerné.
+- **Vérification navigateur** avec de vraies photos de test (image
+  officielle posée sur une « table », position GPS, une photo couchée avec
+  orientation EXIF 6) et le vrai TCGdex : photo servie en portrait, sans
+  EXIF ; Énergie Feu typée par son nom ; refus Feu dans un album Psy et Eau
+  dans un album Feu ; `409` au changement de thème ; album public d'un
+  autre compte visible avec ses photos, privé fermé (`404`), image sans
+  signature `403`.
+- **Trouvé uniquement dans le navigateur** : la fenêtre d'ajout plaçait le
+  focus sur l'en-tête du stepper, si bien que la frappe au clavier était
+  perdue ; et, dans un album de série, les 2 cartes acceptées sur 19
+  arrivaient en fin de liste. Les deux sont corrigés ; le tri a son test.
+- **Faux problème** : un premier passage du harnais a lu le filtre
+  « Dresseur » vide, le script lisant la page avant la fin du rechargement.
+  Revérifié en attendant la réponse du serveur : le filtre fonctionne pour
+  les quatre catégories.
+
+#### Complément — recadrage et rotation de la photo (01/11/2026)
+
+**Backend — 74 tests** (+8). Les photos de test sont des images à **zones
+de couleur** (par exemple moitié rouge, moitié bleue) : on vérifie la
+couleur du résultat, ce qui prouve que c'est bien la zone choisie qui est
+gardée, et pas seulement que la taille est bonne.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `images.test.js` | recadrage simple | la zone choisie (rouge) est gardée, aux dimensions du cadre | ✅ |
+| | photo « couchée » (EXIF 6) | coordonnées lues dans la photo **redressée** : zone bleue | ✅ |
+| | ¼ de tour demandé (sens horaire) | le haut passe à droite : zone attendue | ✅ |
+| | ½ tour | idem | ✅ |
+| | cadre hors de l'image (après rotation) | `400`, aucun fichier écrit | ✅ |
+| | `readAdjustments` : champs absents, JSON invalide, nombres non entiers ou négatifs, largeur < 100, rotation hors 0-3 | valeurs par défaut ou `400` | ✅ |
+| `cards.test.js` | ajout avec recadrage 315 × 440 | `201`, photo enregistrée à la taille du cadre | ✅ |
+| | ajout avec recadrage invalide | `400`, aucun fichier, rien d'enregistré | ✅ |
+
+**Frontend — 84 tests** (+6) : `AddCardDialogComponent` (cadre arrondi au
+pixel et aperçu, rotation dans les deux sens et cadre à recalculer,
+nouvelle photo qui remet tout à zéro, image illisible, envoi bloqué sans
+cadre, envoi de `crop` et `rotation` vérifié dans le test d'envoi
+existant) ; `CardService` (réglages envoyés en JSON, et absents si non
+fournis). Les tests appellent la logique du composant : jsdom ne sait pas
+dessiner une image.
+
+**Préparation des tests** : `ngx-image-cropper` crée une URL d'objet dès
+son chargement. Dans jsdom, `URL.createObjectURL` existe, mais c'est celle
+de Node.js, qui plante sur un `Blob` créé par jsdom (`Cannot read
+properties of undefined (reading '_buffer')`) : 3 fichiers de test
+échouaient avant même de commencer. `src/test-setup.ts` (option
+`setupFiles` d'`angular.json`) remplace ces deux fonctions pour tous les
+tests. Un premier essai ne les remplaçait que si elles manquaient, ce qui
+ne changeait rien puisqu'elles existent.
+
+**Vérification croisée (15 bugs introduits volontairement : 5 backend, 10 frontend)** :
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| recadrage ignoré | 3 tests (taille du cadre, zone gardée, photo couchée) |
+| rotation dans le mauvais sens | **aucun au premier essai** (le test ne faisait qu'un demi-tour, identique dans les deux sens) → test « ¼ de tour » ajouté, qui échoue |
+| orientation EXIF ignorée avant découpage | `processPhoto : … redressés, sans EXIF ni GPS` |
+| cadre hors image non contrôlé | 2 tests (route et service) |
+| cadre minuscule accepté | `readAdjustments : … mal formées refusées` |
+| arrondi par troncature | 2 tests (cadre arrondi, envoi) |
+| largeur = x2 au lieu de x2 − x1 | 2 tests |
+| rotation négative (−1 au lieu de 3) | `rotation : quarts de tour dans les deux sens` |
+| rotation qui garde l'ancien cadre | idem |
+| nouvelle photo qui garde la rotation | `nouvelle photo : rotation et cadre remis à zéro` |
+| envoi sans cadre autorisé | d'abord refusé par **TypeScript** (le cadre ne peut pas être nul) ; compilateur contourné : `pas de cadre : envoi bloqué` |
+| rotation non transmise | test d'envoi |
+| échec du recadreur sans message | `image illisible par le recadreur` |
+| service qui oublie `rotation` | 2 tests |
+| service qui envoie toujours `crop` | `add : multipart…` |
+
+**Vérification navigateur** (photo générée : carte couchée et décentrée
+sur une table, 1600 × 1200) : quart de tour à gauche puis coins du cadre
+tirés à la souris jusqu'à la carte ; champs réellement envoyés lus dans la
+page : `rotation: 3` et `crop: {x:184, y:219, width:316, height:441}` ;
+réponse `201` ; photo rangée de 316 × 441 (ratio 0,717, celui d'une carte),
+**droite et sans le fond** ; aucune erreur dans la console ; mobile
+(390 px) sans débordement horizontal. **Trouvé à la capture** : les boutons
+de rotation (boutons texte sans texte) avaient leur icône décalée,
+remplacés par des boutons-icônes avec info-bulle.

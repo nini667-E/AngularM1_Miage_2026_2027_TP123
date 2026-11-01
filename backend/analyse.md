@@ -14,10 +14,11 @@
 Le backend est une **API REST** minimaliste en **Node.js / Express 5**, avec
 persistance **MongoDB** (via Mongoose, base `card-vault` depuis la V2).
 Elle sert l'application Angular **Card Vault** (`frontend-starter/`). À
-l'étape 2 de la V2, elle gère l'inscription, la connexion, le profil, les
-**albums** et le **catalogue de cartes** (API publique TCGdex, interrogée par
-le serveur). Les photos de cartes (stockées sur le disque local) et les
-fonctions sociales arrivent aux étapes suivantes.
+l'étape 3 de la V2, elle gère l'inscription, la connexion, le profil, les
+**albums**, le **catalogue de cartes** (API publique TCGdex, interrogée par
+le serveur) et les **cartes** rangées dans les albums, avec leur **photo**
+(traitée par `sharp`, stockée sur le disque local, servie par URL signées).
+Les fonctions sociales arrivent aux étapes 4 à 7.
 
 ### 1.1 Stack technique
 
@@ -29,7 +30,8 @@ fonctions sociales arrivent aux étapes suivantes.
 | ODM | Mongoose 9 | Schémas, validation, requêtes |
 | Authentification | jsonwebtoken (JWT) | Sessions sans état |
 | Hachage mot de passe | bcryptjs | Stockage sécurisé des mots de passe |
-| Upload fichiers | Multer 2 | Dépendance conservée mais **plus utilisée** depuis le retrait de l'audio (V2, étape 1) ; réutilisée pour les photos de cartes (étape 3) |
+| Upload fichiers | Multer 2 (`memoryStorage`, 10 Mo) | Réception des photos de cartes (étape 3) ; rien n'est écrit tel quel sur le disque |
+| Images | **sharp** 0.35 (libvips) — ajouté à l'étape 3 | Vérifie qu'un fichier est une image, redresse, retire les métadonnées EXIF (GPS), produit 2 versions WebP |
 | CORS | cors | Autoriser les appels depuis Angular (localhost:4200) |
 | Catalogue de cartes | API publique TCGdex (`fetch` natif de Node, délai 8 s, mémoire 24 h) | Types, séries, extensions (V2, étape 2) |
 | Tests | `node:test` + `node:assert/strict` | Tests unitaires/API légers |
@@ -41,24 +43,29 @@ backend/
 ├── src/
 │   ├── app.js            # Construction de l'app Express (middlewares, auth, routes, erreurs)
 │   ├── server.js         # Point d'entrée : connexion Mongo + écoute HTTP
+│   ├── config.js         # UPLOADS (dossier des photos) et SECRET (JWT + signatures d'images)
 │   ├── errors.js         # HttpError (erreur métier portant son code HTTP)
 │   ├── access.js         # Règles d'accès aux albums : isOwner, canView
 │   ├── models/
 │   │   ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
-│   │   └── Album.js      # Schéma Mongoose Album (visibilité, thème, sharedWith)
+│   │   ├── Album.js      # Album (visibilité, thème, sharedWith, cardCount)
+│   │   └── Card.js       # Carte d'un album (fiche TCGdex recopiée + photo)
 │   ├── routes/
-│   │   ├── albums.js     # /api/albums (Router Express)
-│   │   └── catalog.js    # /api/catalog (Router Express)
+│   │   ├── albums.js     # /api/albums (CRUD, 409 de changement de thème, cascade)
+│   │   ├── cards.js      # /api/albums/:id/cards, /api/cards/:id, /api/images
+│   │   └── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
 │   └── services/
-│       ├── tcgdex.js     # Accès au catalogue TCGdex (mémoire, exclusion Pocket, 502)
-│       └── theme.js      # Validation du thème d'un album (resolveTheme)
-├── data/uploads/         # Fichiers envoyés (hors Git) ; photos de cartes à l'étape 3
-├── test/                 # 29 tests node:test (aucun ne touche MongoDB ni le vrai TCGdex)
-│   ├── helpers.js        # serveur de test, tokens, faux TCGdex
-│   ├── api.test.js       # santé, User, authentification
-│   ├── access.test.js    # canView / isOwner
-│   ├── catalog.test.js   # /api/catalog
-│   └── albums.test.js    # /api/albums
+│       ├── tcgdex.js     # Accès à TCGdex (mémoire, Pocket exclue, 502)
+│       ├── theme.js      # Validation du thème d'un album
+│       ├── card-info.js  # Fiche d'une carte, type des Énergies, cohérence avec le thème
+│       └── images.js     # sharp + URL signées (HMAC-SHA256)
+├── data/uploads/         # Photos WebP (hors Git), jamais servies directement
+├── test/                 # 66 tests node:test (sans MongoDB ni vrai TCGdex)
+│   ├── helpers.js        # serveur de test, tokens, faux TCGdex (cartes, recherche)
+│   ├── api.test.js, access.test.js, catalog.test.js, albums.test.js
+│   ├── card-info.test.js # type des Énergies, règles de cohérence
+│   ├── images.test.js    # vraies images : redressement, EXIF/GPS, tailles, signatures
+│   └── cards.test.js     # recherche, détail, ajout avec photo, classeur, images, suppressions
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
@@ -80,7 +87,8 @@ flowchart LR
     end
 
     subgraph Storage["Stockage"]
-        DB[(MongoDB Atlas\nbase card-vault\nusers, albums)]
+        DB[(MongoDB Atlas\nbase card-vault\nusers, albums, cards)]
+        FS[(Disque\ndata/uploads\nphotos WebP)]
     end
 
     subgraph Ext["Externe"]
@@ -91,6 +99,7 @@ flowchart LR
     MW1 --> MW2 --> Routes
     Routes -. protège .-> MWAuth
     Routes -- lit/écrit --> DB
+    Routes -- "sharp : écrit /\nsendFile si signature valide" --> FS
     Routes -- "types, séries, extensions\n(mémoire 24 h)" --> TCG
     Routes --> Err
     Err -- réponse JSON erreur --> UI
@@ -131,7 +140,24 @@ erDiagram
         date createdAt
         date updatedAt
     }
+    CARD {
+        ObjectId _id PK
+        ObjectId albumId FK "ref Album"
+        ObjectId ownerId FK "ref User"
+        string tcgdexId "ex. sv03.5-006"
+        string name
+        string category "Pokémon | Dresseur | Énergie"
+        string subCategory "Objet, Supporter… / De base, Spécial"
+        string[] types "Énergies : déduit du nom"
+        string rarity
+        object set "id, name, logo"
+        object serie "id, name"
+        string officialImage "base TCGdex"
+        object photo "thumb, full (select:false)"
+        date createdAt
+    }
     USER ||--o{ ALBUM : "possède (ownerId)"
+    ALBUM ||--o{ CARD : "contient (albumId)"
 ```
 
 - **User** (`src/models/User.js`) : le mot de passe en clair n'est **jamais
@@ -147,6 +173,12 @@ erDiagram
   `{ ownerId: 1, updatedAt: -1 }` sert la liste « Mes albums ».
   `sharedWith` (amis destinataires d'un partage) est prévu pour l'étape 5
   et n'est pas exposé par `toPublic()`.
+- **Card** (`src/models/Card.js`, étape 3) : la fiche TCGdex est **recopiée
+  à l'ajout** (catégorie, types calculés, extension, série…), comme pour le
+  thème de l'album : afficher un classeur n'interroge jamais TCGdex. Les noms
+  des fichiers de la photo ont `select: false` : ils ne sortent jamais de
+  l'API (URL signées à la place). Index `{ albumId: 1, createdAt: 1 }` pour
+  le classeur. Doublons autorisés.
 - `toPublic()` construit l'objet réellement envoyé au frontend (transforme
   `_id` en `id` string, retire les champs internes).
 
@@ -214,7 +246,7 @@ flowchart TD
     F --> G[next\ncontinue vers le handler]
 ```
 
-Le middleware `auth` (src/app.js:40) est appliqué explicitement à chaque
+Le middleware `auth` (src/app.js:23) est appliqué explicitement à chaque
 route qui en a besoin (`/api/users/me` ; les routes d'albums et sociales des étapes suivantes) — pas globalement —
 ce qui laisse `/api/health`, `/api/auth/register` et `/api/auth/login`
 publiques. L'identité utilisée dans les handlers vient **toujours de
@@ -232,7 +264,7 @@ client, ce qui empêche un utilisateur d'agir au nom d'un autre.
 
 ---
 
-## 4. Albums et catalogue (V2, étape 2)
+## 4. Albums, catalogue et cartes (V2, étapes 2 et 3)
 
 ### 4.1 Catalogue TCGdex (`services/tcgdex.js`)
 
@@ -311,9 +343,100 @@ sequenceDiagram
     R-->>A: 201 album.toPublic()
 ```
 
-**Upload de fichiers** : retiré à l'étape 1 (audio), réintroduit à
-l'étape 3 pour les photos de cartes (`sharp`, URL signées). L'upload audio
-de la V1 est décrit dans la version taguée `v1.0` de ce fichier.
+### 4.5 Cartes et cohérence (`services/card-info.js`, étape 3)
+
+TCGdex ne donne pas tout au même endroit : la **recherche** renvoie des
+fiches courtes (id, numéro, nom, image) ; le **détail** d'une carte donne
+catégorie, types et extension, mais **pas la série**, obtenue par le détail
+de l'**extension** (`/sets/:id`). `loadCardInfo()` enchaîne les deux
+(mémoire 24 h) et `describeCard()` produit la fiche enregistrée.
+
+**Type des Énergies.** Le champ `types` manque souvent dans TCGdex. Ordre :
+`types` s'il existe, sinon déduit du **nom**, sinon « sans type ». La
+déduction compare des **mots entiers** (découpage aux espaces, tirets et
+majuscules : « GrassFireWater » → grass, fire, water) avec une table de mots
+français et anglais par type, établie sur les **130 noms d'Énergies réels**
+du catalogue. Exemples : *Énergie Lightning Vélocité* → Électrique ;
+*Énergie Cadeau* → aucun (contient « eau » mais pas le mot « eau ») ;
+*Énergie Unitaire GrassFireWater* → aucun (trois types).
+
+**`checkTheme(info, theme)`** renvoie `{ compatible, reasons[] }` : type
+vérifié pour les Pokémon (un des types suffit) et les Énergies typées ;
+série et extension vérifiées pour toutes les cartes. Utilisée à trois
+endroits : verdict affiché (`GET /catalog/cards/:id`), **contrôle à l'ajout**
+(`POST /albums/:id/cards`, la vérité côté serveur) et **changement de thème**
+d'un album (`PUT`, `409` si des cartes ne le respectent plus).
+
+**Ordre des contrôles à l'ajout** : propriétaire → photo présente → carte
+existante → cohérence → **seulement alors** traitement de la photo. Une
+carte refusée ne coûte ni traitement d'image ni écriture sur le disque ; un
+test le vérifie (carte hors thème + fichier invalide → c'est le thème qui
+est signalé).
+
+### 4.6 Photos et URL signées (`services/images.js`, étape 3)
+
+**Traitement** (`processPhoto`) : Multer garde le fichier en mémoire (10 Mo
+max) ; `sharp(buffer).metadata()` lit le **contenu** (un faux fichier est
+refusé, quel que soit son type MIME annoncé) ; formats acceptés JPEG, PNG,
+WebP ; `rotate()` redresse selon l'orientation EXIF ; deux sorties WebP,
+`thumb` (400 px) et `full` (1600 px max) ; sharp ne recopiant aucune
+métadonnée par défaut, **l'EXIF et la position GPS disparaissent**. Vérifié
+sur une vraie photo de test (GPS + orientation 6) : fichier servi en
+portrait, sans EXIF. En cas d'échec après écriture, les fichiers sont
+supprimés (pas d'orphelin).
+
+**Recadrage (01/11/2026)** : la route lit deux champs facultatifs avec
+`readAdjustments` : `rotation` (quarts de tour, sens horaire, 0 à 3) et
+`crop` (JSON, entiers, `width` ≥ 100), sinon `400 « Recadrage invalide »`.
+`processPhoto(buffer, { rotation, crop })` applique, **dans cet ordre** :
+redressement EXIF, rotation demandée, contrôle que le cadre est dans
+l'image (sinon `400`), `extract(crop)`, puis les deux versions WebP. Le
+cadre est donc exprimé dans le repère de la photo telle que l'utilisateur
+la voit (redressée puis tournée), comme le calcule le recadreur côté
+Angular. Le découpage se fait sur l'**original** (pleine qualité), pas sur
+une image réduite par le navigateur. Les champs sont lus **avant** l'appel
+à TCGdex : une requête mal formée est refusée sans rien demander au
+catalogue. Tests avec des images à zones de couleur : la zone choisie est
+bien celle gardée, y compris sur une photo couchée (EXIF 6) et après un
+quart de tour.
+
+**Affichage** : une balise `<img>` n'envoie pas le JWT. Le serveur délivre
+donc, avec chaque carte, des URL de la forme
+`/api/images/<carte>/<taille>?exp=<échéance>&sig=<signature>`.
+
+```mermaid
+sequenceDiagram
+    participant A as Angular
+    participant B as Backend
+    participant D as Disque
+
+    A->>B: GET /api/albums/:id/cards (JWT)
+    B->>B: canView(album, token) ?
+    B-->>A: cartes + photo.thumb = /api/images/c1/thumb?exp=…&sig=HMAC(c1.thumb.exp)
+    A->>B: <img src="/api/images/c1/thumb?exp=…&sig=…"> (sans JWT)
+    B->>B: signature recalculée = sig ? échéance future ?
+    alt valide
+        B->>D: lit c1-thumb.webp
+        B-->>A: 200 image/webp, Cache-Control: private, max-age=…
+    else modifiée, expirée, autre carte ou autre taille
+        B-->>A: 403
+    end
+```
+
+- **Signature** : HMAC-SHA256 de `carte.taille.échéance` avec le **secret du
+  serveur** (celui des JWT) ; impossible à fabriquer ou à modifier sans lui.
+  Comparaison en temps constant (`timingSafeEqual`).
+- **Échéance arrondie** à la fin de l'heure suivante : la même URL est
+  produite pendant toute l'heure, donc le **cache du navigateur** fonctionne
+  (validité 1 à 2 h). Côté Angular, une photo qui ne se charge plus (URL
+  expirée) déclenche un rechargement de la page du classeur, une seule fois.
+- **Limite assumée** : une URL déjà délivrée reste valable jusqu'à son
+  échéance, même si l'album repasse en privé entre-temps (pas de révocation
+  individuelle). Durée courte pour cette raison.
+
+**Suppressions** : `DELETE /cards/:id` (propriétaire) supprime la carte, ses
+deux fichiers et décrémente `cardCount` ; `DELETE /albums/:id` supprime
+l'album, toutes ses cartes et leurs fichiers.
 
 ---
 
@@ -327,6 +450,7 @@ HTTP cohérents :
 flowchart TD
     E[Erreur interceptée] --> M{Type d'erreur}
     M -- HttpError\n(src/errors.js) --> R0[son code : 400, 404, 502…]
+    M -- MulterError\n(photo > 10 Mo) --> R1[400 Photo trop volumineuse]
     M -- ValidationError\n(Mongoose) --> R2[400 Bad Request]
     M -- CastError\n(id MongoDB invalide) --> R3[404 Not Found]
     M -- autre --> R4[next(error)\n-> gestionnaire par défaut Express]
@@ -375,8 +499,12 @@ automatiquement au premier démarrage s'il n'existe pas déjà.
   `"tp1-development-secret"` — acceptable en développement uniquement.
 - **Pas de rate limiting** ni de protection anti-bruteforce sur
   `/api/auth/login`.
-- **Aucune limite de nombre de fichiers par utilisateur** ni de quota total
-  de stockage disque (à garder en tête pour les photos, étape 3).
+- **Aucune limite de nombre de photos par utilisateur** ni de quota total
+  de stockage disque (chaque photo pèse quelques dizaines à centaines de
+  Ko après conversion WebP).
+- **Dépendances** : `npm audit` signalait 4 vulnérabilités (Express et ses
+  sous-dépendances, Multer) ; corrigées le 01/11/2026 par `npm audit fix`
+  (mises à jour compatibles, 0 vulnérabilité ensuite).
 
 ---
 
@@ -391,12 +519,16 @@ flowchart LR
     D --> T[(TCGdex)]
     A -->|4. albums\n+ Bearer JWT| F[/api/albums CRUD/]
     F --> T
+    A -->|5. cartes + photo\n+ Bearer JWT| K[/api/albums/:id/cards/]
+    K --> T
+    K --> P[(Disque : photos WebP)]
+    A -->|6. img src signée\nsans JWT| I[/api/images/:id/:size/]
+    I --> P
     C --> E[(MongoDB card-vault:\nusers, albums)]
     F --> E
 ```
 
-Les flux cartes (étape 3) et social (étapes 4 à 7) seront ajoutés au fil des
-étapes de la V2.
+Les flux sociaux (étapes 4 à 7) seront ajoutés au fil des étapes de la V2.
 
 ---
 
@@ -413,3 +545,11 @@ Les flux cartes (étape 3) et social (étapes 4 à 7) seront ajoutés au fil des
   règles d'accès `canView`/`isOwner`, `HttpError` et gestionnaire d'erreurs,
   organisation en `routes/` et `services/`, 29 tests (§1, §1.1, §1.2, §1.3,
   §2, §4, §5, §8).
+- **01/11/2026** — V2, étape 3 : modèle `Card`, routes des cartes et des
+  images, recherche et détail de cartes, `card-info.js` (type des Énergies,
+  cohérence), `images.js` (sharp, URL signées), `config.js`, `409` au
+  changement de thème, suppression en cascade, `npm audit fix`, 66 tests
+  (§1, §1.1, §1.2, §1.3, §2.1, §4.5, §4.6, §7, §8).
+- **01/11/2026** — V2, étape 3 (complément) : recadrage et rotation de la
+  photo à l'ajout (`readAdjustments`, `processPhoto` avec `crop` et
+  `rotation`), 74 tests (§4.6) ; message de démarrage renommé « Card Vault API » (reste de la V1).

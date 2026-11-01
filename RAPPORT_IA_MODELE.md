@@ -2741,3 +2741,204 @@ l'extension est vidée quand la série change ; à quoi sert `<base href>`
 et pourquoi son absence ne se voyait qu'avec des URL à plusieurs niveaux ;
 comment simuler `fetch` pour TCGdex sans casser les appels du test vers
 notre propre serveur.
+
+### Entrée V2.3 — Étape 3 : cartes, photos et classeur (01/11/2026)
+
+**Objectif.** Ranger des cartes dans les albums : recherche dans le
+catalogue TCGdex, contrôle de cohérence avec le thème, photo de la carte
+(vérifiée, redressée, sans métadonnées), affichage par URL signées,
+classeur 3×3, zoom. À la demande de l'utilisateur, **expliquer en détail
+l'API TCGdex et son utilisation** avant de coder.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets) :**
+> *(clôture de l'étape 2)* pourquoi je vois pas les albums ?
+>
+> ok c est bon je les vois c est nickel
+>
+> ttu peux commit et push et fermer les serveurs, les albums et le compte
+> de test tu peux laisser
+>
+> *(étape 3)* oui on passe a l etape 3 juste pour cette etape il faudra que
+> tu m expliques en detail tout ce qui tourne autour de l API et son
+> utilisation
+>
+> [Recherche : Les afficher grisées] [Doublons : Oui]
+> [Photo : Obligatoire] [Couverture : Garder le logo]
+>
+> oui je valide commence
+>
+> continue
+
+**Démarche de l'agent.** Avant d'expliquer, l'agent a **interrogé la vraie
+API** pour s'appuyer sur des réponses réelles : recherche (partielle,
+insensible à la casse, 113 Dracaufeu, 22 sans image), pagination, filtre
+par extension (fonctionne), filtre par série et tri (ne fonctionnent pas),
+détail d'une carte (pas de série), détail d'une extension (série), liste
+des 202 extensions, images (`low`/`high`, tailles, cache), carte inconnue
+(`404`), présence des cartes Pocket dans la recherche. Explication rédigée
+(questions posées à l'API, qui parle à qui avec un diagramme, pourquoi tout
+passe par le backend, calcul de la cohérence, gestion des pannes), puis
+plan, puis 4 questions de conception. Liste des **130 noms d'Énergies
+réels** extraite pour construire la déduction du type.
+
+**Vérifications réalisées.**
+- Backend 66/66, frontend 78/78, build sans avertissement.
+- **Vérification croisée : 22 bugs introduits volontairement** (12
+  backend, 10 frontend), dont un d'abord non couvert (voir erreur 3) ;
+  chacun fait maintenant échouer un test. *(Première rédaction de l'agent :
+  « 21 », erreur de décompte corrigée.)*
+- Harnais Playwright, vrai TCGdex, **photos de test réalistes** générées
+  par l'agent (image officielle posée sur une « table », position GPS dans
+  l'EXIF, une photo couchée avec orientation 6) : 15 vérifications, dont
+  photo servie droite et sans EXIF, refus de type, Énergie typée par son
+  nom, `409` au changement de thème, accès d'un second compte (public
+  visible, privé `404`, image sans signature `403`).
+- Les 10 fichiers de `data/uploads` correspondent exactement aux 5 cartes
+  du compte de test : aucun fichier orphelin.
+
+**Erreurs, bugs et décisions.**
+1. **Vulnérabilités de dépendances** signalées par `npm audit` à
+   l'installation de `sharp` : elles ne venaient pas de `sharp` mais
+   d'Express et de Multer (déjà présents). Corrigées par `npm audit fix`
+   (mises à jour compatibles, sans `--force`), tests relancés.
+2. **Bug d'ergonomie trouvé par le harnais** : à l'ouverture de la fenêtre
+   d'ajout, le focus allait sur l'en-tête du stepper ; la saisie était
+   perdue (le champ ne contenait que « dra »). Corrigé
+   (`autoFocus: 'input.card-search'`).
+3. **Test manquant (vérification croisée)** : traiter la photo avant le
+   contrôle du thème n'était détecté par aucun test, le nettoyage rendant
+   le résultat identique. Test « ordre des contrôles » ajouté (carte hors
+   thème + fichier invalide → c'est le thème qui est signalé).
+4. **Amélioration trouvée sur capture** : dans un album de série, les 2
+   cartes acceptées sur 19 arrivaient en fin de liste → tri côté serveur,
+   compatibles en tête, avec son test (vérifié comme capable d'échouer).
+5. **Windows** : un test laissait des fichiers ouverts par le cache de
+   `sharp` (`EBUSY`) ; corrigé dans le test (lecture en mémoire).
+6. **Erreurs de l'agent dans le harnais**, sans conséquence sur l'appli :
+   sélecteurs ambigus (le libellé du champ porté aussi par la liste des
+   résultats ; « Retirer » qui correspondait aussi à « Retirer du
+   classeur »), captures prises pendant une animation ou avant le
+   chargement d'une image (refaites), lecture du filtre « Dresseur » avant
+   la fin du rechargement (faux problème, revérifié). Le backend lancé
+   avec `npm start` ne recharge pas le code : redémarré pour que le tri soit
+   pris en compte.
+7. **Limite documentée** : une URL d'image déjà délivrée reste valable
+   jusqu'à son échéance (1 à 2 h), même si l'album repasse en privé.
+
+**Fichiers effectivement modifiés.**
+Backend : `package.json` / `package-lock.json` (`sharp`, `npm audit
+fix`), `src/app.js`, nouveaux `src/config.js`, `src/models/Card.js`,
+`src/routes/cards.js`, `src/services/card-info.js`,
+`src/services/images.js` ; `src/services/tcgdex.js`, `src/routes/albums.js`,
+`src/routes/catalog.js` ; tests `helpers.js`, `albums.test.js`, nouveaux
+`card-info.test.js`, `images.test.js`, `cards.test.js` ; `analyse.md`.
+Frontend : nouveaux `add-card-dialog/`, `card-zoom-dialog/`,
+`shared/models/card.model.ts`, `shared/services/card.service.ts` (+ tests) ;
+`album-page/` (classeur, + test réécrit) ; `analyse.md`. Racine :
+`API_CONTRACT.md`, `README.md`, `Tests.md`, `REPORT.md` (dont §4.1
+« Utilisation de l'API TCGdex »), `compte-rendu/V2.md`, 10 captures
+`v2-etape3-*.png`, `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` (66 et 78) et de
+`npm run build` ; tableau des vérifications navigateur et captures dans
+`compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.** Ce qu'est une API REST publique
+comme TCGdex et comment on l'interroge ; ce que donnent et ne donnent pas
+la recherche, le détail d'une carte et le détail d'une extension ; pourquoi
+TCGdex est appelée par le backend (sécurité du contrôle, mémoire,
+assemblage) et pourquoi les images officielles, elles, sont chargées
+directement ; comment le type d'une Énergie est déduit de son nom, et le
+piège « Cadeau » ; ce que fait `sharp` (vérification du contenu,
+redressement, suppression du GPS) ; le principe d'une URL signée (HMAC,
+échéance, pourquoi arrondie à l'heure) ; pourquoi `debounceTime` et
+`switchMap` dans une recherche ; pourquoi l'ordre des contrôles compte.
+
+### Entrée V2.3b — Étape 3 (complément) : recadrage de la photo (01/11/2026)
+
+**Objectif.** Après un essai avec une vraie photo prise au téléphone,
+permettre de **recadrer la photo au format carte** (et de la tourner)
+avant de la ranger, pour que la pochette montre la carte et non la table.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets) :**
+> je viens de tester avec une photo prise rapidement avec mon téléphone, je
+> veux juste savoir actuellment la photo est juste mise dans le cadre sans
+> rien ?
+>
+> oui ajoute maintenant l'option 1
+>
+> [Rotation : Oui]
+
+**Démarche de l'agent.** Réponse d'abord factuelle : ce que fait le
+serveur (vérification, redressement, suppression des métadonnées, deux
+tailles) et ce qu'il ne fait pas (aucun recadrage ni correction de
+perspective ; la pochette coupe la photo au centre). Trois options
+comparées : **1. recadrage manuel** (recommandé), 2. détection automatique
+des bords (OpenCV, peu fiable avec les reflets des cartes holo), 3. simple
+conseil de cadrage. Après le choix, vérification de la librairie
+`ngx-image-cropper` (compatibilité Angular, date de mise à jour, licence
+MIT), plan, puis une question (rotation).
+
+**Choix techniques.** Le navigateur n'envoie que les **coordonnées** du
+cadre et le nombre de quarts de tour ; le serveur découpe l'**original**
+avec `sharp`, après redressement EXIF puis rotation, dans le même repère
+que celui du recadreur. Le cadre est contrôlé côté serveur (dans l'image,
+largeur minimale), le client ne pouvant pas être cru sur parole.
+
+**Vérifications réalisées.**
+- Backend 74/74, frontend 84/84, build sans avertissement.
+- **15 bugs introduits volontairement** (5 backend, 10 frontend), tous
+  détectés au final (voir erreur 2 et 4).
+- Navigateur (harnais Playwright hors dépôt) : photo générée par l'agent,
+  carte couchée et décentrée sur une table ; quart de tour, coins du cadre
+  tirés à la souris ; champs envoyés lus dans la page (`rotation: 3`,
+  cadre en pixels), `201`, photo rangée au format carte, droite et sans le
+  fond ; mobile sans débordement ; console sans erreur. Les deux cartes en
+  double créées par les exécutions successives du harnais ont été
+  supprimées.
+
+**Erreurs, bugs et décisions.**
+1. **Tests frontend cassés par la librairie** : elle crée une URL d'objet
+   dès son chargement ; dans jsdom, la fonction de Node.js plante sur un
+   `Blob` jsdom (3 fichiers en échec). Premier correctif de l'agent
+   **inefficace** (remplacement seulement si la fonction manquait, or elle
+   existe), puis remplacement systématique dans `src/test-setup.ts`.
+2. **Test trop faible (vérification croisée)** : une rotation dans le
+   mauvais sens n'était détectée par aucun test, le seul test faisant un
+   demi-tour (identique dans les deux sens). Test « ¼ de tour » ajouté.
+3. **Réécriture trop large d'`angular.json`** par l'agent : l'ajout de
+   l'option `setupFiles` avait aussi changé l'indentation d'autres lignes.
+   Fichier restauré puis modifié à la main : seule l'option apparaît dans
+   le diff.
+4. **Mutation absorbée par TypeScript** : « envoyer sans cadre » était
+   refusé par le compilateur avant même les tests ; refaite en contournant
+   le compilateur pour vérifier que le test la détecte aussi (c'est le cas).
+5. **Trouvé à la capture** : icônes des boutons de rotation décalées
+   (boutons texte utilisés sans texte) → boutons-icônes avec info-bulle.
+6. **Harnais** : Playwright ne sait pas lire un envoi multipart contenant
+   un fichier ; les champs envoyés ont été relevés par un espion posé dans
+   la page. Le backend, lancé avant les modifications, a été redémarré.
+
+**Fichiers effectivement modifiés.** Backend : `src/services/images.js`
+(`readAdjustments`, `processPhoto`), `src/routes/cards.js`, tests
+`images.test.js` et `cards.test.js`, `analyse.md`. Frontend :
+`package.json` / `package-lock.json` (`ngx-image-cropper`), `angular.json`
+(`setupFiles`), nouveau `src/test-setup.ts`, `add-card-dialog/` (logique,
+gabarit, styles, tests), `shared/models/card.model.ts`
+(`PhotoAdjustments`), `shared/services/card.service.ts` (+ test),
+`analyse.md`. Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+`compte-rendu/V2.md`, 3 captures `v2-etape3-recadrage-*.png`, cette
+entrée.
+
+**Preuve de fonctionnement.** Sorties de `npm test` (74 et 84) et de
+`npm run build` ; tableau et captures dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.** Pourquoi on envoie des
+coordonnées plutôt que l'image recadrée (qualité, contrôle serveur) ;
+dans quel repère sont exprimées ces coordonnées et pourquoi l'ordre
+redressement → rotation → découpage doit être le même des deux côtés ;
+pourquoi un test de demi-tour ne prouve pas le sens de rotation ; pourquoi
+les tests de composant ne dessinent pas l'image (jsdom) et ce que fait le
+fichier `test-setup.ts`.

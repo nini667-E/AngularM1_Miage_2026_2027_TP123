@@ -57,7 +57,7 @@ async function get(path) {
 }
 
 // TCGdex fournit l'adresse des logos sans extension de fichier.
-const imageUrl = (base) => (base ? `${base}.png` : null);
+export const imageUrl = (base) => (base ? `${base}.png` : null);
 
 /** Les 11 types de cartes, en français (« Feu », « Eau »…). */
 export async function getTypes() {
@@ -86,4 +86,63 @@ export async function getSeriesSets(serieId) {
     logo: imageUrl(set.logo),
     cardCount: set.cardCount?.official ?? null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Cartes (V2, étape 3)
+// ---------------------------------------------------------------------------
+
+export const SEARCH_LIMIT = 20;
+
+/** Extension d'une carte : tout ce qui précède le dernier tiret de son id
+ *  (« sv03.5-006 » -> « sv03.5 », « P-A-009 » -> « P-A »). */
+export function setIdOf(cardId) {
+  const index = cardId.lastIndexOf("-");
+  return index > 0 ? cardId.slice(0, index) : cardId;
+}
+
+/** Les 202 extensions (une seule requête), indexées par id. */
+export async function getSetIndex() {
+  const sets = (await get("/sets")) ?? [];
+  return new Map(sets.map((set) => [set.id, { id: set.id, name: set.name, logo: imageUrl(set.logo) }]));
+}
+
+/** Identifiants des extensions des séries exclues (Pocket). */
+async function excludedSetIds() {
+  const ids = new Set();
+  for (const serieId of EXCLUDED_SERIES) {
+    for (const set of (await get(`/series/${serieId}`))?.sets ?? []) ids.add(set.id);
+  }
+  return ids;
+}
+
+/**
+ * Recherche par nom (partielle, insensible à la casse côté TCGdex), limitée
+ * aux SEARCH_LIMIT premiers résultats, éventuellement dans une extension.
+ * Les cartes Pocket sont retirées. Fiches courtes : id, numéro, nom, image.
+ */
+export async function searchCards(name, { setId } = {}) {
+  if (setId && !ID_PATTERN.test(setId)) return [];
+  const params = new URLSearchParams({ name, "pagination:page": "1", "pagination:itemsPerPage": String(SEARCH_LIMIT) });
+  if (setId) params.set("set.id", setId);
+  const [cards, excluded] = await Promise.all([get(`/cards?${params}`), excludedSetIds()]);
+  return (cards ?? []).filter((card) => !excluded.has(setIdOf(card.id)));
+}
+
+/** Détail d'une carte, ou `null` si elle n'existe pas (ou est Pocket). */
+export async function getCard(cardId) {
+  if (!ID_PATTERN.test(cardId)) return null;
+  if ((await excludedSetIds()).has(setIdOf(cardId))) return null;
+  return get(`/cards/${cardId}`);
+}
+
+/** Détail d'une extension, avec sa série (absente du détail d'une carte). */
+export async function getSet(setId) {
+  if (!ID_PATTERN.test(setId)) return null;
+  return get(`/sets/${setId}`);
+}
+
+/** Image officielle TCGdex (base sans extension) -> vignette ou grand format. */
+export function officialImage(base, quality = "low") {
+  return base ? `${base}/${quality}.webp` : null;
 }

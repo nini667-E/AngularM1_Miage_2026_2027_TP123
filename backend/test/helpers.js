@@ -47,7 +47,46 @@ export const FAKE_TCGDEX = {
     ],
   },
   "/series/swsh": { id: "swsh", sets: [{ id: "swsh3", name: "Ténèbres Embrasées", cardCount: { official: 189 } }] },
+  "/series/tcgp": { id: "tcgp", sets: [{ id: "A1", name: "Puissance Génétique" }] },
+  // Cartes (étape 3) : détail, et extensions avec leur série.
+  "/sets": [
+    { id: "sv01", name: "Écarlate et Violet", logo: "https://assets.tcgdex.net/fr/sv/sv01/logo" },
+    { id: "sv03.5", name: "151", logo: "https://assets.tcgdex.net/fr/sv/sv03.5/logo" },
+    { id: "swsh3", name: "Ténèbres Embrasées" },
+  ],
+  "/sets/sv01": { id: "sv01", name: "Écarlate et Violet", serie: { id: "sv", name: "Écarlate et Violet" } },
+  "/sets/sv03.5": { id: "sv03.5", name: "151", serie: { id: "sv", name: "Écarlate et Violet" } },
+  "/sets/swsh3": { id: "swsh3", name: "Ténèbres Embrasées", serie: { id: "swsh", name: "Épée et Bouclier" } },
+  "/cards/sv03.5-006": {
+    id: "sv03.5-006", localId: "006", name: "Dracaufeu-ex", category: "Pokémon", types: ["Feu"], rarity: "Double rare",
+    image: "https://assets.tcgdex.net/fr/sv/sv03.5/006", set: { id: "sv03.5", name: "151", logo: "https://assets.tcgdex.net/fr/sv/sv03.5/logo" },
+  },
+  "/cards/sv03.5-007": {
+    id: "sv03.5-007", localId: "007", name: "Carapuce", category: "Pokémon", types: ["Eau"], rarity: "Commune",
+    image: "https://assets.tcgdex.net/fr/sv/sv03.5/007", set: { id: "sv03.5", name: "151" },
+  },
+  "/cards/sv01-196": {
+    id: "sv01-196", localId: "196", name: "Hyper Ball", category: "Dresseur", trainerType: "Objet", rarity: "Peu Commune",
+    set: { id: "sv01", name: "Écarlate et Violet" },
+  },
+  // Énergie sans « types » dans les données : type déduit du nom.
+  "/cards/sv01-257": {
+    id: "sv01-257", localId: "257", name: "Énergie Lightning de base", category: "Énergie", energyType: "De base",
+    set: { id: "sv01", name: "Écarlate et Violet" },
+  },
+  "/cards/swsh3-020": {
+    id: "swsh3-020", localId: "020", name: "Dracaufeu V", category: "Pokémon", types: ["Feu"], rarity: "Holo Rare V",
+    set: { id: "swsh3", name: "Ténèbres Embrasées" },
+  },
 };
+
+/** Fiches courtes renvoyées par la recherche /cards?name= (dont une Pocket). */
+export const FAKE_SEARCH = [
+  { id: "sv03.5-006", localId: "006", name: "Dracaufeu-ex", image: "https://assets.tcgdex.net/fr/sv/sv03.5/006" },
+  { id: "swsh3-020", localId: "020", name: "Dracaufeu V" },
+  { id: "A1-036", localId: "036", name: "Dracaufeu" },
+  { id: "sv03.5-007", localId: "007", name: "Carapuce", image: "https://assets.tcgdex.net/fr/sv/sv03.5/007" },
+];
 
 /**
  * Remplace fetch : les URL TCGdex reçoivent le faux catalogue (404 si
@@ -62,7 +101,16 @@ export function mockTcgdex({ down = false } = {}) {
     const path = text.slice("https://api.tcgdex.net/v2/fr".length);
     calls.push(path);
     if (down) throw new TypeError("fetch failed");
-    const body = FAKE_TCGDEX[path];
+    let body = FAKE_TCGDEX[path];
+    if (path.startsWith("/cards?")) {
+      // Recherche : nom partiel insensible à la casse, extension facultative.
+      const params = new URLSearchParams(path.slice("/cards?".length));
+      const name = (params.get("name") ?? "").toLowerCase();
+      const setId = params.get("set.id");
+      body = FAKE_SEARCH.filter(
+        (card) => card.name.toLowerCase().includes(name) && (!setId || card.id.startsWith(`${setId}-`)),
+      );
+    }
     return body === undefined
       ? new Response(JSON.stringify({ status: 404 }), { status: 404 })
       : new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });

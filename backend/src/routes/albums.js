@@ -2,6 +2,9 @@ import express from "express";
 import { canView, isOwner } from "../access.js";
 import { HttpError } from "../errors.js";
 import { Album, DESCRIPTION_MAX, TITLE_MAX, VISIBILITIES } from "../models/Album.js";
+import { Card } from "../models/Card.js";
+import { checkTheme } from "../services/card-info.js";
+import { deletePhotoFiles } from "../services/images.js";
 import { User } from "../models/User.js";
 import { resolveTheme } from "../services/theme.js";
 
@@ -110,7 +113,22 @@ export function albumRoutes(auth) {
     try {
       const album = await Album.findById(req.params.id);
       if (!isOwner(album, req.auth.sub)) throw notFound();
-      Object.assign(album, await readAlbumInput(req.body, true));
+      const values = await readAlbumInput(req.body, true);
+
+      // Nouveau thème : les cartes déjà rangées doivent toujours le respecter
+      // (sinon l'album contiendrait des cartes hors thème).
+      if (values.theme && album.cardCount > 0) {
+        const cards = await Card.find({ albumId: album._id }).select("name category types set serie");
+        const refused = cards.filter((card) => !checkTheme(card, values.theme).compatible);
+        if (refused.length > 0) {
+          throw new HttpError(
+            409,
+            `Thème refusé : ${refused.length} carte(s) de l'album ne le respectent pas (ex. ${refused[0].name})`,
+          );
+        }
+      }
+
+      Object.assign(album, values);
       await album.save();
       console.log(`[albums] Album modifié : ${album.id}`);
       res.json(album.toPublic());
@@ -119,12 +137,15 @@ export function albumRoutes(auth) {
     }
   });
 
-  /** Supprime un album (propriétaire uniquement). Les cartes : étape 3. */
+  /** Supprime un album (propriétaire uniquement), avec ses cartes et leurs photos. */
   router.delete("/:id", auth, async (req, res, next) => {
     try {
       const album = await Album.findOneAndDelete({ _id: req.params.id, ownerId: req.auth.sub });
       if (!album) throw notFound();
-      console.log(`[albums] Album supprimé : ${album.id}`);
+      const cards = await Card.find({ albumId: album._id }).select("+photo.thumb +photo.full");
+      await Card.deleteMany({ albumId: album._id });
+      for (const card of cards) await deletePhotoFiles(card.photo);
+      console.log(`[albums] Album supprimé : ${album.id} (${cards.length} carte(s))`);
       res.status(204).end();
     } catch (error) {
       next(error);

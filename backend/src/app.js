@@ -1,28 +1,11 @@
 import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
-import fs from "node:fs";
-import path from "node:path";
+import { SECRET } from "./config.js";
 import { User } from "./models/User.js";
 import { albumRoutes } from "./routes/albums.js";
+import { albumCardRoutes, cardRoutes, imageRoutes } from "./routes/cards.js";
 import { catalogRoutes } from "./routes/catalog.js";
-
-// Dossier des fichiers envoyés par les utilisateurs. Vide depuis le retrait
-// de l'audio (V2, étape 1) ; il accueillera les photos de cartes (étape 3).
-const UPLOADS = path.resolve("data/uploads");
-
-try {
-  // mkdirSync est utilisé au démarrage : l'application doit disposer de ce
-  // dossier avant de pouvoir accepter le premier upload.
-  fs.mkdirSync(UPLOADS, { recursive: true });
-  console.log(`[startup] Dossier des uploads prêt : ${UPLOADS}`);
-} catch (error) {
-  console.error("[startup] Impossible de créer le dossier des uploads", error);
-  throw error;
-}
-
-// Ce secret reste côté serveur. Il ne doit jamais être copié dans Angular.
-const SECRET = process.env.JWT_SECRET || "tp1-development-secret";
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -211,6 +194,10 @@ export function createApp() {
   // Catalogue TCGdex (listes pour le thème des albums) et albums (V2, étape 2).
   app.use("/api/catalog", catalogRoutes(auth));
   app.use("/api/albums", albumRoutes(auth));
+  // Cartes et photos (V2, étape 3).
+  app.use("/api/albums", albumCardRoutes(auth));
+  app.use("/api/cards", cardRoutes(auth));
+  app.use("/api/images", imageRoutes());
 
   /** Gestionnaire central des erreurs connues de l'application. */
   app.use((error, _req, res, next) => {
@@ -219,6 +206,11 @@ export function createApp() {
     // Erreurs métier (src/errors.js) : 400, 404, 502…
     if (error?.name === "HttpError") {
       return res.status(error.status).json({ message: error.message });
+    }
+    // Erreurs de réception de fichier (Multer) : photo trop lourde, etc.
+    if (error?.name === "MulterError") {
+      const message = error.code === "LIMIT_FILE_SIZE" ? "Photo trop volumineuse (10 Mo maximum)" : "Envoi de fichier invalide";
+      return res.status(400).json({ message });
     }
     if (error?.name === "ValidationError") {
       return res.status(400).json({ message: error.message });

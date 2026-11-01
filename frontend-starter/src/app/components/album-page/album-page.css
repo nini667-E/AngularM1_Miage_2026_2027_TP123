@@ -50,12 +50,21 @@ h1 { margin: 0.25rem 0 0.5rem; font: var(--mat-sys-headline-medium); font-weight
 
 /* Classeur : une page de 9 pochettes au format d'une carte (63 × 88 mm). */
 .binder { margin-top: 1.5rem; }
+.binder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  max-width: 720px;
+  margin: 0 auto 1rem;
+}
 .page {
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: clamp(0.5rem, 2vw, 1.25rem);
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
   padding: clamp(0.75rem, 3vw, 1.5rem);
   background: linear-gradient(180deg, #121828, #0e1322);
@@ -64,11 +73,99 @@ h1 { margin: 0.25rem 0 0.5rem; font: var(--mat-sys-headline-medium); font-weight
   box-shadow: inset 0 0 40px rgb(0 0 0 / 0.5), 0 18px 40px rgb(0 0 0 / 0.35);
 }
 .pocket {
+  position: relative;
+  display: block;
   aspect-ratio: 63 / 88;
-  background: linear-gradient(160deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.01));
-  border: 1px dashed rgb(201 162 77 / 0.35);
+  padding: 0;
+  overflow: hidden;
   border-radius: 10px;
 }
+.pocket.empty {
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.01));
+  border: 1px dashed rgb(201 162 77 / 0.35);
+}
+
+/* Emplacements « fantômes » animés pendant le chargement. */
+.pocket.skeleton {
+  background: linear-gradient(100deg, #182036 30%, #232d48 50%, #182036 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+/* Carte rangée : photo plein cadre, liseré doré, reflet au survol. */
+.pocket.card {
+  cursor: pointer;
+  background: #0b0f1b;
+  border: 1px solid rgb(201 162 77 / 0.45);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.45);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.pocket.card img { width: 100%; height: 100%; object-fit: cover; }
+.pocket.card:hover,
+.pocket.card:focus-visible {
+  z-index: 1;
+  transform: translateY(-4px) scale(1.03);
+  box-shadow: 0 16px 32px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(243 217 139 / 0.6);
+  outline: none;
+}
+/* Reflet or métallique qui balaie la carte au survol (sans arc-en-ciel). */
+.sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 243 209 / 0.35) 48%, rgb(214 176 90 / 0.18) 55%, transparent 65%);
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  opacity: 0;
+  transition: opacity 180ms ease, background-position 700ms ease;
+  pointer-events: none;
+}
+.pocket.card:hover .sheen,
+.pocket.card:focus-visible .sheen { opacity: 1; background-position: -20% 0; }
+
+.badges {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.type-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  background: rgb(13 18 32 / 0.85);
+  border: 1px solid var(--chip-color);
+  border-radius: 50%;
+}
+.type-dot mat-icon { width: 14px; height: 14px; font-size: 14px; color: var(--chip-color); }
+.category {
+  margin-left: auto;
+  padding: 1px 7px;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-small);
+  background: rgb(13 18 32 / 0.85);
+  border-radius: 999px;
+}
+.caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.2rem 0.5rem 0.4rem;
+  overflow: hidden;
+  color: #fff;
+  font: var(--mat-sys-label-medium);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.8));
+}
+
 .binder-note {
   position: absolute;
   inset: 50% auto auto 50%;
@@ -84,6 +181,15 @@ h1 { margin: 0.25rem 0 0.5rem; font: var(--mat-sys-headline-medium); font-weight
   transform: translate(-50%, -50%);
 }
 .binder-note mat-icon { color: var(--mat-sys-primary); }
+
+mat-paginator { max-width: 720px; margin: 0.75rem auto 0; background: transparent; }
+.credit {
+  max-width: 720px;
+  margin: 0.75rem auto 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  text-align: center;
+}
 
 @media (max-width: 720px) {
   .banner { grid-template-columns: 1fr; }

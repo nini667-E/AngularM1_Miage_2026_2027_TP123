@@ -16,10 +16,10 @@ Application **Angular 22** en mode **standalone** (pas de `NgModule`),
 consommant l'API décrite dans `backend/analyse.md` et `API_CONTRACT.md`.
 Depuis la V2 (01/11/2026), l'application s'appelle **Card Vault** : un
 réseau de collectionneurs de cartes Pokémon (voir `../REPORT.md`). À
-l'étape 2, elle contient l'authentification, le profil, la navigation et
-les **albums** (création, thème, visibilité, page d'album) ; les cartes
-arrivent à l'étape 3, le social aux étapes 4 à 7 (voir §7 "État par
-rapport aux missions").
+l'étape 3, elle contient l'authentification, le profil, la navigation, les
+**albums** (création, thème, visibilité) et les **cartes** (recherche dans
+le catalogue, contrôle du thème, photo, classeur 3×3, zoom) ; le social
+arrive aux étapes 4 à 7 (voir §7 "État par rapport aux missions").
 
 ### 1.1 Stack technique
 
@@ -30,9 +30,9 @@ rapport aux missions").
 | Formulaires | Reactive Forms (`FormGroup`, `FormControl`) + `MatFormField`/`matInput` (V2) | Saisie inscription/connexion/profil |
 | HTTP | `HttpClient` + intercepteur fonctionnel ; mécanisme XHR forcé par `withXhr()` (TP3, Mission 6, 08/10/2026) | Appels API, ajout du JWT, progression d'upload |
 | Routage | `provideRouter`, routes standalone, `CanActivateFn` | Navigation + protection de pages |
-| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés ; V2 étape 2 : 14 fichiers `*.spec.ts` / 56 tests au 01/11/2026) | `ng serve`, `ng build`, `ng test` |
+| Build/test | Angular CLI 22, Vitest 4 (TP3 : `jsdom` + config `build:development` ajoutés ; V2 étape 3 : 17 fichiers `*.spec.ts` / 84 tests au 01/11/2026 ; `src/test-setup.ts` chargé avant chaque fichier de test, voir §4.5) | `ng serve`, `ng build`, `ng test` |
 | Proxy dev | `proxy.conf.json` → `http://localhost:3000` | Évite le CORS en développement (`/api` → backend) |
-| Composants UI | Angular Material 22.2.1 + CDK | **V2 (01/11/2026)** : utilisé dans toute l'application — `MatToolbar`, `MatMenu`, `MatCard`, `MatFormField`, `MatButton`, `MatIcon` (police *Material Symbols Outlined*), `MatSnackBar`, `MatDivider` ; étape 2 : `MatDialog`, `MatSelect`, `MatButtonToggle`, `MatChips`, `MatTooltip`, `MatPaginator`, `MatProgressBar`. Thème Material 3 **sombre or / bleu nuit** (`material-theme.scss`, palettes générées) + identité visuelle dans `styles.css` (reflet or métallique, couleurs des 11 types) |
+| Composants UI | Angular Material 22.2.1 + CDK | **V2 (01/11/2026)** : utilisé dans toute l'application — `MatToolbar`, `MatMenu`, `MatCard`, `MatFormField`, `MatButton`, `MatIcon` (police *Material Symbols Outlined*), `MatSnackBar`, `MatDivider` ; étape 2 : `MatDialog`, `MatSelect`, `MatButtonToggle`, `MatChips`, `MatTooltip`, `MatPaginator`, `MatProgressBar` ; étape 3 : `MatStepper`, `MatAutocomplete`, `MatProgressSpinner` ; recadrage : librairie **`ngx-image-cropper`** 9.1.7 (MIT, 01/11/2026). Thème Material 3 **sombre or / bleu nuit** (`material-theme.scss`, palettes générées) + identité visuelle dans `styles.css` (reflet or métallique, couleurs des 11 types) |
 
 ### 1.2 Arborescence
 
@@ -51,16 +51,18 @@ frontend-starter/
 │   │   │   ├── app/                 # racine : barre MatToolbar + <router-outlet>
 │   │   │   ├── login-page/, register-page/, profile-page/
 │   │   │   ├── albums-page/         # « Mes albums » : grille de couvertures (étape 2)
-│   │   │   ├── album-page/          # page d'un album : en-tête + classeur (étape 2)
+│   │   │   ├── album-page/          # page d'un album : en-tête + classeur de cartes (étapes 2-3)
 │   │   │   ├── album-form-dialog/   # création / modification d'un album (étape 2)
+│   │   │   ├── add-card-dialog/     # ajout d'une carte : MatStepper carte -> photo (étape 3)
+│   │   │   ├── card-zoom-dialog/    # zoom : photo + image officielle + infos (étape 3)
 │   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche, Amis)
 │   │   └── shared/
 │   │       ├── components/          # album-cover, theme-chips, confirm-dialog (réutilisables)
 │   │       ├── guards/auth.guard.ts
 │   │       ├── interceptors/auth.interceptor.ts
 │   │       ├── i18n/french-paginator-intl.ts
-│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue
-│   │       ├── services/            # AuthService, AlbumService, CatalogService (seuls points d'appel HTTP)
+│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes
+│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService (seuls points d'appel HTTP)
 │   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
@@ -75,6 +77,9 @@ flowchart LR
         Albums[AlbumsPageComponent\nMes albums]
         Album[AlbumPageComponent]
         Form[AlbumFormDialogComponent]
+        Add[AddCardDialogComponent\nMatStepper]
+        Zoom[CardZoomDialogComponent]
+        CardSvc[CardService]
         Cover[AlbumCover / ThemeChips\n(partagés)]
         AuthSvc[AuthService]
         AlbumSvc[AlbumService]
@@ -83,17 +88,20 @@ flowchart LR
     end
 
     subgraph API["Backend Express (proxy /api -> :3000)"]
-        Endpoints[/api/auth, /api/users/me,\n/api/albums, /api/catalog/]
+        Endpoints[/api/auth, /api/users/me,\n/api/albums, /api/catalog,\n/api/cards, /api/images/]
     end
 
     Routes --> Auth & Albums & Album
     Albums --> Cover
     Albums -- MatDialog --> Form
     Album -- MatDialog --> Form
+    Album -- MatDialog --> Add & Zoom
+    Add --> CardSvc
+    Album --> CardSvc
     Auth --> AuthSvc
     Albums & Album --> AlbumSvc
     Form --> AlbumSvc & CatSvc
-    AuthSvc & AlbumSvc & CatSvc --> Interceptor
+    AuthSvc & AlbumSvc & CatSvc & CardSvc --> Interceptor
     Interceptor -- "Authorization: Bearer <token>" --> Endpoints
 ```
 
@@ -347,7 +355,7 @@ return next(authorizedRequest).pipe(
 
 ---
 
-## 4. Albums (V2, étape 2) et cartes (étape 3)
+## 4. Albums (V2, étape 2) et cartes (V2, étape 3)
 
 ### 4.1 Services
 
@@ -355,6 +363,7 @@ return next(authorizedRequest).pipe(
 |---|---|---|
 | `AlbumService` | `mine(page, limit)` → `GET /api/albums/mine` ; `get(id)` → `GET /api/albums/:id` ; `create(input)` → `POST /api/albums` ; `update(id, changes)` → `PUT` ; `delete(id)` → `DELETE` | identifiant encodé (`encodeURIComponent`) |
 | `CatalogService` | `types()`, `series()`, `sets(serieId)` → `/api/catalog/…` | **une requête par liste et par session** : `shareReplay(1)` + `Map` des Observables par URL. Vérifié dans le navigateur : 5 ouvertures du formulaire, 1 seul appel par liste |
+| `CardService` (étape 3) | `search(name, albumId)`, `detail(id, albumId)` → `/api/catalog/cards…` ; `list(albumId, page, 9, category?)` → `/api/albums/:id/cards` ; `add(albumId, tcgdexId, photo)` → multipart, **`reportUploadProgress` + `observe: 'events'`** (le mécanisme du TP3, d'où `withXhr()`) ; `delete(id)` → `/api/cards/:id` | photos affichées par leurs URL signées : pas de Blob comme en V1 |
 
 ### 4.2 « Mes albums » (`AlbumsPageComponent`)
 
@@ -420,10 +429,88 @@ sequenceDiagram
   (`ConfirmDialogComponent`, puis SnackBar et retour à `/albums`). Ces
   boutons ne sont qu'un confort : c'est le backend qui refuse (`404`) toute
   modification par un autre utilisateur.
-- **Classeur** : une page de 9 pochettes au format d'une carte
-  (`aspect-ratio: 63 / 88`), vides jusqu'à l'étape 3.
+- **Classeur** : décrit en §4.6 (étape 3).
 
-### 4.5 Composants partagés (`shared/components`)
+### 4.5 Ajout d'une carte (`AddCardDialogComponent`, étape 3)
+
+`MatStepper` **linéaire** en deux étapes :
+
+1. **La carte.** Champ de recherche relié à `MatAutocomplete`. Le flux de
+   saisie : `valueChanges` → filtre (on ignore l'objet posé par la sélection
+   d'une option) → `debounceTime(300)` (une requête après 300 ms sans frappe,
+   pas une par touche) → `distinctUntilChanged` → `switchMap` (une nouvelle
+   frappe **annule** la requête précédente encore en cours) → `search()`.
+   Moins de 2 caractères : pas de requête. Options : vignette officielle (ou
+   icône si TCGdex n'en a pas), nom, extension et numéro ; options
+   incompatibles **désactivées et grisées** avec la raison (« Hors de la
+   série… »), placées après les compatibles par le serveur. Le choix d'une
+   carte charge son détail avec le **verdict du serveur** ; `cardAccepted`
+   (`computed`) bloque « Suivant » si la carte est refusée.
+2. **La photo.** Bouton Material qui ouvre un `<input type="file">` caché ;
+   contrôle du format (JPEG, PNG, WebP) et de la taille (10 Mo) **avant**
+   envoi, comme au TP2 ; **recadrage** (voir plus bas) ; envoi avec barre
+   de progression ;
+   « Traitement de la photo… » à 100 % (sharp travaille encore côté
+   serveur). Pendant l'envoi : `disableClose` (Échap ou clic extérieur
+   n'interrompent pas l'envoi), garde contre le double clic.
+
+**Recadrage de la photo (01/11/2026).** La photo choisie s'affiche dans
+`<image-cropper>` (ngx-image-cropper) avec un **cadre verrouillé au format
+carte** (`aspectRatio` 63/88), placé au maximum de la photo : une photo
+déjà bien cadrée n'exige aucun geste. Deux boutons-icônes tournent la photo
+d'un quart de tour (`canvasRotation`). À chaque changement, le recadreur
+émet `imageCropped` ; le composant n'en garde que :
+- `imagePosition` (coordonnées du cadre **dans la photo redressée puis
+  tournée**), arrondies au pixel dans le signal `crop` ;
+- une petite image (240 px de large) pour l'**aperçu** à côté du cadre.
+
+L'image recadrée par le navigateur n'est **pas envoyée** : on envoie la
+photo d'origine, `crop` (JSON) et `rotation`, et c'est le serveur qui
+découpe l'original en pleine qualité. « Ajouter au classeur » reste
+désactivé tant que `crop` est nul (recadreur pas prêt) ; tourner la photo
+remet `crop` à nul jusqu'au prochain cadre ; une nouvelle photo remet
+rotation et cadre à zéro ; une image que le navigateur ne sait pas lire
+affiche « Impossible de lire cette image ».
+
+*Tests* : jsdom ne dessine pas les images, les tests appellent donc la
+logique du composant (`onCropped`, `rotate`, `upload`). La librairie crée
+une URL d'objet dès son chargement, ce que jsdom ne permet pas :
+`src/test-setup.ts` (déclaré dans `angular.json` > `test` > `setupFiles`)
+remplace `URL.createObjectURL` / `revokeObjectURL` avant chaque fichier
+de test.
+
+**Focus à l'ouverture** : par défaut, `MatDialog` place le focus sur le
+premier élément focalisable, ici l'**en-tête du stepper** : la frappe au
+clavier était perdue (trouvé par le harnais navigateur, dont la saisie
+s'arrêtait à « dra »). Ouverture avec `autoFocus: 'input.card-search'`.
+
+### 4.6 Classeur et zoom (`AlbumPageComponent`, `CardZoomDialogComponent`, étape 3)
+
+- **Classeur** : une page = **9 pochettes** (`pockets`, `computed` : la
+  carte ou `null`) ; `mat-paginator` sans choix de taille, affiché au-delà
+  de 9 cartes ; filtre `MatButtonToggle` Toutes / Pokémon / Dresseur /
+  Énergie (filtre **côté serveur**, puisque la pagination l'est, avec
+  retour à la page 1).
+- **Une carte** : la photo (`thumb`, `loading="lazy"`) au format
+  `aspect-ratio: 63 / 88`, liseré doré, **reflet or au survol** (dégradé
+  qui balaie la carte, sans arc-en-ciel, choix de l'étape 1), légère
+  élévation ; pastilles de type (couleur + icône) et sous-catégorie ;
+  légende avec le nom. **Squelettes animés** (9 pochettes) pendant le
+  chargement ; pochettes vides en pointillés.
+- **Photo expirée** (URL signée dépassée, page restée ouverte plus d'une
+  heure) : `(error)` sur l'image → rechargement de la page du classeur pour
+  obtenir de nouvelles URL, **une seule fois** (pas de boucle).
+- **Ajout** : la nouvelle carte est rangée à la fin ; la page qui la
+  contient est affichée (`ceil(cardCount / 9)`), filtre remis à « Toutes »,
+  compteur de l'en-tête mis à jour.
+- **Zoom** (`MatDialog`) : photo `full` à côté de l'image officielle
+  `high.webp`, informations (catégorie, type, rareté, extension et numéro,
+  série, date) ; pour le propriétaire, « Retirer du classeur ». Le zoom ne
+  fait que **renvoyer l'intention** (`'delete'`) : confirmation, requête et
+  mise à jour sont faites par la page (une seule responsabilité par
+  composant).
+
+### 4.7 Composants partagés (`shared/components`)
 
 | Composant | Rôle |
 |---|---|
@@ -526,6 +613,7 @@ mini projet.
 | TP3 · M7 | Tests frontend (services, intercepteur, guard, composants) | ✅ 7/7 (08/10/2026) — `AuthService`, `TrackService`, `authInterceptor`, `authGuard`, + `tracks-page.spec.ts` (erreur HTTP affichée, suppression, upload avec progression). Détail : `Tests.md` |
 | V2 · Étape 1 | Retrait de l'audio, identité Card Vault, thème sombre, navigation | ✅ Fait (01/11/2026) — pages audio supprimées ; `MatToolbar` + `MatMenu` (+ menu mobile) ; thème Material sombre or / bleu nuit ; connexion/inscription/profil en Material ; pages d'attente Accueil/Recherche/Amis ; 23 tests |
 | V2 · Étape 2 | Albums : création, modification, suppression, thème, visibilité | ✅ Fait (01/11/2026) — `AlbumService`, `CatalogService` (mémoire de session), « Mes albums » (couvertures, état vide, pagination), fenêtre de formulaire (extension dépendante de la série), page d'album (404, actions du propriétaire, classeur vide) ; `<base href="/">` ajouté ; 56 tests |
+| V2 · Étape 3 | Cartes : recherche TCGdex, contrôle du thème, photo, classeur, zoom | ✅ Fait (01/11/2026) — `CardService` (progression d'envoi), `AddCardDialogComponent` (MatStepper, MatAutocomplete, debounce + switchMap, verdict serveur, contrôle de la photo), classeur 3×3 paginé et filtrable (squelettes, reflet, URL signées, reprise si expirée), zoom ; focus de la fenêtre sur la recherche ; 78 tests |
 
 ---
 
@@ -622,3 +710,10 @@ mini projet.
   couverture / puces / confirmation, `card-types.ts`), lien « Mes albums »
   dans la barre, `<base href="/">` dans `index.html` (§1, §1.1, §1.2, §1.3,
   §2.1, §2.2, §3.5, §4, §7).
+- **01/11/2026** — V2, étape 3 : cartes (`CardService`, fenêtre d'ajout en
+  deux étapes, classeur 3×3 avec filtre et pagination, zoom), focus de la
+  fenêtre d'ajout sur la recherche (§1, §1.1, §1.2, §1.3, §4.1, §4.4, §4.5,
+  §4.6, §7).
+- **01/11/2026** — V2, étape 3 (complément) : recadrage au format carte et
+  rotation par quarts de tour (`ngx-image-cropper`), `src/test-setup.ts`,
+  84 tests (§1, §4.5).

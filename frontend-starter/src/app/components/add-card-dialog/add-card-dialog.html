@@ -1,0 +1,170 @@
+<h2 mat-dialog-title>Ajouter une carte à « {{ data.album.title }} »</h2>
+
+<mat-dialog-content>
+  <mat-stepper linear #stepper>
+    <!-- Étape 1 : la carte -->
+    <mat-step [completed]="cardAccepted()" [editable]="!uploading()">
+      <ng-template matStepLabel>La carte</ng-template>
+
+      <mat-form-field appearance="outline" class="search">
+        <mat-label>Nom de la carte</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input matInput class="card-search" [formControl]="query" [matAutocomplete]="auto" placeholder="ex. Dracaufeu" />
+        @if (searching()) {
+          <mat-spinner matSuffix diameter="20" aria-label="Recherche en cours" />
+        }
+        <mat-hint>Au moins 2 caractères · données : TCGdex</mat-hint>
+      </mat-form-field>
+
+      <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayCard" (optionSelected)="select($event)" class="card-results">
+        @for (result of results(); track result.id) {
+          <mat-option [value]="result" [disabled]="!result.compatible">
+            <span class="result">
+              @if (result.image) {
+                <img [src]="result.image" alt="" loading="lazy" />
+              } @else {
+                <span class="no-image" aria-hidden="true"><mat-icon>style</mat-icon></span>
+              }
+              <span class="result-text">
+                <b>{{ result.name }}</b>
+                <small>{{ result.set.name ?? result.set.id }} · n° {{ result.localId }}</small>
+                @if (!result.compatible) {
+                  <small class="refused"><mat-icon aria-hidden="true">block</mat-icon> {{ result.reason }}</small>
+                }
+              </span>
+            </span>
+          </mat-option>
+        }
+      </mat-autocomplete>
+
+      @if (searchError()) {
+        <p class="error" role="alert">{{ searchError() }}</p>
+      }
+      @if (loadingDetail()) {
+        <mat-progress-bar mode="indeterminate" aria-label="Chargement de la carte" />
+      }
+
+      @if (detail(); as card) {
+        <section class="detail" aria-live="polite">
+          <div class="official">
+            @if (card.officialImage.large) {
+              <img [src]="card.officialImage.large" [alt]="'Carte officielle ' + card.name" />
+            } @else {
+              <span class="no-image large" aria-hidden="true"><mat-icon>style</mat-icon></span>
+            }
+          </div>
+          <div class="facts">
+            <h3>{{ card.name }}</h3>
+            <p class="muted">{{ card.set?.name }} · n° {{ card.localId }} · {{ card.serie?.name }}</p>
+            <p class="tags">
+              <span class="tag">{{ card.category }}{{ card.subCategory ? ' · ' + card.subCategory : '' }}</span>
+              @for (type of card.types; track type) {
+                <span class="tag type" [style.--chip-color]="typeColor(type)">
+                  <mat-icon aria-hidden="true">{{ typeIcon(type) }}</mat-icon>{{ type }}
+                </span>
+              }
+              @if (card.rarity) {
+                <span class="tag">{{ card.rarity }}</span>
+              }
+            </p>
+            @if (card.verdict; as verdict) {
+              @if (verdict.compatible) {
+                <p class="verdict ok"><mat-icon aria-hidden="true">check_circle</mat-icon> Correspond au thème de l'album</p>
+              } @else {
+                <div class="verdict ko" role="alert">
+                  <mat-icon aria-hidden="true">cancel</mat-icon>
+                  <div>
+                    <b>Ne correspond pas au thème de l'album</b>
+                    @for (reason of verdict.reasons; track reason) {
+                      <p>{{ reason }}</p>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </section>
+      }
+
+      <div class="step-actions">
+        <button mat-button mat-dialog-close type="button">Annuler</button>
+        <button mat-flat-button matStepperNext type="button" [disabled]="!cardAccepted()">Suivant : la photo</button>
+      </div>
+    </mat-step>
+
+    <!-- Étape 2 : la photo -->
+    <mat-step [editable]="!uploading()">
+      <ng-template matStepLabel>Ta photo</ng-template>
+
+      <div class="photo-step" [class.has-photo]="photo()">
+        @if (photo(); as file) {
+          <div class="cropper">
+            <image-cropper
+              [imageFile]="file"
+              [maintainAspectRatio]="true"
+              [aspectRatio]="cardRatio"
+              [canvasRotation]="rotation()"
+              [onlyScaleDown]="true"
+              [resizeToWidth]="240"
+              output="base64"
+              format="jpeg"
+              [disabled]="uploading()"
+              cropperFrameAriaLabel="Cadre de recadrage de la carte"
+              (imageCropped)="onCropped($event)"
+              (loadImageFailed)="onCropperFailed()"
+            />
+          </div>
+        }
+        <div class="photo-actions">
+          @if (photo()) {
+            <p><b>Ajuste le cadre sur ta carte</b> : seule cette zone sera rangée dans le classeur.</p>
+            <div class="adjust">
+              <div class="frame small">
+                @if (preview()) {
+                  <img [src]="preview()" alt="Aperçu de la carte recadrée" />
+                }
+              </div>
+              <div class="rotate-buttons">
+                <button mat-icon-button type="button" (click)="rotate(-1)" [disabled]="uploading()" matTooltip="Quart de tour à gauche" aria-label="Tourner d'un quart de tour vers la gauche">
+                  <mat-icon>rotate_left</mat-icon>
+                </button>
+                <button mat-icon-button type="button" (click)="rotate(1)" [disabled]="uploading()" matTooltip="Quart de tour à droite" aria-label="Tourner d'un quart de tour vers la droite">
+                  <mat-icon>rotate_right</mat-icon>
+                </button>
+              </div>
+            </div>
+          } @else {
+            <div class="frame empty"><mat-icon aria-hidden="true">add_a_photo</mat-icon></div>
+            <p>
+              Photo de <b>{{ detail()?.name }}</b>, la tienne : tu pourras ensuite la recadrer au format de la carte.
+            </p>
+          }
+          <!-- Sélecteur natif caché, ouvert par un vrai bouton Material. -->
+          <input #fileInput class="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" (change)="choosePhoto($event)" />
+          <button mat-stroked-button type="button" (click)="fileInput.click()" [disabled]="uploading()">
+            <mat-icon>upload</mat-icon>
+            {{ photo() ? 'Changer de photo' : 'Choisir une photo' }}
+          </button>
+          <p class="muted small">JPEG, PNG ou WebP · 10 Mo maximum. La position GPS éventuelle est retirée.</p>
+          @if (photoError()) {
+            <p class="error" role="alert">{{ photoError() }}</p>
+          }
+          @if (uploading()) {
+            <mat-progress-bar mode="determinate" [value]="progress()" aria-label="Progression de l'envoi" />
+            <p class="small">{{ progress() < 100 ? 'Envoi : ' + progress() + ' %' : 'Traitement de la photo…' }}</p>
+          }
+          @if (uploadError()) {
+            <p class="error" role="alert">{{ uploadError() }}</p>
+          }
+        </div>
+      </div>
+
+      <div class="step-actions">
+        <button mat-button matStepperPrevious type="button" [disabled]="uploading()">Retour</button>
+        <button mat-flat-button type="button" (click)="upload()" [disabled]="!photo() || !crop() || uploading()">
+          Ajouter au classeur
+        </button>
+      </div>
+    </mat-step>
+  </mat-stepper>
+</mat-dialog-content>

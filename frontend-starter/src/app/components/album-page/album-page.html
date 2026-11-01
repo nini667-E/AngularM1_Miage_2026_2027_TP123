@@ -57,16 +57,79 @@
       }
     </header>
 
-    <div class="binder" aria-label="Classeur de l'album">
-      <div class="page">
-        @for (slot of slots; track slot) {
-          <span class="pocket" aria-hidden="true"></span>
+    <section class="binder" aria-label="Classeur de l'album">
+      <div class="binder-toolbar">
+        <mat-button-toggle-group
+          [value]="category()"
+          (change)="onCategory($event.value)"
+          aria-label="Filtrer les cartes par catégorie"
+          hideSingleSelectionIndicator
+        >
+          <mat-button-toggle value="">Toutes</mat-button-toggle>
+          <mat-button-toggle value="Pokémon">Pokémon</mat-button-toggle>
+          <mat-button-toggle value="Dresseur">Dresseur</mat-button-toggle>
+          <mat-button-toggle value="Énergie">Énergie</mat-button-toggle>
+        </mat-button-toggle-group>
+        @if (isOwner()) {
+          <button mat-flat-button (click)="addCard()">
+            <mat-icon>add</mat-icon>
+            Ajouter une carte
+          </button>
         }
-        <p class="binder-note">
-          <mat-icon aria-hidden="true">style</mat-icon>
-          L'ajout de cartes arrive à l'étape 3.
-        </p>
       </div>
-    </div>
+
+      @if (cardsError()) {
+        <p class="error" role="alert">{{ cardsError() }}</p>
+      }
+
+      <div class="page" [class.loading]="cardsLoading()">
+        @for (card of pockets(); track $index) {
+          @if (cardsLoading()) {
+            <span class="pocket skeleton" aria-hidden="true"></span>
+          } @else if (card) {
+            <button type="button" class="pocket card" (click)="openCard(card)" [attr.aria-label]="'Voir ' + card.name">
+              <img [src]="card.photo.thumb" [alt]="card.name" loading="lazy" (error)="onImageError()" />
+              <span class="sheen" aria-hidden="true"></span>
+              <span class="badges">
+                @for (type of card.types; track type) {
+                  <span class="type-dot" [style.--chip-color]="typeColor(type)" [matTooltip]="type">
+                    <mat-icon aria-hidden="true">{{ typeIcon(type) }}</mat-icon>
+                  </span>
+                }
+                <span class="category">{{ card.subCategory ?? card.category }}</span>
+              </span>
+              <span class="caption">{{ card.name }}</span>
+            </button>
+          } @else {
+            <span class="pocket empty" aria-hidden="true"></span>
+          }
+        }
+
+        @if (!cardsLoading() && total() === 0) {
+          <p class="binder-note">
+            <mat-icon aria-hidden="true">style</mat-icon>
+            @if (category()) {
+              Aucune carte de cette catégorie.
+            } @else if (isOwner()) {
+              Ton classeur est vide : ajoute ta première carte.
+            } @else {
+              Ce classeur est encore vide.
+            }
+          </p>
+        }
+      </div>
+
+      @if (total() > perPage) {
+        <mat-paginator
+          [length]="total()"
+          [pageSize]="perPage"
+          [pageIndex]="page() - 1"
+          [hidePageSize]="true"
+          (page)="onPage($event)"
+          aria-label="Pages du classeur"
+        />
+      }
+      <p class="credit">Données et images officielles des cartes : TCGdex.</p>
+    </section>
   }
 </section>

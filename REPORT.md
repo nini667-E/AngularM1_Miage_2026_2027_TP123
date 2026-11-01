@@ -8,14 +8,16 @@
 > Échanges avec l'assistant IA : [RAPPORT_IA_MODELE.md](RAPPORT_IA_MODELE.md), section V2.
 
 **État au 01/11/2026** : conception terminée (points 1 à 4 du sujet) ;
-étapes 0 (préparation), 1 (nettoyage, identité, navigation) et 2 (albums)
-terminées. Prochaine étape : 3 (cartes et classeur).
+étapes 0 (préparation), 1 (nettoyage, identité, navigation), 2 (albums)
+et 3 (cartes et classeur) terminées. Prochaine étape : 4 (amis).
 
 **Fonctionnalités disponibles** : inscription, connexion, profil ;
 navigation ; **albums** (créer, modifier, supprimer ; thème facultatif
 type / série / extension choisi dans le catalogue TCGdex et vérifié par le
-serveur ; visibilité publique ou privée ; page « Mes albums » et page
-d'album avec classeur).
+serveur ; visibilité publique ou privée ; page « Mes albums ») ;
+**cartes** (recherche dans le catalogue TCGdex, verdict de cohérence avec
+le thème, ajout avec la photo de sa carte, classeur 3×3 paginé et
+filtrable par catégorie, zoom photo / image officielle, retrait).
 
 ## 1. Le projet
 
@@ -82,9 +84,40 @@ chargement, emplacements vides façon pochettes de classeur.
 | Catalogue | API publique **TCGdex** (gratuite, sans clé, en français), **appelée par le backend** | le contrôle du thème doit être fait par le serveur (un client peut mentir) ; cache |
 | Type des Énergies | `types` de TCGdex s'il existe, sinon déduit du nom (variantes *Electrik*, *Lightning*…), sinon « sans type » | données TCGdex incomplètes pour les Énergies |
 | Série exclue | *Pokémon Pocket* (cartes numériques, impossibles à photographier) | — |
-| Affichage des images | **URL signées temporaires** (HMAC, 1 h) | `<img>` n'envoie pas le JWT ; cache et chargement différé |
+| Affichage des images | **URL signées temporaires** (HMAC-SHA256, échéance arrondie à l'heure : 1 à 2 h) | `<img>` n'envoie pas le JWT ; même URL pendant l'heure, donc cache du navigateur et chargement différé |
 | Traitement des images | **`sharp`** : vérification que c'est une image, miniature, redressement, suppression des métadonnées EXIF (GPS) | performance et vie privée |
+| Recadrage (01/11/2026) | **`ngx-image-cropper`** côté Angular (cadre au format carte 63:88, rotation par quarts de tour) ; seules les **coordonnées** sont envoyées, `sharp` découpe l'original côté serveur | pochettes remplies par la carte seule, sans perte de qualité |
 | V1 | audio supprimé ; authentification, upload avec progression, pagination, SnackBar réutilisés | V1 conservée via le tag `v1.0` |
+
+### 4.1 Utilisation de l'API TCGdex (étape 3)
+
+TCGdex est une base publique de toutes les cartes Pokémon (gratuite, sans
+clé, en français). Elle est interrogée **uniquement par le backend** ;
+seules ses images officielles, publiques, sont chargées directement par le
+navigateur. Données et images : propriété de Pokémon / Nintendo, utilisées
+ici dans un cadre non commercial, avec la mention « Données : TCGdex ».
+
+| Besoin | Requête TCGdex | Mémoire serveur |
+|---|---|---|
+| Listes du thème d'un album | `/types`, `/series`, `/series/:id` | 24 h |
+| Recherche de carte | `/cards?name=…&pagination:itemsPerPage=20` (+ `set.id=` si l'album a une extension) | 24 h par recherche |
+| Nom des extensions dans les résultats | `/sets` (202 extensions, un seul appel) | 24 h |
+| Détail d'une carte (catégorie, types) | `/cards/:id` | 24 h |
+| Série d'une carte (absente du détail) | `/sets/:id` | 24 h |
+
+**Limites de l'API gérées par le serveur.** La recherche ne renvoie ni le
+type ni l'extension (complétés par le serveur), ne sait pas filtrer par
+série (le serveur marque les cartes compatibles et les place en tête) et
+inclut les cartes Pocket (retirées). Le type des Énergies manque souvent :
+il est déduit du nom (mots français et anglais, établis sur les 130 noms
+d'Énergies réels). Certaines cartes n'ont pas d'image officielle
+(vignette de remplacement). TCGdex injoignable : `502`, message clair.
+
+**Pourquoi par le backend.** 1) La cohérence avec le thème doit être
+décidée par le serveur : il récupère lui-même la carte à partir de son
+identifiant, un client modifié ne peut donc pas mentir sur son type. 2) La
+mémoire : une carte n'est demandée qu'une fois. 3) Le serveur assemble une
+réponse prête à afficher. 4) Une seule adresse (`/api`) pour Angular.
 
 ## 5. Découpage du travail (point 4 du sujet)
 
@@ -93,7 +126,7 @@ chargement, emplacements vides façon pochettes de classeur.
 | 0 | Préparation : branche `V2`, règles, documents, base `card-vault` | ✅ 01/11/2026 |
 | 1 | Nettoyage de l'audio, identité Card Vault, thème sombre, navigation | ✅ 01/11/2026 |
 | 2 | Albums : CRUD, visibilité, thème | ✅ 01/11/2026 |
-| 3 | Cartes et classeur : catalogue, cohérence, photos, URL signées | à faire |
+| 3 | Cartes et classeur : catalogue, cohérence, photos, URL signées | ✅ 01/11/2026 |
 | 4 | Amis | à faire |
 | 5 | Partage et arrêt du partage | à faire |
 | 6 | Likes et commentaires | à faire |
@@ -112,6 +145,8 @@ Détail (tableaux attendu / observé) : [Tests.md](Tests.md), section V2.
 |---|---|---|---|---|
 | 1 (01/11/2026) | 6/6 | 23/23 (7 fichiers) | ✅ | ✅ 11 vérifications |
 | 2 (01/11/2026) | 29/29 (5 fichiers) | 56/56 (14 fichiers) | ✅ | ✅ 12 vérifications, vrai TCGdex, 2 comptes |
+| 3 (01/11/2026) | 66/66 (7 fichiers) | 78/78 (17 fichiers) | ✅ | ✅ 15 vérifications, vrai TCGdex, vraies photos de test (GPS, orientation), 2 comptes |
+| 3, recadrage (01/11/2026) | 74/74 (7 fichiers) | 84/84 (17 fichiers) | ✅ | ✅ photo couchée et décentrée : rotation, cadre ajusté, carte rangée droite au format carte |
 
 **Méthode.** Les tests frontend simulent le backend
 (`provideHttpClientTesting()`) ; les tests backend n'utilisent pas MongoDB
@@ -133,3 +168,12 @@ un cas non testé (album sans thème), ajouté. Et deux défauts ne pouvaient
 (ouvrir directement l'adresse d'un album donnait une page blanche) et une
 fenêtre de formulaire coupée. Les tests unitaires et la vérification
 navigateur sont complémentaires.
+
+**Enseignement de l'étape 3.** 22 bugs introduits volontairement, tous
+détectés après l'ajout d'un test : traiter la photo **avant** le contrôle du
+thème ne changeait pas le résultat final (les fichiers étaient nettoyés), un
+test rend désormais l'ordre des contrôles visible. Les photos sont testées
+avec de vraies images : redressement et suppression des données GPS sont
+vérifiés, pas supposés. Dans le navigateur : focus mal placé à l'ouverture
+de la fenêtre d'ajout (la frappe était perdue) et cartes compatibles noyées
+en fin de liste, deux défauts d'ergonomie corrigés.
