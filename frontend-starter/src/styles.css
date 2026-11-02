@@ -66,6 +66,17 @@ a { color: var(--mat-sys-primary); }
 
 .error { color: var(--mat-sys-error); }
 
+/* Texte lu par les lecteurs d'écran mais invisible (ex. nombre
+   d'invitations porté visuellement par un badge). */
+.cv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* SnackBar (rendue dans un overlay hors des composants, d'où un style
    global) : vert pour un succès, rouge pour une erreur. */
 .mat-mdc-snack-bar-container.snack-success {

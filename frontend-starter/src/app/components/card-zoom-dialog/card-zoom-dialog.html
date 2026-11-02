@@ -5,7 +5,7 @@
   <div class="images">
     <figure>
       <img class="photo" [src]="card.photo.full" [alt]="'Photo de ' + card.name" />
-      <figcaption>Ta photo</figcaption>
+      <figcaption>{{ data.ownerName ? 'Photo de ' + data.ownerName : 'Ta photo' }}</figcaption>
     </figure>
     @if (card.officialImage.large) {
       <figure>

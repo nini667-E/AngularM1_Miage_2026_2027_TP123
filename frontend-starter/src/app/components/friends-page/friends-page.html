@@ -1,0 +1,128 @@
+<section class="cv-page">
+  <header class="page-header">
+    <h1 class="cv-page-title">Amis</h1>
+    <p class="subtitle">Invite d’autres collectionneurs : tes amis pourront voir les albums que tu partages avec eux.</p>
+  </header>
+
+  <section class="search" aria-label="Trouver un collectionneur">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Trouver un collectionneur</mat-label>
+      <mat-icon matPrefix>person_search</mat-icon>
+      <input matInput [formControl]="query" placeholder="Son pseudo (2 caractères minimum)" autocomplete="off" />
+    </mat-form-field>
+
+    @if (searching()) {
+      <mat-progress-bar mode="indeterminate" aria-label="Recherche en cours" />
+    }
+    @if (searchError()) {
+      <p class="error search-error" role="alert">{{ searchError() }}</p>
+    }
+    @if (results(); as results) {
+      @if (results.length === 0) {
+        <p class="hint no-result">Aucun collectionneur ne correspond à « {{ searchedFor() }} ».</p>
+      } @else {
+        <ul class="people results" aria-label="Résultats de la recherche">
+          @for (result of results; track result.id) {
+            <li class="person">
+              <span class="avatar" aria-hidden="true">{{ initial(result.name) }}</span>
+              <span class="name">{{ result.name }}</span>
+              <app-friend-button
+                [userId]="result.id"
+                [userName]="result.name"
+                [relation]="relationOf(result)"
+                (changed)="reload()"
+              />
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement des amis" />
+  }
+  @if (error()) {
+    <p class="error lists-error" role="alert">{{ error() }}</p>
+  }
+
+  <mat-tab-group
+    [selectedIndex]="tab()"
+    (selectedIndexChange)="tab.set($event)"
+    mat-stretch-tabs="false"
+    animationDuration="0ms"
+  >
+    <mat-tab [label]="'Amis (' + friends().length + ')'">
+      @if (loaded() && friends().length === 0) {
+        <p class="hint empty">Pas encore d’amis : cherche un collectionneur par son pseudo pour l’inviter.</p>
+      }
+      <ul class="people friends">
+        @for (friend of friends(); track friend.user.id) {
+          <li class="person">
+            <span class="avatar" aria-hidden="true">{{ initial(friend.user.name) }}</span>
+            <span class="name">
+              {{ friend.user.name }}
+              <small>Amis depuis le {{ friend.since | date: 'dd/MM/yyyy' }}</small>
+            </span>
+            <button
+              mat-icon-button
+              class="remove"
+              (click)="confirmRemove(friend)"
+              [disabled]="isBusy(friend.user.id)"
+              matTooltip="Retirer de mes amis"
+              [attr.aria-label]="'Retirer ' + friend.user.name + ' de mes amis'"
+            >
+              <mat-icon>person_remove</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+    </mat-tab>
+
+    <mat-tab [label]="'Reçues (' + received().length + ')'">
+      @if (loaded() && received().length === 0) {
+        <p class="hint empty">Aucune invitation en attente.</p>
+      }
+      <ul class="people received">
+        @for (request of received(); track request.user.id) {
+          <li class="person">
+            <span class="avatar" aria-hidden="true">{{ initial(request.user.name) }}</span>
+            <span class="name">
+              {{ request.user.name }}
+              <small>Invitation du {{ request.createdAt | date: 'dd/MM/yyyy' }}</small>
+            </span>
+            <span class="actions">
+              <button mat-flat-button class="accept" (click)="accept(request)" [disabled]="isBusy(request.user.id)">
+                <mat-icon>how_to_reg</mat-icon>
+                Accepter
+              </button>
+              <button mat-button class="refuse" (click)="refuse(request)" [disabled]="isBusy(request.user.id)">
+                Refuser
+              </button>
+            </span>
+          </li>
+        }
+      </ul>
+    </mat-tab>
+
+    <mat-tab [label]="'Envoyées (' + sent().length + ')'">
+      @if (loaded() && sent().length === 0) {
+        <p class="hint empty">Aucune invitation envoyée en attente.</p>
+      }
+      <ul class="people sent">
+        @for (request of sent(); track request.user.id) {
+          <li class="person">
+            <span class="avatar" aria-hidden="true">{{ initial(request.user.name) }}</span>
+            <span class="name">
+              {{ request.user.name }}
+              <small>Invité le {{ request.createdAt | date: 'dd/MM/yyyy' }}</small>
+            </span>
+            <button mat-button class="cancel" (click)="cancel(request)" [disabled]="isBusy(request.user.id)">
+              Annuler l’invitation
+            </button>
+          </li>
+        }
+      </ul>
+    </mat-tab>
+  </mat-tab-group>
+</section>

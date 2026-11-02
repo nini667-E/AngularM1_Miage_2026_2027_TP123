@@ -26,6 +26,7 @@ const ALBUM: Album = {
     set: { id: 'sv03.5', name: '151', logo: null },
   },
   cardCount: 0,
+  sharedCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };

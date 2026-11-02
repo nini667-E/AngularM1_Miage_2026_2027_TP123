@@ -10,6 +10,8 @@ export interface CardZoomData {
   card: AlbumCard;
   /** Propriétaire de l'album : peut retirer la carte. */
   canDelete: boolean;
+  /** Pseudo du propriétaire si l'album n'est pas le mien (« Photo de X ») ; null pour mes albums. */
+  ownerName: string | null;
 }
 
 /** Résultat : 'delete' si le propriétaire demande à retirer la carte. */

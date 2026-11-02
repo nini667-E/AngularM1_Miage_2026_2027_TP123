@@ -12,12 +12,13 @@ import { AlbumPageComponent } from './album-page';
 const ALBUM: AlbumDetail = {
   id: 'a1',
   ownerId: 'owner',
-  owner: { id: 'owner', name: 'Sacha' },
+  owner: { id: 'owner', name: 'Sacha', relation: 'self' },
   title: 'Mes Dracaufeu',
   description: 'Les plus beaux',
   visibility: 'public',
   theme: { type: 'Feu', serie: null, set: null },
   cardCount: 3,
+  sharedCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };
@@ -73,6 +74,10 @@ describe('AlbumPageComponent', () => {
   /** Album affiché pour un utilisateur donné, avec une première page de cartes. */
   function showAlbum(currentUserId: string, cards: AlbumCard[] = [], album = ALBUM): void {
     TestBed.inject(AuthService).currentUser.set({ id: currentUserId, name: 'X', email: 'x@x', createdAt: '' });
+    // Comme le backend : relation « self » pour le propriétaire seulement.
+    if (currentUserId !== album.ownerId && album.owner.relation === 'self') {
+      album = { ...album, owner: { ...album.owner, relation: 'none' } };
+    }
     httpMock.expectOne('/api/albums/a1').flush(album);
     flushCards(cards, Math.max(cards.length, 0));
     fixture.detectChanges();
@@ -92,18 +97,93 @@ describe('AlbumPageComponent', () => {
   it('visiteur : ni Modifier, ni Supprimer, ni « Ajouter une carte »', () => {
     showAlbum('someone-else');
 
-    expect(el.querySelector('.actions')).toBeNull();
+    expect(text('.actions')).not.toContain('Modifier');
+    expect(el.querySelector(`.actions button[aria-label="Supprimer l'album"]`)).toBeNull();
     expect(text('.binder-toolbar')).not.toContain('Ajouter une carte');
     expect(text('.binder-note')).toContain('Ce classeur est encore vide');
   });
 
-  it('propriétaire : Modifier, Supprimer et « Ajouter une carte »', () => {
+  it('propriétaire : Modifier, Supprimer et « Ajouter une carte », pas de bouton d’amitié', () => {
     showAlbum('owner');
 
+    expect(el.querySelector('app-friend-button')).toBeNull();
     expect(text('.actions')).toContain('Modifier');
     expect(el.querySelector('.actions button[aria-label="Supprimer l\'album"]')).not.toBeNull();
     expect(text('.binder-toolbar')).toContain('Ajouter une carte');
     expect(text('.binder-note')).toContain('ajoute ta première carte');
+  });
+
+  it('propriétaire, profil pas encore rechargé (après F5) : pas de bouton d’amitié (relation self)', () => {
+    TestBed.inject(AuthService).currentUser.set(null);
+    httpMock.expectOne('/api/albums/a1').flush(ALBUM);
+    flushCards([]);
+    fixture.detectChanges();
+
+    expect(el.querySelector('app-friend-button')).toBeNull();
+  });
+
+  it('visiteur : bouton d’amitié selon la relation avec le propriétaire (étape 4)', () => {
+    showAlbum('someone-else', [], { ...ALBUM, owner: { ...ALBUM.owner, relation: 'received' } });
+    TestBed.inject(AuthService).token.set('jwt-de-test');
+
+    const button = el.querySelector<HTMLButtonElement>('.actions app-friend-button button');
+    expect(button?.textContent ?? '').toContain('Accepter');
+    button!.click();
+    const accept = httpMock.expectOne('/api/friends/requests/owner/accept');
+    expect(accept.request.method).toBe('POST');
+    accept.flush({ user: { id: 'owner', name: 'Sacha' }, relation: 'friend' });
+    // L'invitation acceptée change le badge de la barre du haut.
+    httpMock.expectOne('/api/friends/requests').flush({ received: [], sent: [] });
+    fixture.detectChanges();
+
+    expect(text('.actions')).toContain('Ami');
+    expect(el.querySelector('.actions button')).toBeNull();
+  });
+
+  // ------------------------------------------------- partage (étape 5)
+
+  it('propriétaire d’un album privé : « Partager » et nombre d’amis destinataires', () => {
+    showAlbum('owner', [], { ...ALBUM, visibility: 'private', sharedCount: 2 });
+
+    expect(el.querySelector('.actions button.share')).not.toBeNull();
+    expect(text('.eyebrow')).toContain('Album privé · partagé avec 2 amis');
+  });
+
+  it('album public, ou album d’un autre : pas de « Partager »', () => {
+    showAlbum('owner');
+    expect(el.querySelector('button.share')).toBeNull();
+  });
+
+  it('album privé partagé avec moi : « partagé avec toi », ni Partager ni Modifier', () => {
+    showAlbum('someone-else', [], { ...ALBUM, visibility: 'private', sharedCount: null });
+
+    expect(text('.eyebrow')).toContain('Album privé · partagé avec toi');
+    expect(el.querySelector('button.share')).toBeNull();
+    expect(text('.actions')).not.toContain('Modifier');
+  });
+
+  it('partage enregistré : nombre mis à jour et SnackBar ; tout décoché : « Partage arrêté »', () => {
+    showAlbum('owner', [], { ...ALBUM, visibility: 'private', sharedCount: 1 });
+    const open = vi.spyOn(component['dialog'], 'open');
+    const snack = vi.spyOn(component['snackBar'], 'open').mockReturnValue(undefined as never);
+
+    open.mockReturnValueOnce({ afterClosed: () => of({ ...ALBUM, visibility: 'private', sharedCount: 3 }) } as never);
+    el.querySelector<HTMLButtonElement>('button.share')!.click();
+    fixture.detectChanges();
+    expect(component.album()?.sharedCount).toBe(3);
+    expect(text('.eyebrow')).toContain('partagé avec 3 amis');
+    expect(snack).toHaveBeenLastCalledWith('Album partagé avec 3 amis.', 'OK', expect.anything());
+
+    open.mockReturnValueOnce({ afterClosed: () => of({ ...ALBUM, visibility: 'private', sharedCount: 0 }) } as never);
+    component.share();
+    fixture.detectChanges();
+    expect(text('.eyebrow')).not.toContain('partagé');
+    expect(snack).toHaveBeenLastCalledWith('Partage arrêté : l’album est visible par toi seul.', 'OK', expect.anything());
+
+    // Fenêtre annulée : rien ne change.
+    open.mockReturnValueOnce({ afterClosed: () => of(undefined) } as never);
+    component.share();
+    expect(snack).toHaveBeenCalledTimes(2);
   });
 
   it('404 (inexistant ou privé d’un autre) : « Album introuvable », aucune carte demandée', () => {
@@ -203,6 +283,18 @@ describe('AlbumPageComponent', () => {
 
     expect(component.album()?.cardCount).toBe(2);
     flushCards([]);
+  });
+
+  it('zoom : la photo est « la mienne » dans mon album, celle du propriétaire sinon', () => {
+    showAlbum('someone-else', [card('c1', 'Dracaufeu-ex')]);
+    const open = vi.spyOn(component['dialog'], 'open').mockReturnValue({ afterClosed: () => of(undefined) } as never);
+
+    component.openCard(component.cards()[0]);
+    expect(open.mock.calls[0][1]?.data).toEqual(expect.objectContaining({ canDelete: false, ownerName: 'Sacha' }));
+
+    component.album.set({ ...component.album()!, owner: { ...ALBUM.owner, relation: 'self' } });
+    component.openCard(component.cards()[0]);
+    expect(open.mock.calls[1][1]?.data).toEqual(expect.objectContaining({ ownerName: null }));
   });
 
   it('zoom fermé sans demande de retrait : aucune requête', () => {

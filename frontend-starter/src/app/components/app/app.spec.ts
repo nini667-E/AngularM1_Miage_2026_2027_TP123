@@ -62,6 +62,38 @@ describe('AppComponent (barre du haut)', () => {
     expect(el.querySelector('.avatar')?.textContent?.trim()).toBe('S');
   });
 
+  it('badge d’invitations : rechargé à chaque page, affiché sur « Amis » seulement s’il y en a', async () => {
+    localStorage.setItem('gpc_token', 'jwt-de-test');
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    httpMock
+      .expectOne('/api/users/me')
+      .flush({ id: 'u1', name: 'Sacha', email: 'sacha@example.com', createdAt: '2026-11-01' });
+    const router = TestBed.inject(Router);
+    const el = fixture.nativeElement as HTMLElement;
+    const friendsLink = () =>
+      Array.from(el.querySelectorAll('nav.links a')).find((a) => (a.textContent ?? '').includes('Amis'))!;
+
+    await router.navigateByUrl('/');
+    httpMock.expectOne('/api/friends/requests').flush({
+      received: [{ user: { id: 'u2', name: 'A' }, createdAt: '' }, { user: { id: 'u3', name: 'B' }, createdAt: '' }],
+      sent: [],
+    });
+    fixture.detectChanges();
+
+    const badges = Array.from(el.querySelectorAll('nav.links mat-icon:not(.mat-badge-hidden)'));
+    expect(badges.length).toBe(1);
+    expect(friendsLink().querySelector('.mat-badge-content')?.textContent ?? '').toBe('2');
+    expect(friendsLink().querySelector('.cv-visually-hidden')?.textContent ?? '').toContain('2 invitations reçues');
+
+    // Page suivante : nouvelle lecture ; plus d'invitation -> badge masqué.
+    await router.navigateByUrl('/?page=2');
+    httpMock.expectOne('/api/friends/requests').flush({ received: [], sent: [] });
+    fixture.detectChanges();
+    expect(el.querySelectorAll('nav.links mat-icon:not(.mat-badge-hidden)').length).toBe(0);
+    expect(friendsLink().querySelector('.cv-visually-hidden')).toBeNull();
+  });
+
   it('Déconnexion (menu profil) : vide la session et redirige vers /login', async () => {
     localStorage.setItem('gpc_token', 'jwt-de-test');
     const fixture = TestBed.createComponent(AppComponent);

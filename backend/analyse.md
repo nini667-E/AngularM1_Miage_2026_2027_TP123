@@ -8,6 +8,12 @@
 > **01/11/2026 — V2, étape 1** : la partie audio de la V1 (modèle `Track`,
 > routes `/api/tracks`, upload Multer audio) a été retirée ; sa description
 > reste consultable dans la version taguée `v1.0` de ce fichier.
+>
+> **02/11/2026 — V2, étape 4** : amis et invitations (modèle `Friendship`,
+> service `friends.js`, routes `/api/users/search` et `/api/friends`), §4.7.
+> **02/11/2026 — V2, étape 5** : partage des albums privés avec des amis
+> (`canView` étendu, routes `/api/albums/shared` et `/api/albums/:id/shares`,
+> partages arrêtés au retrait d'un ami), §4.8.
 
 ## 1. Vue d'ensemble
 
@@ -18,7 +24,10 @@ l'étape 3 de la V2, elle gère l'inscription, la connexion, le profil, les
 **albums**, le **catalogue de cartes** (API publique TCGdex, interrogée par
 le serveur) et les **cartes** rangées dans les albums, avec leur **photo**
 (traitée par `sharp`, stockée sur le disque local, servie par URL signées).
-Les fonctions sociales arrivent aux étapes 4 à 7.
+Depuis l'étape 4, elle gère aussi les **amis** (recherche d'utilisateurs
+par pseudo, invitations, acceptation, refus, retrait), et depuis l'étape 5
+le **partage** des albums privés avec des amis choisis. Réactions et
+activité arrivent aux étapes 6 et 7.
 
 ### 1.1 Stack technique
 
@@ -45,27 +54,32 @@ backend/
 │   ├── server.js         # Point d'entrée : connexion Mongo + écoute HTTP
 │   ├── config.js         # UPLOADS (dossier des photos) et SECRET (JWT + signatures d'images)
 │   ├── errors.js         # HttpError (erreur métier portant son code HTTP)
-│   ├── access.js         # Règles d'accès aux albums : isOwner, canView
+│   ├── access.js         # Règles d'accès aux albums : isOwner, isSharedWith, canView
 │   ├── models/
 │   │   ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
 │   │   ├── Album.js      # Album (visibilité, thème, sharedWith, cardCount)
-│   │   └── Card.js       # Carte d'un album (fiche TCGdex recopiée + photo)
+│   │   ├── Card.js       # Carte d'un album (fiche TCGdex recopiée + photo)
+│   │   └── Friendship.js # Lien d'amitié : invitation en attente ou amis (étape 4)
 │   ├── routes/
 │   │   ├── albums.js     # /api/albums (CRUD, 409 de changement de thème, cascade)
 │   │   ├── cards.js      # /api/albums/:id/cards, /api/cards/:id, /api/images
-│   │   └── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
+│   │   ├── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
+│   │   └── friends.js    # /api/users/search, /api/friends (amis et invitations)
 │   └── services/
 │       ├── tcgdex.js     # Accès à TCGdex (mémoire, Pocket exclue, 502)
 │       ├── theme.js      # Validation du thème d'un album
 │       ├── card-info.js  # Fiche d'une carte, type des Énergies, cohérence avec le thème
+│       ├── friends.js    # relationOf, relationBetween, areFriends, friendIds
 │       └── images.js     # sharp + URL signées (HMAC-SHA256)
 ├── data/uploads/         # Photos WebP (hors Git), jamais servies directement
-├── test/                 # 66 tests node:test (sans MongoDB ni vrai TCGdex)
+├── test/                 # 102 tests node:test (sans MongoDB ni vrai TCGdex)
 │   ├── helpers.js        # serveur de test, tokens, faux TCGdex (cartes, recherche)
 │   ├── api.test.js, access.test.js, catalog.test.js, albums.test.js
 │   ├── card-info.test.js # type des Énergies, règles de cohérence
 │   ├── images.test.js    # vraies images : redressement, EXIF/GPS, tailles, signatures
-│   └── cards.test.js     # recherche, détail, ajout avec photo, classeur, images, suppressions
+│   ├── cards.test.js     # recherche, détail, ajout avec photo, classeur, images, suppressions
+│   ├── friends.test.js   # relations, recherche d'utilisateurs, invitations, amis (étape 4)
+│   └── shares.test.js    # partage : canView, liste, partager / arrêter, partagés avec moi (étape 5)
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
@@ -87,7 +101,7 @@ flowchart LR
     end
 
     subgraph Storage["Stockage"]
-        DB[(MongoDB Atlas\nbase card-vault\nusers, albums, cards)]
+        DB[(MongoDB Atlas\nbase card-vault\nusers, albums, cards,\nfriendships)]
         FS[(Disque\ndata/uploads\nphotos WebP)]
     end
 
@@ -135,7 +149,7 @@ erDiagram
         string description "500 max"
         string visibility "private | public (défaut private)"
         object theme "type?, serie {id,name,logo}?, set {id,name,logo}?"
-        ObjectId[] sharedWith "ref User (étape 5)"
+        ObjectId[] sharedWith "ref User : amis destinataires (étape 5)"
         number cardCount "défaut 0"
         date createdAt
         date updatedAt
@@ -156,7 +170,17 @@ erDiagram
         object photo "thumb, full (select:false)"
         date createdAt
     }
+    FRIENDSHIP {
+        ObjectId _id PK
+        ObjectId requester FK "ref User : qui invite"
+        ObjectId recipient FK "ref User : qui est invité"
+        string pair UK "ids triés : un seul lien par paire"
+        string status "pending | accepted"
+        date acceptedAt
+        date createdAt
+    }
     USER ||--o{ ALBUM : "possède (ownerId)"
+    USER ||--o{ FRIENDSHIP : "invite / est invité"
     ALBUM ||--o{ CARD : "contient (albumId)"
 ```
 
@@ -171,14 +195,23 @@ erDiagram
   avec leur **nom et leur logo** (recopiés depuis TCGdex au moment de
   l'enregistrement) : l'affichage n'a jamais besoin du catalogue. Un index
   `{ ownerId: 1, updatedAt: -1 }` sert la liste « Mes albums ».
-  `sharedWith` (amis destinataires d'un partage) est prévu pour l'étape 5
-  et n'est pas exposé par `toPublic()`.
+  `sharedWith` contient les amis avec qui un album privé est partagé
+  (étape 5) ; il n'est jamais exposé : `toPublic(viewerId)` donne seulement
+  `sharedCount`, et au propriétaire seulement (`null` pour les autres). Un
+  second index `{ sharedWith: 1, updatedAt: -1 }` sert la liste
+  « Partagés avec moi ».
 - **Card** (`src/models/Card.js`, étape 3) : la fiche TCGdex est **recopiée
   à l'ajout** (catégorie, types calculés, extension, série…), comme pour le
   thème de l'album : afficher un classeur n'interroge jamais TCGdex. Les noms
   des fichiers de la photo ont `select: false` : ils ne sortent jamais de
   l'API (URL signées à la place). Index `{ albumId: 1, createdAt: 1 }` pour
   le classeur. Doublons autorisés.
+- **Friendship** (`src/models/Friendship.js`, étape 4) : un document par
+  **paire** d'utilisateurs. `pair` (les deux identifiants triés, calculé à
+  la validation) porte un **index unique** : même si les deux s'invitent au
+  même instant, un seul lien peut exister. `pending` = invitation de
+  `requester` en attente, `accepted` = amis. Un refus, une annulation ou un
+  retrait **supprime** le document (pas de statut « refusé »).
 - `toPublic()` construit l'objet réellement envoyé au frontend (transforme
   `_id` en `id` string, retire les champs internes).
 
@@ -310,12 +343,14 @@ quels dans l'album.
 | Fonction | Règle (étape 2) | Utilisée par |
 |---|---|---|
 | `isOwner(album, userId)` | `album.ownerId` = identité du token (comparaison en chaîne, ObjectId vs string) | `PUT /albums/:id` |
-| `canView(album, userId)` | propriétaire, **ou** album `public` | `GET /albums/:id` |
+| `canView(album, userId)` | propriétaire, **ou** album `public`, **ou** utilisateur présent dans `sharedWith` (étape 5) | `GET /albums/:id`, cartes, URL signées des photos |
+| `isSharedWith(album, userId)` | `userId` figure dans `sharedWith` (étape 5) | `canView` |
 
 `DELETE` applique la même règle directement dans la requête
 (`findOneAndDelete({ _id, ownerId: req.auth.sub })`). Refus = **`404`**,
 jamais `403` : un utilisateur ne peut pas savoir si un album privé existe.
-L'étape 5 étendra `canView` au partage (`sharedWith`).
+Depuis l'étape 5, `canView` inclut le partage ; l'amitié n'y est pas
+revérifiée, car retirer un ami le retire de `sharedWith` (§4.8).
 
 ### 4.4 Routes (`routes/albums.js`, `routes/catalog.js`)
 
@@ -438,6 +473,93 @@ sequenceDiagram
 deux fichiers et décrémente `cardCount` ; `DELETE /albums/:id` supprime
 l'album, toutes ses cartes et leurs fichiers.
 
+### 4.7 Amis et invitations (`routes/friends.js`, `services/friends.js`, étape 4)
+
+**Relation.** `relationOf(lien, moi)` traduit un lien selon le point de
+vue : `none` (aucun lien), `sent` (j'ai invité), `received` (on m'a
+invité), `friend`. `relationBetween(moi, autre)` cherche le lien par sa clé
+de paire et renvoie `self` pour soi-même, sans requête. `areFriends` et
+`friendIds` serviront au partage (étape 5), aux réactions (6) et à
+l'activité (7).
+
+**Routes** (détail : `../API_CONTRACT.md`) :
+- `GET /api/users/search?q=` : pseudo contenant `q` (2 caractères minimum,
+  saisie **échappée** avant d'être placée dans `$regex` : `.*` est cherché
+  tel quel), moi exclu, 20 résultats, chacun avec sa relation. Seuls `id`
+  et `name` d'un autre utilisateur sortent de l'API, **jamais son email** ;
+- `GET /api/friends`, `GET /api/friends/requests` : listes ;
+- `POST /api/friends/requests` : invitation ;
+- `POST /api/friends/requests/:userId/accept` ; `DELETE
+  /api/friends/requests/:userId` (refus ou annulation) ; `DELETE
+  /api/friends/:userId` (retrait).
+
+L'autre utilisateur est désigné par son identifiant, l'utilisateur
+connecté par le token. Chaque écriture est **une seule requête filtrée**
+qui contient la clé de paire (donc forcément l'utilisateur du token) :
+
+| Action | Filtre | Pourquoi |
+|---|---|---|
+| accepter | `{ pair, status: 'pending', recipient: moi }` | seul l'invité accepte, et une seule fois |
+| refuser / annuler | `{ pair, status: 'pending' }` | l'un ou l'autre membre ; ne touche jamais une amitié |
+| retirer | `{ pair, status: 'accepted' }` | ne touche jamais une invitation |
+
+```mermaid
+sequenceDiagram
+    participant A as Alice (Angular)
+    participant R as POST /api/friends/requests
+    participant M as Friendship
+
+    A->>R: { userId: Bob } + JWT d'Alice
+    R->>R: Bob = Alice ? 400 ; Bob existe ? sinon 404
+    R->>M: findOne({ pair: "alice:bob" })
+    alt déjà amis ou déjà invité
+        R-->>A: 409
+    else Bob avait invité Alice (invitations croisées)
+        R->>M: findOneAndUpdate({ pair, pending, recipient: Alice }) : accepted
+        R-->>A: 200 { relation: "friend" }
+    else aucun lien
+        R->>M: create({ requester: Alice, recipient: Bob })
+        note right of M: index unique sur pair :<br/>invitation simultanée = 409
+        R-->>A: 201 { relation: "sent" }
+    end
+```
+
+**Page d'album.** `GET /api/albums/:id` ajoute `owner.relation` (calculée
+en parallèle de la lecture du propriétaire) pour afficher le bouton
+« Inviter en ami » sans requête supplémentaire.
+
+### 4.8 Partage des albums privés (`routes/albums.js`, étape 5)
+
+Un album privé devient une **pièce fermée à clé** dont le propriétaire
+distribue des doubles à certains amis (`sharedWith`). Comme les cartes et
+les URL signées passent déjà par `canView`, l'ami destinataire voit aussi
+le classeur et les photos, sans pouvoir rien modifier (`isOwner` reste
+exigé pour toute écriture).
+
+| Route | Ce qu'elle fait |
+|---|---|
+| `GET /api/albums/shared` | albums `{ visibility: 'private', sharedWith: moi }`, plus récents d'abord, avec le pseudo du propriétaire (`publicUsers`) ; déclarée **avant** `/:id` |
+| `GET /api/albums/:id/shares` | propriétaire seulement : `friendIds(moi)` → pseudos, chacun avec `shared` (présent dans `sharedWith`) |
+| `PUT /api/albums/:id/shares` | propriétaire seulement ; `userIds` doit être une liste de chaînes, **chacune un ami** (`friendIds`), sinon `400` ; doublons retirés ; la liste **remplace** `sharedWith` (liste vide = plus aucun partage) |
+
+**Retrait d'un ami** (`DELETE /api/friends/:userId`) : après la suppression
+du lien, deux `updateMany` avec `$pull` retirent l'autre de mes albums et
+me retirent des siens. Une nouvelle amitié ne rétablit pas les partages.
+
+**Visibilité qui change** : `sharedWith` est conservé quand l'album passe
+en public (il n'a alors pas d'effet) et reprend effet s'il redevient privé.
+
+```mermaid
+flowchart TD
+    A[GET /api/albums/:id par Bob] --> B{propriétaire ?}
+    B -- oui --> OK[200]
+    B -- non --> C{album public ?}
+    C -- oui --> OK
+    C -- non --> D{Bob dans sharedWith ?}
+    D -- oui --> OK
+    D -- non --> N[404 Album inconnu]
+```
+
 ---
 
 ## 5. Gestion des erreurs et journalisation
@@ -524,11 +646,13 @@ flowchart LR
     K --> P[(Disque : photos WebP)]
     A -->|6. img src signée\nsans JWT| I[/api/images/:id/:size/]
     I --> P
-    C --> E[(MongoDB card-vault:\nusers, albums)]
+    A -->|7. amis, invitations\n+ Bearer JWT| G[/api/users/search\n/api/friends/]
+    G --> E
+    C --> E[(MongoDB card-vault:\nusers, albums, cards,\nfriendships)]
     F --> E
 ```
 
-Les flux sociaux (étapes 4 à 7) seront ajoutés au fil des étapes de la V2.
+Les autres flux sociaux (étapes 5 à 7) seront ajoutés au fil des étapes de la V2.
 
 ---
 
@@ -553,3 +677,12 @@ Les flux sociaux (étapes 4 à 7) seront ajoutés au fil des étapes de la V2.
 - **01/11/2026** — V2, étape 3 (complément) : recadrage et rotation de la
   photo à l'ajout (`readAdjustments`, `processPhoto` avec `crop` et
   `rotation`), 74 tests (§4.6) ; message de démarrage renommé « Card Vault API » (reste de la V1).
+- **02/11/2026** — V2, étape 4 : modèle `Friendship` (clé de paire
+  unique), service `friends.js`, routes `/api/users/search` et
+  `/api/friends`, `owner.relation` dans `GET /api/albums/:id`, 91 tests
+  (§1, §1.2, §1.3, §2.1, §4.7, §8).
+- **02/11/2026** — V2, étape 5 : partage des albums privés (`isSharedWith`,
+  `canView` étendu, `toPublic(viewerId)` avec `sharedCount`, routes
+  `/api/albums/shared` et `/api/albums/:id/shares`, `publicUsers` et
+  `byName` déplacés dans `services/friends.js`, partages arrêtés au retrait
+  d'un ami), 102 tests (§1, §1.2, §2.1, §4.3, §4.8).

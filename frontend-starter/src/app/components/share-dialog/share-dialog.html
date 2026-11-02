@@ -1,0 +1,60 @@
+<h2 mat-dialog-title>Partager « {{ data.album.title }} »</h2>
+
+<mat-dialog-content>
+  <p class="hint">
+    Coche les amis qui pourront voir cet album privé. Décocher un ami arrête le partage : il ne le verra plus.
+  </p>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement de tes amis" />
+  }
+  @if (error()) {
+    <p class="error load-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (!loading() && !error() && shares().length === 0) {
+    <div class="no-friends">
+      <mat-icon aria-hidden="true">group_add</mat-icon>
+      <p>Tu n’as pas encore d’amis : le partage est réservé à tes amis.</p>
+      <a mat-stroked-button routerLink="/friends" mat-dialog-close>Trouver des amis</a>
+    </div>
+  }
+
+  @if (shares().length > 0) {
+    <mat-selection-list
+      class="friends"
+      aria-label="Amis avec qui partager l’album"
+      [disabled]="saving()"
+      (selectionChange)="onSelection($event.source.selectedOptions.selected)"
+    >
+      @for (share of shares(); track share.user.id) {
+        <mat-list-option [value]="share.user.id" [selected]="share.shared" togglePosition="before">
+          <span class="person">
+            <span class="avatar" aria-hidden="true">{{ initial(share.user.name) }}</span>
+            {{ share.user.name }}
+          </span>
+        </mat-list-option>
+      }
+    </mat-selection-list>
+    <p class="summary">
+      @switch (selected().size) {
+        @case (0) { Visible par toi seul }
+        @case (1) { Partagé avec 1 ami }
+        @default { Partagé avec {{ selected().size }} amis }
+      }
+    </p>
+  }
+
+  @if (saveError()) {
+    <p class="error save-error" role="alert">{{ saveError() }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close [disabled]="saving()">Annuler</button>
+  @if (shares().length > 0) {
+    <button mat-flat-button class="save" (click)="save()" [disabled]="saving() || !changed()">
+      {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </button>
+  }
+</mat-dialog-actions>

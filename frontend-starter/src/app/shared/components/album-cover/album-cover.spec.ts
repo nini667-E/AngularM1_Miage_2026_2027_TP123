@@ -12,6 +12,7 @@ const base: Album = {
   visibility: 'private',
   theme: { type: null, serie: null, set: null },
   cardCount: 0,
+  sharedCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };
@@ -69,5 +70,24 @@ describe('AlbumCoverComponent', () => {
   it('sans thème : puce « Collection libre »', () => {
     render({});
     expect(text('app-theme-chips')).toContain('Collection libre');
+  });
+
+  it('partage (étape 5) : nombre d’amis destinataires pour le propriétaire', () => {
+    render({ visibility: 'private', sharedCount: 2 });
+    expect(text('.visibility .sr-only')).toBe('Album privé, partagé avec 2 amis');
+    expect(text('.visibility mat-icon')).toBe('group');
+    render({ visibility: 'private', sharedCount: 1 });
+    expect(text('.visibility .sr-only')).toBe('Album privé, partagé avec 1 ami');
+    // Liste conservée mais inactive si l'album est public.
+    render({ visibility: 'public', sharedCount: 2 });
+    expect(text('.visibility .sr-only')).toBe('Album public');
+    expect(el.querySelector('.owner')).toBeNull();
+  });
+
+  it('album partagé avec moi : « par » son propriétaire, « partagé avec toi »', () => {
+    fixture.componentRef.setInput('owner', { id: 'u9', name: 'Ondine' });
+    render({ visibility: 'private', sharedCount: null });
+    expect(text('.owner')).toBe('par Ondine');
+    expect(text('.visibility .sr-only')).toBe('Album privé, partagé avec toi');
   });
 });

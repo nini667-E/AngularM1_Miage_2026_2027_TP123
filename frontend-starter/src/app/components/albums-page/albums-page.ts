@@ -6,15 +6,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Album } from '../../shared/models/album.model';
+import { MatTabsModule } from '@angular/material/tabs';
+import { Album, SharedAlbum } from '../../shared/models/album.model';
 import { AlbumService } from '../../shared/services/album.service';
 import { AlbumCoverComponent } from '../../shared/components/album-cover/album-cover';
 import { serverErrorMessage } from '../../shared/utils/http-error';
 import { ALBUM_DIALOG_CONFIG, AlbumFormDialogComponent } from '../album-form-dialog/album-form-dialog';
 
-/** « Mes albums » (V2, étape 2) : grille paginée des albums de l'utilisateur. */
+/**
+ * « Mes albums » (V2, étape 2) : grille paginée des albums de l'utilisateur ;
+ * onglet « Partagés avec moi » (étape 5) : albums privés que des amis
+ * partagent avec lui, chargés à la première ouverture de l'onglet.
+ */
 @Component({
-  imports: [MatButtonModule, MatIconModule, MatPaginatorModule, MatProgressBarModule, AlbumCoverComponent],
+  imports: [MatButtonModule, MatIconModule, MatPaginatorModule, MatProgressBarModule, MatTabsModule, AlbumCoverComponent],
   templateUrl: './albums-page.html',
   styleUrl: './albums-page.css',
 })
@@ -29,9 +34,47 @@ export class AlbumsPageComponent {
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly tab = signal(0);
+
+  // Onglet « Partagés avec moi » (étape 5).
+  readonly shared = signal<SharedAlbum[]>([]);
+  readonly sharedPage = signal(1);
+  readonly sharedTotal = signal(0);
+  readonly sharedLoading = signal(false);
+  readonly sharedLoaded = signal(false);
+  readonly sharedError = signal('');
 
   constructor() {
     this.load();
+  }
+
+  onTab(index: number): void {
+    this.tab.set(index);
+    // Rechargé à chaque ouverture : un ami a pu partager ou arrêter un partage.
+    if (index === 1) this.loadShared();
+  }
+
+  loadShared(): void {
+    this.sharedLoading.set(true);
+    this.sharedError.set('');
+    this.albumService.shared(this.sharedPage(), this.limit()).subscribe({
+      next: (response) => {
+        this.shared.set(response.items);
+        this.sharedTotal.set(response.total);
+        this.sharedLoading.set(false);
+        this.sharedLoaded.set(true);
+      },
+      error: (error: HttpErrorResponse) => {
+        console.error('[AlbumsPage] Albums partagés indisponibles', error);
+        this.sharedLoading.set(false);
+        this.sharedError.set(serverErrorMessage(error, 'Impossible de charger les albums partagés avec toi'));
+      },
+    });
+  }
+
+  onSharedPage(event: PageEvent): void {
+    this.sharedPage.set(event.pageIndex + 1);
+    this.loadShared();
   }
 
   load(): void {
@@ -65,6 +108,7 @@ export class AlbumsPageComponent {
         if (!album) return;
         this.snackBar.open(`Album « ${album.title} » créé.`, 'OK', { duration: 4000, panelClass: 'snack-success' });
         // Le nouvel album est le plus récent : il apparaît en tête de la page 1.
+        this.tab.set(0);
         this.page.set(1);
         this.load();
       });

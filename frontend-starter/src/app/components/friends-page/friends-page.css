@@ -1,0 +1,69 @@
+:host { display: block; }
+
+.page-header { margin-bottom: 1.5rem; }
+.page-header .cv-page-title { margin: 0; }
+.subtitle { margin: 0.25rem 0 0; color: var(--mat-sys-on-surface-variant); }
+
+.search {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  background: var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 16px;
+}
+.search mat-form-field { width: 100%; }
+.search mat-progress-bar { margin-top: 0.75rem; }
+
+.hint { margin: 1rem 0 0; color: var(--mat-sys-on-surface-variant); }
+.empty { padding: 1.5rem 0.25rem 0; }
+
+.people {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.results { margin-top: 1rem; }
+mat-tab-group .people { padding-top: 1rem; }
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--cv-border);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.02);
+}
+
+/* Même avatar que le menu profil : initiale sur fond or métallique. */
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--cv-bg);
+  font-weight: 700;
+  background: var(--cv-gold);
+}
+
+.name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  font: var(--mat-sys-title-small);
+  overflow-wrap: anywhere;
+}
+.name small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.25rem; }
+
+@media (max-width: 520px) {
+  .person { flex-wrap: wrap; }
+  .person .actions,
+  .person app-friend-button,
+  .person .cancel { margin-left: auto; }
+}

@@ -6,16 +6,16 @@
     } @else {
       <mat-icon class="emblem-icon" aria-hidden="true">{{ icon() }}</mat-icon>
     }
-    <span
-      class="visibility"
-      [matTooltip]="album().visibility === 'public' ? 'Public : visible par tous' : 'Privé : visible par toi seul'"
-    >
-      <mat-icon aria-hidden="true">{{ album().visibility === 'public' ? 'public' : 'lock' }}</mat-icon>
-      <span class="sr-only">{{ album().visibility === 'public' ? 'Album public' : 'Album privé' }}</span>
+    <span class="visibility" [matTooltip]="visibility().tooltip">
+      <mat-icon aria-hidden="true">{{ visibility().icon }}</mat-icon>
+      <span class="sr-only">{{ visibility().label }}</span>
     </span>
   </div>
   <div class="info">
     <h3>{{ album().title }}</h3>
+    @if (owner(); as owner) {
+      <p class="owner">par {{ owner.name }}</p>
+    }
     <p class="count">{{ cardLabel() }}</p>
     <app-theme-chips [theme]="album().theme" />
   </div>

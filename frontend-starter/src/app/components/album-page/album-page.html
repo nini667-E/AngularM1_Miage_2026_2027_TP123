@@ -31,8 +31,8 @@
       </div>
       <div class="details">
         <p class="eyebrow">
-          <mat-icon aria-hidden="true">{{ album.visibility === 'public' ? 'public' : 'lock' }}</mat-icon>
-          {{ album.visibility === 'public' ? 'Album public' : 'Album privé' }} · par {{ album.owner.name }}
+          <mat-icon aria-hidden="true">{{ visibility().icon }}</mat-icon>
+          {{ visibility().label }} · par {{ album.owner.name }}
         </p>
         <h1 class="cv-gold-text">{{ album.title }}</h1>
         @if (album.description) {
@@ -46,6 +46,12 @@
       </div>
       @if (isOwner()) {
         <div class="actions">
+          @if (album.visibility === 'private') {
+            <button mat-flat-button class="share" (click)="share()">
+              <mat-icon>share</mat-icon>
+              Partager
+            </button>
+          }
           <button mat-stroked-button (click)="edit()">
             <mat-icon>edit</mat-icon>
             Modifier
@@ -53,6 +59,11 @@
           <button mat-icon-button (click)="confirmDelete()" [disabled]="deleting()" matTooltip="Supprimer l'album" aria-label="Supprimer l'album">
             <mat-icon>delete</mat-icon>
           </button>
+        </div>
+      } @else if (album.owner.relation !== 'self') {
+        <!-- Album d'un autre collectionneur : l'inviter en ami (étape 4). -->
+        <div class="actions">
+          <app-friend-button [userId]="album.owner.id" [userName]="album.owner.name" [relation]="album.owner.relation" />
         </div>
       }
     </header>

@@ -15,6 +15,7 @@ const album = (id: string, title: string): Album => ({
   visibility: 'private',
   theme: { type: null, serie: null, set: null },
   cardCount: 0,
+  sharedCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 });
@@ -91,5 +92,44 @@ describe('AlbumsPageComponent (Mes albums)', () => {
     component.create();
 
     httpMock.expectNone((r) => r.url === '/api/albums/mine');
+  });
+
+  // ------------------------------------------- partagés avec moi (étape 5)
+
+  async function openSharedTab(): Promise<void> {
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('onglet « Partagés avec moi » : chargé à l’ouverture, couvertures avec le propriétaire', async () => {
+    flushPage([album('a1', 'Mes Feu')]);
+    httpMock.expectNone((r) => r.url === '/api/albums/shared');
+
+    await openSharedTab();
+    const req = httpMock.expectOne((r) => r.url === '/api/albums/shared');
+    expect(req.request.params.get('page')).toBe('1');
+    req.flush({ items: [{ ...album('s1', 'Les Psy d’Ondine'), sharedCount: null, owner: { id: 'u2', name: 'Ondine' } }], page: 1, limit: 12, total: 1, pages: 1 });
+    fixture.detectChanges();
+
+    const covers = Array.from(el.querySelectorAll('.shared app-album-cover'));
+    expect(covers.length).toBe(1);
+    expect(covers[0].querySelector('.owner')?.textContent ?? '').toBe('par Ondine');
+    expect(covers[0].querySelector('a')?.getAttribute('href')).toBe('/albums/s1');
+  });
+
+  it('onglet « Partagés avec moi » vide : message explicatif ; erreur : message', async () => {
+    flushPage([]);
+    await openSharedTab();
+    httpMock.expectOne((r) => r.url === '/api/albums/shared').flush({ items: [], page: 1, limit: 12, total: 0, pages: 1 });
+    fixture.detectChanges();
+    expect(el.querySelector('.shared-empty h2')?.textContent ?? '').toContain('Aucun album partagé avec toi');
+
+    fixture.componentInstance.loadShared();
+    httpMock.expectOne((r) => r.url === '/api/albums/shared').error(new ProgressEvent('error'));
+    fixture.detectChanges();
+    expect(el.querySelector('.shared-error')?.textContent ?? '').toContain('Impossible de charger les albums partagés');
+    expect(el.querySelector('.shared-empty')).toBeNull();
   });
 });

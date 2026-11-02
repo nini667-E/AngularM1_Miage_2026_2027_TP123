@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { isOwner } from "../access.js";
 
 export const VISIBILITIES = ["private", "public"];
 export const TITLE_MAX = 60;
@@ -28,7 +29,8 @@ const schema = new mongoose.Schema(
     // Privé par défaut : on construit son album avant de le montrer.
     visibility: { type: String, enum: VISIBILITIES, default: "private" },
     theme: { type: themeSchema, default: () => ({}) },
-    // Amis avec qui un album privé est partagé (étape 5).
+    // Amis avec qui un album privé est partagé (étape 5). Conservé si
+    // l'album devient public : il reprend effet s'il redevient privé.
     sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     cardCount: { type: Number, default: 0, min: 0 },
   },
@@ -37,11 +39,17 @@ const schema = new mongoose.Schema(
 
 // Liste « Mes albums » : les albums d'un utilisateur, les plus récents d'abord.
 schema.index({ ownerId: 1, updatedAt: -1 });
+// « Partagés avec moi » (étape 5).
+schema.index({ sharedWith: 1, updatedAt: -1 });
 
 const publicRef = (ref) => (ref ? { id: ref.id, name: ref.name ?? null, logo: ref.logo ?? null } : null);
 
-/** Champs exposés par l'API (sharedWith n'est pas encore exposé). */
-schema.methods.toPublic = function () {
+/**
+ * Champs exposés par l'API. `viewerId` : utilisateur du token. Seul le
+ * propriétaire reçoit le nombre d'amis destinataires (`sharedCount`) ; la
+ * liste elle-même n'est donnée que par GET /albums/:id/shares.
+ */
+schema.methods.toPublic = function (viewerId) {
   return {
     id: this.id,
     ownerId: String(this.ownerId),
@@ -54,6 +62,7 @@ schema.methods.toPublic = function () {
       set: publicRef(this.theme?.set),
     },
     cardCount: this.cardCount,
+    sharedCount: isOwner(this, viewerId) ? (this.sharedWith?.length ?? 0) : null,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

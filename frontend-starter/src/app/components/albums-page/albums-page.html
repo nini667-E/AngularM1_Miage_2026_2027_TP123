@@ -12,42 +12,88 @@
     </button>
   </header>
 
-  @if (loading()) {
-    <mat-progress-bar mode="indeterminate" aria-label="Chargement des albums" />
-  }
+  <mat-tab-group
+    [selectedIndex]="tab()"
+    (selectedIndexChange)="onTab($event)"
+    mat-stretch-tabs="false"
+    animationDuration="0ms"
+  >
+    <mat-tab label="Mes albums">
+      <div class="tab-body">
+        @if (loading()) {
+          <mat-progress-bar mode="indeterminate" aria-label="Chargement des albums" />
+        }
 
-  @if (error()) {
-    <p class="error" role="alert">{{ error() }}</p>
-  }
+        @if (error()) {
+          <p class="error" role="alert">{{ error() }}</p>
+        }
 
-  @if (!loading() && !error() && albums().length === 0) {
-    <div class="empty">
-      <div class="empty-binder" aria-hidden="true">
-        @for (slot of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track slot) {
-          <span></span>
+        @if (!loading() && !error() && albums().length === 0) {
+          <div class="empty">
+            <div class="empty-binder" aria-hidden="true">
+              @for (slot of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track slot) {
+                <span></span>
+              }
+            </div>
+            <h2>Ton coffre est encore vide</h2>
+            <p>Crée ton premier album pour commencer à ranger tes cartes.</p>
+            <button mat-flat-button (click)="create()">
+              <mat-icon>add</mat-icon>
+              Créer mon premier album
+            </button>
+          </div>
+        } @else {
+          <ul class="grid">
+            @for (album of albums(); track album.id) {
+              <li><app-album-cover [album]="album" /></li>
+            }
+          </ul>
+          @if (total() > limit()) {
+            <mat-paginator
+              [length]="total()"
+              [pageSize]="limit()"
+              [pageIndex]="page() - 1"
+              [pageSizeOptions]="[12, 24, 48]"
+              (page)="onPage($event)"
+            />
+          }
         }
       </div>
-      <h2>Ton coffre est encore vide</h2>
-      <p>Crée ton premier album pour commencer à ranger tes cartes.</p>
-      <button mat-flat-button (click)="create()">
-        <mat-icon>add</mat-icon>
-        Créer mon premier album
-      </button>
-    </div>
-  } @else {
-    <ul class="grid">
-      @for (album of albums(); track album.id) {
-        <li><app-album-cover [album]="album" /></li>
-      }
-    </ul>
-    @if (total() > limit()) {
-      <mat-paginator
-        [length]="total()"
-        [pageSize]="limit()"
-        [pageIndex]="page() - 1"
-        [pageSizeOptions]="[12, 24, 48]"
-        (page)="onPage($event)"
-      />
-    }
-  }
+    </mat-tab>
+
+    <mat-tab label="Partagés avec moi">
+      <div class="tab-body shared">
+        @if (sharedLoading()) {
+          <mat-progress-bar mode="indeterminate" aria-label="Chargement des albums partagés" />
+        }
+
+        @if (sharedError()) {
+          <p class="error shared-error" role="alert">{{ sharedError() }}</p>
+        }
+
+        @if (sharedLoaded() && !sharedError() && shared().length === 0) {
+          <div class="empty shared-empty">
+            <mat-icon class="empty-icon" aria-hidden="true">group</mat-icon>
+            <h2>Aucun album partagé avec toi</h2>
+            <p>Quand un ami partage un de ses albums privés avec toi, il apparaît ici.</p>
+          </div>
+        } @else {
+          <ul class="grid">
+            @for (album of shared(); track album.id) {
+              <li><app-album-cover [album]="album" [owner]="album.owner" /></li>
+            }
+          </ul>
+          @if (sharedTotal() > limit()) {
+            <mat-paginator
+              [length]="sharedTotal()"
+              [pageSize]="limit()"
+              [pageIndex]="sharedPage() - 1"
+              [hidePageSize]="true"
+              (page)="onSharedPage($event)"
+            />
+          }
+        }
+      </div>
+    </mat-tab>
+  </mat-tab-group>
 </section>

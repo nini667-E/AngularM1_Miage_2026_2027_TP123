@@ -17,12 +17,14 @@ import { AlbumService } from '../../shared/services/album.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { CardService } from '../../shared/services/card.service';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/components/confirm-dialog/confirm-dialog';
+import { FriendButtonComponent } from '../../shared/components/friend-button/friend-button';
 import { ThemeChipsComponent } from '../../shared/components/theme-chips/theme-chips';
 import { typeColor, typeIcon } from '../../shared/utils/card-types';
 import { serverErrorMessage } from '../../shared/utils/http-error';
 import { AddCardDialogComponent, AddCardDialogData } from '../add-card-dialog/add-card-dialog';
 import { ALBUM_DIALOG_CONFIG, AlbumFormDialogComponent } from '../album-form-dialog/album-form-dialog';
 import { CardZoomData, CardZoomDialogComponent, CardZoomResult } from '../card-zoom-dialog/card-zoom-dialog';
+import { ShareDialogComponent, ShareDialogData } from '../share-dialog/share-dialog';
 
 /** Une page de classeur = 9 pochettes, comme un vrai classeur de collection. */
 export const CARDS_PER_PAGE = 9;
@@ -39,6 +41,7 @@ export const CARDS_PER_PAGE = 9;
     MatProgressBarModule,
     MatTooltipModule,
     ThemeChipsComponent,
+    FriendButtonComponent,
   ],
   templateUrl: './album-page.html',
   styleUrl: './album-page.css',
@@ -77,6 +80,19 @@ export class AlbumPageComponent {
   readonly isOwner = computed(() => {
     const album = this.album();
     return Boolean(album) && album!.ownerId === this.auth.currentUser()?.id;
+  });
+  /**
+   * Visibilité affichée dans l'en-tête, partage compris (étape 5). Le
+   * propriétaire est reconnu par `owner.relation` (fiable même avant le
+   * rechargement du profil).
+   */
+  protected readonly visibility = computed(() => {
+    const album = this.album();
+    if (!album || album.visibility === 'public') return { icon: 'public', label: 'Album public' };
+    if (album.owner.relation !== 'self') return { icon: 'group', label: 'Album privé · partagé avec toi' };
+    const n = album.sharedCount ?? 0;
+    if (n === 0) return { icon: 'lock', label: 'Album privé' };
+    return { icon: 'group', label: `Album privé · partagé avec ${n === 1 ? '1 ami' : `${n} amis`}` };
   });
   protected readonly color = computed(() => typeColor(this.album()?.theme.type));
   protected readonly icon = computed(() => typeIcon(this.album()?.theme.type));
@@ -179,7 +195,12 @@ export class AlbumPageComponent {
     this.dialog
       .open<CardZoomDialogComponent, CardZoomData, CardZoomResult>(CardZoomDialogComponent, {
         maxWidth: '95vw',
-        data: { card, canDelete: this.isOwner() },
+        data: {
+          card,
+          canDelete: this.isOwner(),
+          // Album d'un autre (public ou partagé) : la photo est la sienne, pas la mienne.
+          ownerName: this.album()?.owner.relation === 'self' ? null : (this.album()?.owner.name ?? null),
+        },
       })
       .afterClosed()
       .subscribe((result) => {
@@ -215,6 +236,32 @@ export class AlbumPageComponent {
             });
           },
         });
+      });
+  }
+
+  /** Fenêtre de partage d'un album privé (étape 5). */
+  share(): void {
+    const album = this.album();
+    if (!album) return;
+    this.dialog
+      .open<ShareDialogComponent, ShareDialogData, Album>(ShareDialogComponent, {
+        width: '480px',
+        maxWidth: '95vw',
+        data: { album },
+      })
+      .afterClosed()
+      .subscribe((saved) => {
+        if (!saved) return;
+        const before = album.sharedCount ?? 0;
+        const after = saved.sharedCount ?? 0;
+        this.album.set({ ...album, sharedCount: after });
+        const message =
+          after > 0
+            ? `Album partagé avec ${after === 1 ? '1 ami' : `${after} amis`}.`
+            : before > 0
+              ? 'Partage arrêté : l’album est visible par toi seul.'
+              : 'Partage enregistré.';
+        this.snackBar.open(message, 'OK', { duration: 4000, panelClass: 'snack-success' });
       });
   }
 

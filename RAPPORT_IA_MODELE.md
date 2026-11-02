@@ -2942,3 +2942,267 @@ redressement → rotation → découpage doit être le même des deux côtés ;
 pourquoi un test de demi-tour ne prouve pas le sens de rotation ; pourquoi
 les tests de composant ne dessinent pas l'image (jsdom) et ce que fait le
 fichier `test-setup.ts`.
+
+### Entrée V2.4 — Étape 4 : amis et invitations (02/11/2026)
+
+**Objectif.** Couvrir l'exigence du sujet « inviter / ajouter / supprimer
+des amis » : rechercher un collectionneur, l'inviter, accepter ou refuser
+une invitation, annuler la sienne, retirer un ami, et voir les invitations
+reçues. Le lien d'amitié servira ensuite au partage (étape 5), aux
+réactions (étape 6) et à l'activité (étape 7).
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets).** L'étape a commencé dans une **nouvelle conversation**, avec
+un prompt de reprise rédigé à la fin de la conversation précédente pour
+un assistant qui n'en connaît rien. Les identifiants des comptes de test
+ont été retirés ci-dessous.
+> Reprise du projet Card Vault (V2 du TP Angular M1 MIAGE). Avant de
+> répondre, lis : README.md, sujet du mini projet (fichier sujet TP4-5-6 en
+> .md), REPORT.md, compte-rendu/V2.md, API_CONTRACT.md, Tests.md,
+> backend/analyse.md, frontend-starter/analyse.md, et la fin de
+> RAPPORT_IA_MODELE.md (entrées V2.x).
+>
+> *(suivent : le contexte du dépôt et des étapes, les règles de travail,
+> les comptes de test — retirés ici — et les décisions déjà prises)*
+>
+> - Prochaine tâche : ÉTAPE 4 (amis). Commence par expliquer l'objectif,
+>   repérer les fichiers, proposer un plan, et poser tes questions de
+>   conception. Ne code rien avant que je valide.
+>
+> [Recherche : Par pseudo] [Refus : Supprimée, silencieux]
+> [Badge : Navigation + actions] [Bouton album : Oui]
+>
+> oui implémente
+
+**Démarche de l'agent.** Lecture des documents demandés et du code
+concerné (`access.js`, modèle `Album` et son champ `sharedWith` prévu pour
+l'étape 5, routes, page d'attente `/friends`, barre du haut). Ensuite :
+explication vulgarisée (« une lettre qui attend une réponse »), repérage
+des fichiers, plan backend / frontend / tests, puis quatre questions de
+conception. Une décision a été prise par défaut et annoncée comme telle :
+les invitations croisées sont acceptées automatiquement. Aucun code avant
+la validation.
+
+**Choix techniques.**
+- **Un document par paire d'utilisateurs**, avec une clé unique formée des
+  deux identifiants triés. Deux invitations envoyées au même instant ne
+  peuvent donc pas créer deux liens ; le second envoi reçoit un `409`.
+- **Chaque action est une seule requête filtrée** :
+  - accepter : `{ paire, pending, destinataire = token }` ;
+  - refuser ou annuler : `{ paire, pending }` ;
+  - retirer : `{ paire, accepted }`.
+
+  Personne ne peut agir sur le lien d'autres utilisateurs, et une action
+  ne peut pas toucher le mauvais type de lien.
+- **Écart avec le plan**, signalé ici : le plan prévoyait
+  `/friends/requests/:id`, mais toutes les routes désignent finalement
+  l'autre utilisateur par son `userId`. La paire suffit à retrouver le
+  lien, et le frontend connaît toujours l'identifiant de l'utilisateur,
+  jamais celui du lien.
+- **Confidentialité** : un autre utilisateur n'est décrit que par `id` et
+  `name`. La saisie de recherche est échappée avant d'être placée dans
+  `$regex`.
+- **Frontend** : le bouton d'amitié est un composant réutilisable
+  (`linkedSignal` sur la relation reçue) ; le badge lit le Signal
+  `FriendService.receivedCount`, rechargé à chaque `NavigationEnd`.
+
+**Vérifications réalisées.**
+- Backend 91/91 (+17), frontend 110/110 (+26), build sans avertissement.
+- **Vérification croisée : 27 bugs introduits volontairement** (13
+  backend, 14 frontend), par un script hors dépôt qui applique chaque bug,
+  relance les tests et restaure le fichier. Au premier passage, 26 sont
+  détectés et 1 ne l'est pas (voir erreur 1). Après l'ajout d'un test, les
+  27 sont détectés.
+- Harnais Playwright (scratchpad, hors dépôt), vraie base, trois comptes :
+  27 vérifications réussies (invitation, badge, refus silencieux,
+  réinvitation, `409`, acceptation, bouton sur un album, invitations
+  croisées, retrait confirmé, mobile, console sans JWT).
+- Relecture de chaque capture avant intégration.
+
+**Erreurs, bugs et décisions.**
+1. **Test manquant (vérification croisée)** : retirer la condition
+   `relation !== 'self'` du gabarit de la page d'album ne faisait échouer
+   aucun test. Dans les cas testés, `isOwner()` suffisait. Le cas réel
+   existe pourtant : juste après un F5, le profil n'est pas encore
+   rechargé et `isOwner()` est faux sur son propre album. Test ajouté ; il
+   échoue avec le bug.
+2. **Défaut vu seulement sur capture** : `matBadgeSize="small"` affiche un
+   simple point en Material 3. Le test, qui lit le nombre dans le DOM,
+   passait. Corrigé avec la taille standard, puis capture refaite.
+3. **Erreurs de l'agent, sans conséquence sur l'application** :
+   - un heredoc du shell a échoué à la création des fichiers de la page
+     Amis (fichiers écrits ensuite avec l'outil d'écriture) ;
+   - une apostrophe mal échappée a cassé un fichier de test ; le build l'a
+     signalé et elle a été corrigée ;
+   - dans le harnais, un sélecteur était ambigu : la zone de recherche et
+     son champ portent le même libellé.
+4. **Remarque hors étape** (notée dans `compte-rendu/V2.md`) : sur l'album
+   d'un autre, la barre surligne « Mes albums » et le lien de retour
+   s'appelle « Mes albums ». C'est le comportement des étapes 2 et 3, à
+   revoir aux étapes 7 et 8.
+
+**Fichiers effectivement modifiés.**
+- Backend : nouveaux `src/models/Friendship.js`, `src/services/friends.js`,
+  `src/routes/friends.js`, `test/friends.test.js` ; modifiés
+  `src/app.js`, `src/routes/albums.js` (`owner.relation`),
+  `test/albums.test.js`, `analyse.md`.
+- Frontend : nouveaux `components/friends-page/`,
+  `shared/components/friend-button/`, `shared/models/friend.model.ts`,
+  `shared/services/friend.service.ts`, avec leurs tests ; modifiés
+  `routes.ts`, `components/app/` (badge), `components/album-page/`
+  (bouton), `shared/models/album.model.ts`, `styles.css`
+  (`.cv-visually-hidden`), `routes.spec.ts`, `analyse.md`.
+- Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+  `compte-rendu/V2.md`, 10 captures `v2-etape4-*.png`,
+  `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` (91 et 110) et de
+`npm run build` ; tableau des vérifications dans le navigateur et
+captures dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.**
+- Pourquoi un seul document par paire, et à quoi sert la clé triée avec
+  son index unique.
+- Ce que signifient `sent` et `received` selon le point de vue.
+- Pourquoi chaque action est une requête filtrée qui contient la paire, et
+  pourquoi seul le destinataire peut accepter.
+- Pourquoi on échappe la saisie avant un `$regex`, et pourquoi on ne
+  renvoie jamais l'email d'un autre.
+- Ce que sont les invitations croisées.
+- Comment le badge se met à jour sans requête en arrière-plan.
+- Pourquoi un test peut passer alors que l'écran est faux (le badge en
+  point).
+
+### Entrée V2.5 — Étape 5 : partage des albums privés (02/11/2026)
+
+**Objectif.** Couvrir les exigences du sujet « un fichier privé […] on
+peut le partager avec des amis » et « on veut pouvoir stopper un
+partage » : partager un album privé avec des amis choisis, arrêter un
+partage, et retrouver les albums partagés avec soi.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets) :**
+> passe à l'étape 5 tout de suite et je testerais et on fera le git des deux en même temps
+>
+> [Où voir : Onglet dans Mes albums] [Si public : Conservée, inactive]
+> [Retrait ami : Non] [Démarrage : Oui, implémente directement]
+
+**Démarche de l'agent.** L'étape 4 n'a pas été commitée : elle le sera
+avec l'étape 5, à la demande de l'utilisateur. Le plan a quand même été
+présenté avant le code (règle du projet), en un seul message :
+- explication vulgarisée (« une pièce fermée à clé dont on distribue des
+  doubles ») ;
+- fichiers concernés, plan backend / frontend / tests ;
+- quatre questions, dont une demandant si les réponses valaient
+  validation du plan. L'utilisateur a choisi « implémente directement ».
+
+**Choix techniques.**
+- **Règle d'accès** : le partage est ajouté à la règle centrale `canView`
+  (`isSharedWith`). Les cartes et les URL signées des photos l'utilisaient
+  déjà ; aucune autre route n'a eu à changer.
+- **Amitié** : elle n'est pas revérifiée à chaque lecture. C'est le
+  retrait d'un ami qui nettoie les partages, avec un `$pull` dans les deux
+  sens.
+- **Partager** = remplacer **toute la liste** (`PUT /albums/:id/shares`).
+  Chaque identifiant doit être un ami. Une liste vide arrête tous les
+  partages. Ce choix colle à la fenêtre à cases à cocher : l'état envoyé
+  est exactement l'état affiché.
+- **Confidentialité** : la liste des destinataires ne sort jamais ; seul
+  le propriétaire reçoit leur nombre (`sharedCount`, `null` pour les
+  autres).
+- **Réorganisation** : `publicUsers` et `byName` sont passés de la route
+  des amis au service `friends.js`, pour être partagés avec les routes
+  d'albums.
+
+**Vérifications réalisées.**
+- Backend 102/102 (+11), frontend 125/125 (+15), build sans avertissement.
+- **Vérification croisée : 24 bugs introduits volontairement** (12
+  backend, 12 frontend) par le script hors dépôt de l'étape 4. Tous ont
+  été détectés dès le premier passage.
+- Harnais Playwright, vraie base, album privé « Deck Feu » (6 vraies
+  photos) : 28 vérifications réussies. Elles couvrent : partage,
+  non-ami refusé, droits du destinataire, photos chargées, passage
+  public puis privé, arrêt, retrait d'ami, mobile et console.
+- Relecture de chaque capture.
+
+**Erreurs, bugs et décisions.**
+1. **Erreurs de l'agent dans le harnais** (premier passage : 25 sur 27),
+   sans effet sur l'application :
+   - l'image était vérifiée avant la fin de son chargement ; la capture
+     montrait pourtant les 6 photos, et l'attente a été corrigée ;
+   - le `404` volontaire, après l'arrêt du partage, était compté comme une
+     erreur de console. Il est maintenant vérifié comme attendu.
+2. **Cas non vérifié dans le navigateur** : la fenêtre sans aucun ami,
+   car Demo n'a pas d'album privé et l'agent n'en a pas créé pour ne pas
+   modifier les données de démonstration. Le cas est couvert par un test
+   de composant.
+3. **Rappel** : le backend lancé par `npm start` ne recharge pas le code ;
+   il a été redémarré avant la vérification dans le navigateur.
+
+**Fichiers effectivement modifiés.**
+- Backend : `src/access.js`, `src/models/Album.js`, `src/routes/albums.js`,
+  `src/routes/friends.js`, `src/services/friends.js` ; tests : nouveau
+  `test/shares.test.js`, `test/friends.test.js` modifié ; `analyse.md`.
+- Frontend : nouveau `components/share-dialog/` (avec son test) ;
+  `album-page/`, `albums-page/`, `shared/components/album-cover/`,
+  `shared/models/album.model.ts`, `shared/services/album.service.ts` (et
+  leurs tests) ; données de test complétées (`sharedCount`) ;
+  `analyse.md`.
+- Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+  `compte-rendu/V2.md`, 7 captures `v2-etape5-*.png`,
+  `RAPPORT_IA_MODELE.md` (cette entrée).
+
+**Preuve de fonctionnement.** Sorties de `npm test` (102 et 125) et de
+`npm run build` ; tableau des vérifications dans le navigateur et
+captures dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.**
+- Pourquoi ajouter le partage à `canView` suffit pour que les cartes et
+  les photos suivent.
+- Pourquoi l'amitié n'est pas revérifiée à chaque lecture.
+- Pourquoi on envoie la liste complète plutôt que « ajouter / retirer un
+  ami ».
+- Pourquoi un destinataire ne voit pas les autres destinataires.
+- Ce qui se passe quand l'album passe en public puis redevient privé.
+- La limite des URL de photos déjà délivrées (valables jusqu'à 2 h après
+  l'arrêt du partage).
+
+### Entrée V2.5b — Correction : légende du zoom dans l'album d'un autre (02/11/2026)
+
+**Prompts (recopiés tels quels) :**
+> tu peux me renvoyer les logs des deux comptes de test
+>
+> ok c'est bon j'ai juste remarqué une petite incohérence, quand je vais
+> dans les albums partagés avec moi et que je clique sur une carte, il y a
+> écrit "ta carte" or c'est la carte de mon ami il faudrait remplacer ça
+> par "carte de pseudo de l'ami"
+
+**Démarche de l'agent.**
+- La première demande a été comprise comme « les identifiants de
+  connexion ». L'agent les a renvoyés, puisque l'utilisateur les lui avait
+  donnés, et a proposé les journaux du serveur si c'était le sens voulu.
+- Pour la seconde, l'agent a recherché le texte. Le libellé réel était
+  « **Ta photo** » (légende de la photo dans le zoom), pas « ta carte ».
+- L'agent a constaté que le défaut existait aussi, depuis l'étape 3, sur
+  les albums **publics** d'un autre utilisateur.
+- Correction faite directement, vu sa petite taille et la demande
+  explicite : la page transmet le pseudo du propriétaire au zoom, qui
+  affiche « Photo de X ». Le libellé suit le mot réel de l'écran
+  (« photo ») plutôt que « carte » : c'est bien la photo de l'ami, et la
+  carte officielle est à côté.
+
+**Vérifications.**
+- 2 tests ajoutés (127/127), build OK.
+- Les deux bugs réintroduits sont détectés par ces tests.
+- Navigateur avec les deux comptes, et capture.
+
+**Erreur ou incident.** Deux tests sans lien avec la correction ont
+dépassé la limite de 5 s pendant que la machine était chargée. Ils passent
+au calme, deux fois de suite. Rien n'a été modifié ; c'est noté dans
+`Tests.md`.
+
+**Fichiers effectivement modifiés.**
+- Frontend : `card-zoom-dialog/` (`.ts`, `.html`, `.spec.ts`),
+  `album-page/album-page.ts`, `album-page.spec.ts`, `analyse.md`.
+- Racine : `compte-rendu/V2.md`, `Tests.md`, capture
+  `v2-etape5-zoom-photo-ami.png`, cette entrée.

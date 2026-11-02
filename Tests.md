@@ -540,3 +540,172 @@ réponse `201` ; photo rangée de 316 × 441 (ratio 0,717, celui d'une carte),
 (390 px) sans débordement horizontal. **Trouvé à la capture** : les boutons
 de rotation (boutons texte sans texte) avaient leur icône décalée,
 remplacés par des boutons-icônes avec info-bulle.
+
+### Étape 4 — Amis et invitations (02/11/2026)
+
+**Backend — 8 fichiers de test, 91 tests** (+17), toujours sans MongoDB.
+Les méthodes du modèle `Friendship` (`find`, `findOne`, `create`,
+`findOneAndUpdate`, `findOneAndDelete`) et de `User` sont simulées ; les
+utilisateurs simulés **ont un email**, pour vérifier qu'il ne ressort
+jamais de l'API.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `friends.test.js` (17) | `pairKey` | même clé dans les deux sens, clés différentes pour deux paires | ✅ |
+| | `relationOf` | `none`, `sent`, `received`, `friend` selon le point de vue | ✅ |
+| | `relationBetween`, `areFriends` | `self` sans requête ; invitation en attente ≠ ami ; recherche par clé de paire | ✅ |
+| | `friendIds` | l'autre membre de chaque amitié acceptée | ✅ |
+| | recherche d'utilisateurs | `400` sous 2 caractères (espaces retirés) ; filtre `{ _id ≠ moi, name ~ q, insensible à la casse }`, 20 résultats triés ; relation jointe ; **aucun email** | ✅ |
+| | recherche `.*` | cherché tel quel (expression échappée) | ✅ |
+| | mes amis | triés par pseudo, date d'amitié, sans email | ✅ |
+| | invitations | séparées en reçues / envoyées, plus récentes d'abord | ✅ |
+| | inviter | `201`, expéditeur = token, destinataire = `userId` | ✅ |
+| | inviter refusé | soi-même `400` ; inconnu, identifiant invalide ou absent `404` ; déjà amis ou déjà invité `409` ; rien créé | ✅ |
+| | invitations croisées | `200 friend`, acceptation filtrée sur le destinataire, rien créé | ✅ |
+| | invitation simultanée (clé dupliquée `11000`) | `409` | ✅ |
+| | accepter | filtre `{ pair, pending, recipient: token }` ; sinon `404` (dont l'expéditeur qui tente d'accepter sa propre invitation) | ✅ |
+| | refuser / annuler ; retirer | filtres `{ pair, pending }` et `{ pair, accepted }` ; sinon `404` | ✅ |
+| | sans token | `401` sur les 5 routes | ✅ |
+| | modèle | clé de paire calculée à la validation, statut inconnu refusé | ✅ |
+| `albums.test.js` (modifié) | lecture d'un album | `owner.relation` : `self` (sans requête) pour le propriétaire, puis `none` / `sent` / `received` / `friend` pour un autre | ✅ |
+
+**Frontend — 20 fichiers, 110 tests** (+26) :
+
+| Fichier | Cas | Observé |
+|---|---|---|
+| `friend.service.spec.ts` **(nouveau, 5)** | URL, méthodes, corps, identifiant encodé ; `requests()` met à jour le badge ; `refreshCount()` sans session (0, aucune requête), connecté, erreur sans effet | ✅ |
+| `friend-button.spec.ts` **(nouveau, 6)** | Inviter → « Invitation envoyée » + SnackBar + `changed` ; invitations croisées → « Ami » + badge rechargé ; Accepter ; erreur `409` (message, bouton réactivé) ; double clic = une requête ; ami / envoyée / soi-même sans bouton | ✅ |
+| `friends-page.spec.ts` **(nouveau, 11)** | listes et nombres des onglets ; état vide ; erreur de chargement ; recherche (rien sous 2 caractères, une requête après 300 ms — horloge simulée) ; relation déduite des listes ; aucun résultat et erreur ; Accepter, Refuser, Annuler (bonne route, SnackBar, rechargement) ; retrait confirmé ou annulé ; action refusée (message, bouton réactivé) | ✅ |
+| `app.spec.ts` (+1) | badge rechargé à chaque navigation, sur « Amis » seulement, texte pour lecteur d'écran, masqué à 0 | ✅ |
+| `album-page.spec.ts` (+2, 2 adaptés) | bouton d'amitié du visiteur (Accepter → « Ami », badge rechargé) ; aucun bouton sur son propre album, y compris avant le rechargement du profil | ✅ |
+| `routes.spec.ts` (+1) | `/friends` = `FriendsPageComponent` (et toujours `[authGuard]`) | ✅ |
+
+**Vérification croisée (27 bugs introduits volontairement : 13 backend, 14 frontend)**
+— un script (hors dépôt) applique chaque bug, relance les tests, puis
+restaure le fichier :
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| acceptation sans filtre sur le destinataire | `accepter : filtré sur le destinataire…`, `invitations croisées…` |
+| email exposé | 4 tests (comparaison exacte des utilisateurs renvoyés) |
+| recherche qui m'inclut | `recherche : … sans moi…` |
+| saisie utilisée comme expression régulière | `recherche : caractères spéciaux cherchés tels quels` |
+| pas de `409` si déjà invité | `invitation refusée : … 409` |
+| invitations croisées non acceptées | `invitations croisées…` |
+| refus qui peut supprimer une amitié | `refuser ou annuler…` |
+| retrait d'ami qui peut supprimer une invitation | `retirer un ami…` |
+| `sent` / `received` inversés | 3 tests |
+| relation non calculée sur l'album | 2 tests de lecture d'album |
+| toutes les invitations rangées en « reçues » | `invitations : séparées…` |
+| amis non triés | `mes amis : triés par pseudo…` |
+| invitation à soi-même acceptée | `invitation refusée : soi-même 400…` |
+| badge jamais mis à jour | 3 tests (service et barre) |
+| `refreshCount()` sans vérifier la session | `refreshCount() : sans session…` |
+| badge non rechargé à la navigation | `badge d'invitations : rechargé à chaque page…` |
+| badge sur tous les liens | idem |
+| bouton d'amitié : double envoi | `double clic : une seule requête` |
+| bouton d'amitié : badge non rechargé après acceptation | 3 tests |
+| bouton d'amitié : état non mis à jour | 4 tests |
+| page Amis : pas de rechargement après une action | 4 tests |
+| recherche sans délai de frappe | `recherche : rien sous 2 caractères, une seule requête après 300 ms` |
+| relation des résultats qui ignore les listes | `recherche : la relation affichée suit les listes` |
+| retrait sans confirmation | `retirer un ami : confirmation…` |
+| « Refuser » qui retire un ami | 4 tests |
+| invitation envoyée avec un mauvais corps | 2 tests |
+| bouton d'amitié affiché sur mon propre album | **aucun au premier essai** → test ajouté, qui échoue (voir ci-dessous) |
+
+**Le bug non détecté au premier essai.** Le gabarit de la page d'album
+affiche le bouton d'amitié quand l'album n'est pas à moi
+(`@if (isOwner()) … @else if (relation !== 'self')`). Sans la seconde
+condition, aucun test n'échouait, car `isOwner()` suffisait dans tous les
+cas testés. Il existe pourtant un cas réel où `isOwner()` est faux sur mon
+propre album : juste après un F5, le profil (`currentUser`) n'est pas
+encore rechargé. Test ajouté : propriétaire, profil absent, `relation:
+'self'` → aucun bouton. Il échoue bien avec le bug.
+
+**Vérification navigateur** (harnais Playwright hors dépôt, vraie base,
+trois comptes) : 27 vérifications, toutes réussies. Tableau détaillé dans
+`compte-rendu/V2.md`, étape 4. **Trouvé uniquement sur capture** : un badge
+`matBadgeSize="small"` en Material 3 n'affiche qu'un **point**, sans le
+nombre. Le test passait quand même, car le nombre est bien présent dans le
+DOM. Le badge est passé à la taille standard, qui affiche le nombre.
+
+### Étape 5 — Partage des albums privés (02/11/2026)
+
+**Backend — 9 fichiers de test, 102 tests** (+11), sans MongoDB.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `shares.test.js` **(nouveau, 11)** | `canView` / `isSharedWith` | privé visible par le propriétaire et les destinataires seulement ; plus visible après l'arrêt | ✅ |
+| | `toPublic(viewerId)` | `sharedCount` pour le propriétaire seulement ; jamais `sharedWith` | ✅ |
+| | lecture d'un album partagé | `200` pour le destinataire (sans `sharedCount`), `404` pour un autre et après l'arrêt | ✅ |
+| | liste de partage | mes amis triés, cochés s'ils reçoivent l'album, sans email ; `404` pour un destinataire, un inconnu, un identifiant invalide | ✅ |
+| | partager | liste remplacée, doublons retirés, `sharedCount` renvoyé ; liste vide = tout arrêter | ✅ |
+| | partager refusé | non-ami, soi-même, corps absent, pas une liste, pas des chaînes : `400`, rien enregistré ; album d'un autre (même destinataire) : `404` | ✅ |
+| | partagés avec moi | filtre `{ visibility: 'private', sharedWith: moi }`, tri, propriétaires, `sharedCount` nul, aucun email | ✅ |
+| | sans token | `401` sur les 3 routes | ✅ |
+| `friends.test.js` (modifié) | retrait d'un ami | `$pull` dans les deux sens ; rien touché sans amitié | ✅ |
+
+**Frontend — 21 fichiers, 125 tests** (+15) : `ShareDialogComponent`
+(**nouveau**, 6 : amis cochés et « Enregistrer » inactif sans changement ;
+cocher puis enregistrer, avec fenêtre non fermable pendant l'envoi ; tout
+décocher ; erreur avec double clic ; sans ami ; erreur de chargement),
+`AlbumPageComponent` (+4 : « Partager » et nombre de destinataires ; pas
+de « Partager » sur un album public ; « partagé avec toi » chez le
+destinataire ; messages après la fenêtre, y compris « Partage arrêté » et
+fenêtre annulée), `AlbumsPageComponent` (+2 : onglet chargé à
+l'ouverture avec le propriétaire ; onglet vide puis erreur),
+`AlbumCoverComponent` (+2 : nombre d'amis, rien sur un album public ;
+« par » et « partagé avec toi »), `AlbumService` (+1). Les données de test
+typées `Album` ont reçu `sharedCount`.
+
+**Vérification croisée (24 bugs introduits volontairement : 12 backend, 12 frontend), tous détectés au premier passage :**
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| `canView` ignore le partage | `canView : …`, `lecture d'un album privé partagé…` |
+| album partagé avec quelqu'un = visible par tous | idem |
+| `sharedCount` donné à tous | 3 tests |
+| liste de partage lisible par un destinataire | `liste de partage : réservée au propriétaire` |
+| partage modifiable par un destinataire | `partager l'album d'un autre : 404…` |
+| partage avec un non-ami accepté | `partager refusé…` |
+| doublons gardés | `partager : la liste est remplacée…` |
+| corps non vérifié | `partager refusé…` |
+| « partagés avec moi » inclut les albums publics | `partagés avec moi…` |
+| « partagés avec moi » divulgue `sharedCount` | idem |
+| retrait d'ami : partages arrêtés dans un seul sens | `retirer un ami : … dans les deux sens…` |
+| liste de partage : tout coché | `liste de partage : mes amis…` |
+| fenêtre : « Enregistrer » actif sans changement | `liste mes amis, … Enregistrer inactif…` |
+| fenêtre : double envoi | `erreur à l'enregistrement : … une seule requête…` |
+| fenêtre : fermable pendant l'envoi | `cocher un ami puis Enregistrer…` |
+| fenêtre : envoie l'ancienne sélection | 2 tests |
+| « Partager » sur un album public | `album public… : pas de « Partager »` |
+| nombre non mis à jour après la fenêtre | `partage enregistré : …` |
+| pas de message « Partage arrêté » | idem |
+| destinataire non informé (« partagé avec toi ») | `album privé partagé avec moi…` |
+| onglet « Partagés avec moi » jamais chargé | 2 tests |
+| propriétaire non affiché sur la couverture | `onglet « Partagés avec moi » : … avec le propriétaire` |
+| couverture sans le nombre d'amis | `partage (étape 5)…` |
+| service : mauvais corps de requête | 3 tests |
+
+**Vérification navigateur** : 28 vérifications, toutes réussies (détail
+dans `compte-rendu/V2.md`, étape 5).
+
+#### Complément — légende du zoom (02/11/2026)
+
+Défaut signalé par l'utilisateur : « Ta photo » sur la photo d'un ami.
+**Frontend — 127 tests** (+2) :
+- `card-zoom-dialog.spec.ts` : « Ta photo » dans mes albums, « Photo de
+  X » dans l'album d'un autre ;
+- `album-page.spec.ts` : la page transmet le pseudo du propriétaire au
+  zoom (album d'un autre), et `null` pour le mien.
+
+Les deux bugs réintroduits sont détectés par ces deux tests.
+
+**Instabilité observée.** Pendant cette vérification, la machine était
+chargée (build en 17 s au lieu de 3 s). Le premier test du formulaire
+d'album a deux fois dépassé la limite de 5 s par test de Vitest (jusqu'à
+9,6 s), et le test de recherche de la page Amis une fois. Relancés au
+calme, ils passent (127/127 deux fois de suite). Rien n'a été modifié, et
+le cas est noté pour le check-up de l'étape 8 : on pourra augmenter la
+limite pour ces fichiers si ça se reproduit.

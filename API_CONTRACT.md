@@ -11,6 +11,13 @@
 > **01/11/2026 — étape 3** : recherche et détail de cartes, cartes d'un
 > album (photo), suppression de carte, images signées ; `PUT /albums/:id`
 > peut répondre `409`, `DELETE /albums/:id` supprime aussi les cartes.
+> **02/11/2026 — étape 4** : recherche d'utilisateurs, amis et
+> invitations (`/users/search`, `/friends`) ; `GET /albums/:id` renvoie
+> aussi `owner.relation`.
+> **02/11/2026 — étape 5** : partage des albums privés avec des amis
+> (`/albums/shared`, `/albums/:id/shares`) ; `Album.sharedCount` ; un album
+> privé est visible par les amis destinataires ; retirer un ami arrête les
+> partages.
 
 Base : `/api`. Sauf santé, inscription et connexion, envoyer
 `Authorization: Bearer <token>` (sinon `401`).
@@ -31,22 +38,32 @@ Le backend utilise Mongoose et MongoDB (base `card-vault`).
 | GET | `/catalog/series/:id/sets` | JWT | `200 Set[]` |
 | POST | `/albums` | `AlbumInput` + JWT | `201 Album` |
 | GET | `/albums/mine?page=1&limit=12` | JWT | `200 Page<Album>` |
+| GET | `/albums/shared?page=1&limit=12` | JWT | `200 Page<SharedAlbum>` |
 | GET | `/albums/:id` | JWT | `200 AlbumDetail` |
 | PUT | `/albums/:id` | `Partial<AlbumInput>` + JWT | `200 Album` |
 | DELETE | `/albums/:id` | JWT | `204` (cartes et photos comprises) |
+| GET | `/albums/:id/shares` | JWT | `200 AlbumShare[]` |
+| PUT | `/albums/:id/shares` | `{userIds}` + JWT | `200 Album` |
 | GET | `/catalog/cards?name=&albumId=` | JWT | `200 CardSearchResult[]` |
 | GET | `/catalog/cards/:id?albumId=` | JWT | `200 CardDetail` |
 | GET | `/albums/:id/cards?page=1&limit=9&category=` | JWT | `200 Page<AlbumCard>` |
 | POST | `/albums/:id/cards` | multipart : `photo`, `tcgdexId` (+ `crop`, `rotation` facultatifs) + JWT | `201 AlbumCard` |
 | DELETE | `/cards/:id` | JWT | `204` |
 | GET | `/images/:cardId/:size?exp=&sig=` | **signature** (pas de JWT) | `200 image/webp` |
+| GET | `/users/search?q=` | JWT | `200 UserSearchResult[]` |
+| GET | `/friends` | JWT | `200 Friend[]` |
+| GET | `/friends/requests` | JWT | `200 { received, sent }` |
+| POST | `/friends/requests` | `{userId}` + JWT | `201` (invitation) ou `200` (invitations croisées) `FriendActionResult` |
+| POST | `/friends/requests/:userId/accept` | JWT | `200 FriendActionResult` |
+| DELETE | `/friends/requests/:userId` | JWT | `204` (refus ou annulation) |
+| DELETE | `/friends/:userId` | JWT | `204` |
 
 `Page<T>` contient `items`, `page`, `limit`, `total` et `pages`.
 
 Erreurs courantes : `400` validation, `401` authentification, `403` lien
 d'image invalide ou expiré, `404` ressource (ou ressource d'un autre
-utilisateur), `409` email déjà utilisé ou thème incompatible avec les
-cartes, `502` catalogue TCGdex indisponible. Toute erreur renvoie
+utilisateur), `409` email déjà utilisé, thème incompatible avec les
+cartes, ou invitation impossible (déjà amis, déjà invité), `502` catalogue TCGdex indisponible. Toute erreur renvoie
 `{ "message" }`.
 
 ## Catalogue (étape 2)
@@ -73,10 +90,15 @@ AlbumInput = {
 Album = {
   id, ownerId, title, description, visibility,
   theme: { type: string | null, serie: Ref | null, set: Ref | null },  // Ref = { id, name, logo }
-  cardCount, createdAt, updatedAt
+  cardCount,
+  sharedCount: number | null,   // étape 5 : nombre d'amis destinataires,
+                                // pour le propriétaire seulement (sinon null)
+  createdAt, updatedAt
 }
 
-AlbumDetail = Album & { owner: { id, name } }
+AlbumDetail = Album & { owner: { id, name, relation } }
+// relation (02/11/2026, étape 4) : ma relation avec le propriétaire,
+// 'self' | 'none' | 'sent' | 'received' | 'friend' (voir « Amis »).
 ```
 
 **Thème** (validé par le serveur auprès de TCGdex) : `type` doit être un des
@@ -85,13 +107,14 @@ extension **de cette série** ; un `setId` sans `serieId` est refusé. Les noms
 et logos sont recopiés dans l'album. Sans thème : collection libre.
 
 **Visibilité** : `public` = visible par tous les utilisateurs connectés ;
-`private` = visible par le propriétaire seul (partage avec des amis : étape 5).
+`private` = visible par le propriétaire **et par les amis avec qui il est
+partagé** (étape 5, voir « Partage »).
 
 | Route | Accès | Réponses | Erreurs |
 |---|---|---|---|
 | `POST /albums` | utilisateur connecté (devient propriétaire, `ownerId` = token) | `201 Album` | `400` (titre absent ou trop long, description trop longue, visibilité invalide, type inconnu, série inconnue, extension sans série ou hors série), `401`, `502` (thème non vérifiable) |
 | `GET /albums/mine` | ses propres albums, plus récents d'abord ; `page` ≥ 1, `limit` entre 1 et 48 (défaut 12) | `200 Page<Album>` | `401` |
-| `GET /albums/:id` | propriétaire, ou tout utilisateur si l'album est public | `200 AlbumDetail` | `401`, `404 Album inconnu` (inexistant, identifiant invalide, ou privé d'un autre : volontairement indiscernables) |
+| `GET /albums/:id` | propriétaire, tout utilisateur si l'album est public, ami destinataire si l'album est privé et partagé avec lui | `200 AlbumDetail` | `401`, `404 Album inconnu` (inexistant, identifiant invalide, ou privé d'un autre : volontairement indiscernables) |
 | `PUT /albums/:id` | propriétaire seulement ; seuls les champs envoyés sont modifiés | `200 Album` | `400` (mêmes règles que la création), `401`, `404`, **`409`** (nouveau thème non respecté par des cartes déjà rangées, étape 3), `502` |
 | `DELETE /albums/:id` | propriétaire seulement ; supprime aussi ses cartes et leurs photos | `204` | `401`, `404` |
 
@@ -143,3 +166,56 @@ position GPS) et en garde deux versions WebP. Si un recadrage est envoyé
 redressement et rotation, avant de créer les deux versions. Les URL signées ne sont
 délivrées qu'aux utilisateurs qui peuvent voir l'album ; une URL déjà
 délivrée reste valable jusqu'à son échéance (1 à 2 h).
+
+## Amis (étape 4, 02/11/2026)
+
+```ts
+PublicUser = { id, name }            // jamais l'email d'un autre utilisateur
+Relation = 'none' | 'sent' | 'received' | 'friend'   // (+ 'self' sur un album)
+UserSearchResult = PublicUser & { relation: Relation }
+Friend = { user: PublicUser, since }               // since = date d'acceptation
+FriendRequest = { user: PublicUser, createdAt }
+FriendActionResult = { user: PublicUser, relation: 'sent' | 'friend' }
+```
+
+`sent` : je l'ai invité ; `received` : il m'a invité. Un seul lien par
+paire d'utilisateurs (index unique). Une invitation refusée ou annulée et
+une amitié retirée sont **supprimées** : l'autre n'est pas prévenu, et
+l'un ou l'autre peut réinviter ensuite. Toutes les routes identifient
+l'autre utilisateur par son `userId` ; l'utilisateur connecté vient
+toujours du token.
+
+| Route | Accès | Réponses | Erreurs |
+|---|---|---|---|
+| `GET /users/search?q=` | pseudo contenant `q` (insensible à la casse, caractères spéciaux cherchés tels quels), 2 caractères minimum (espaces retirés, 40 au plus), moi exclu ; 20 résultats maximum, par ordre alphabétique | `200 UserSearchResult[]` | `400 Tape au moins 2 caractères`, `401` |
+| `GET /friends` | mes amis, par ordre alphabétique | `200 Friend[]` | `401` |
+| `GET /friends/requests` | invitations en attente, les plus récentes d'abord | `200 { received: FriendRequest[], sent: FriendRequest[] }` | `401` |
+| `POST /friends/requests` | inviter `userId`. **Invitations croisées** : s'il m'avait déjà invité, son invitation est acceptée | `201 { relation: 'sent' }`, ou `200 { relation: 'friend' }` | `400` (s'inviter soi-même), `401`, `404 Utilisateur inconnu` (inexistant ou identifiant invalide), `409` (déjà amis, invitation déjà envoyée, ou invitation simultanée) |
+| `POST /friends/requests/:userId/accept` | accepter l'invitation **reçue** de `userId` (seul le destinataire peut accepter) | `200 { relation: 'friend' }` | `401`, `404` (utilisateur ou invitation inconnus) |
+| `DELETE /friends/requests/:userId` | refuser l'invitation reçue de `userId`, ou annuler celle que je lui ai envoyée | `204` | `401`, `404 Invitation inconnue` |
+| `DELETE /friends/:userId` | retirer `userId` de mes amis (l'un ou l'autre peut le faire) ; **arrête aussi les partages entre les deux, dans les deux sens** (étape 5) | `204` | `401`, `404 Ami inconnu` |
+
+## Partage (étape 5, 02/11/2026)
+
+```ts
+AlbumShare = { user: PublicUser, shared: boolean }   // un de mes amis
+SharedAlbum = Album & { owner: PublicUser }          // sharedCount = null
+```
+
+Un album **privé** peut être partagé avec des **amis** choisis : ils le
+voient (fiche, cartes, photos) mais ne peuvent ni le modifier ni le
+partager. On **arrête un partage** en retirant l'ami de la liste ; retirer
+un ami de ses amis arrête aussi ses partages, et une nouvelle amitié ne les
+rétablit pas. La liste est **conservée** si l'album devient public (elle
+n'a alors pas d'effet) et reprend effet s'il redevient privé. Un
+destinataire ne voit ni la liste ni le nombre des autres destinataires.
+
+| Route | Accès | Réponses | Erreurs |
+|---|---|---|---|
+| `GET /albums/shared` | albums **privés** partagés avec moi, les plus récemment modifiés d'abord ; `page` ≥ 1, `limit` 1-48 (défaut 12) | `200 Page<SharedAlbum>` | `401` |
+| `GET /albums/:id/shares` | propriétaire seulement : **mes amis**, par ordre alphabétique, chacun coché (`shared`) s'il reçoit l'album | `200 AlbumShare[]` | `401`, `404` (album inconnu ou d'un autre, même pour un destinataire) |
+| `PUT /albums/:id/shares` | propriétaire seulement ; `userIds` **remplace** la liste (doublons retirés) ; `[]` arrête tous les partages | `200 Album` (avec `sharedCount`) | `400` (`userIds` absent ou pas une liste de chaînes, ou un identifiant qui n'est pas un de mes amis), `401`, `404` |
+
+Une URL de photo déjà délivrée à un destinataire reste valable jusqu'à son
+échéance (1 à 2 h) après l'arrêt du partage : limite déjà décrite pour les
+images (étape 3).

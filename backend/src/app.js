@@ -6,6 +6,7 @@ import { User } from "./models/User.js";
 import { albumRoutes } from "./routes/albums.js";
 import { albumCardRoutes, cardRoutes, imageRoutes } from "./routes/cards.js";
 import { catalogRoutes } from "./routes/catalog.js";
+import { friendRoutes, userSearchRoutes } from "./routes/friends.js";
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -198,6 +199,9 @@ export function createApp() {
   app.use("/api/albums", albumCardRoutes(auth));
   app.use("/api/cards", cardRoutes(auth));
   app.use("/api/images", imageRoutes());
+  // Recherche d'utilisateurs, amis et invitations (V2, étape 4).
+  app.use("/api/users", userSearchRoutes(auth));
+  app.use("/api/friends", friendRoutes(auth));
 
   /** Gestionnaire central des erreurs connues de l'application. */
   app.use((error, _req, res, next) => {

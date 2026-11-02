@@ -13,8 +13,16 @@
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: link.exact }"
         >
-          <mat-icon aria-hidden="true">{{ link.icon }}</mat-icon>
+          <mat-icon
+            aria-hidden="true"
+            [matBadge]="pending()"
+            [matBadgeHidden]="link.path !== '/friends' || pending() === 0"
+            >{{ link.icon }}</mat-icon
+          >
           {{ link.label }}
+          @if (link.path === '/friends' && pending() > 0) {
+            <span class="cv-visually-hidden">({{ pending() }} invitation{{ pending() > 1 ? 's' : '' }} reçue{{ pending() > 1 ? 's' : '' }})</span>
+          }
         </a>
       }
     </nav>
@@ -23,13 +31,16 @@
 
     <!-- Mobile : les liens passent dans un menu. -->
     <button mat-icon-button class="burger" [matMenuTriggerFor]="navMenu" aria-label="Ouvrir la navigation">
-      <mat-icon>menu</mat-icon>
+      <mat-icon [matBadge]="pending()" [matBadgeHidden]="pending() === 0">menu</mat-icon>
     </button>
     <mat-menu #navMenu="matMenu">
       @for (link of links; track link.path) {
         <a mat-menu-item [routerLink]="link.path">
           <mat-icon>{{ link.icon }}</mat-icon>
           <span>{{ link.label }}</span>
+          @if (link.path === '/friends' && pending() > 0) {
+            <span class="menu-count">{{ pending() }}<span class="cv-visually-hidden"> invitation(s) reçue(s)</span></span>
+          }
         </a>
       }
     </mat-menu>

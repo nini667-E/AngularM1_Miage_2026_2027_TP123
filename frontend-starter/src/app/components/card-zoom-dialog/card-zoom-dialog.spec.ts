@@ -19,10 +19,10 @@ const CARD = {
   createdAt: '2026-11-01',
 } as unknown as AlbumCard;
 
-function render(canDelete: boolean): HTMLElement {
+function render(canDelete: boolean, ownerName: string | null = null): HTMLElement {
   TestBed.configureTestingModule({
     imports: [CardZoomDialogComponent],
-    providers: [{ provide: MAT_DIALOG_DATA, useValue: { card: CARD, canDelete } }],
+    providers: [{ provide: MAT_DIALOG_DATA, useValue: { card: CARD, canDelete, ownerName } }],
   });
   const fixture = TestBed.createComponent(CardZoomDialogComponent);
   fixture.detectChanges();
@@ -43,5 +43,11 @@ describe('CardZoomDialogComponent', () => {
     expect(render(false).textContent ?? '').not.toContain('Retirer du classeur');
     TestBed.resetTestingModule();
     expect(render(true).textContent ?? '').toContain('Retirer du classeur');
+  });
+
+  it('légende de la photo : « Ta photo » dans mes albums, « Photo de X » dans l’album d’un autre', () => {
+    expect(render(true).querySelector('figcaption')?.textContent ?? '').toBe('Ta photo');
+    TestBed.resetTestingModule();
+    expect(render(false, 'ClaudeTestBot').querySelector('figcaption')?.textContent ?? '').toBe('Photo de ClaudeTestBot');
   });
 });

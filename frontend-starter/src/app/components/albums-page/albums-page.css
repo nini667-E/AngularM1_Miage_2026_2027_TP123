@@ -48,3 +48,6 @@ mat-paginator { margin-top: 1.5rem; background: transparent; }
   border: 1px dashed rgb(201 162 77 / 0.45);
   border-radius: 4px;
 }
+
+.tab-body { padding-top: 1.25rem; }
+.empty-icon { width: 48px; height: 48px; font-size: 48px; color: var(--mat-sys-primary); }

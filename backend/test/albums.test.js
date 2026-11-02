@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { Album } from "../src/models/Album.js";
 import { Card } from "../src/models/Card.js";
+import { Friendship, pairKey } from "../src/models/Friendship.js";
 import { User } from "../src/models/User.js";
 import { clearCatalogCache } from "../src/services/tcgdex.js";
 import { authHeaders, mockTcgdex, newId, realFetch, startServer } from "./helpers.js";
@@ -149,16 +150,19 @@ function mockFindById(album) {
   });
 }
 
-test("lecture : le propriétaire voit son album privé, avec le nom du propriétaire", async () => {
+test("lecture : le propriétaire voit son album privé, avec le nom du propriétaire (relation self)", async () => {
   const album = fakeAlbum({ ownerId: alice, visibility: "private" });
   mockFindById(album);
   mock.method(User, "findById", async () => ({ name: "Alice" }));
+  const findLink = mock.method(Friendship, "findOne", async () => null);
 
   const r = await call("GET", `/api/albums/${album.id}`, alice);
 
   assert.equal(r.status, 200);
   const body = await r.json();
-  assert.deepEqual(body.owner, { id: alice, name: "Alice" });
+  assert.deepEqual(body.owner, { id: alice, name: "Alice", relation: "self" });
+  // Pas de lien d'amitié à chercher avec soi-même.
+  assert.equal(findLink.mock.callCount(), 0);
 });
 
 test("lecture : album privé d'un autre -> 404 (indiscernable d'un album inexistant)", async () => {
@@ -167,6 +171,7 @@ test("lecture : album privé d'un autre -> 404 (indiscernable d'un album inexist
   // Simulé aussi : si la règle d'accès cassait, la route irait jusqu'ici, et
   // le test échouerait immédiatement au lieu d'attendre une base absente.
   mock.method(User, "findById", async () => ({ name: "Alice" }));
+  mock.method(Friendship, "findOne", async () => null);
 
   for (const id of [album.id, newId(), "pas-un-id"]) {
     const r = await call("GET", `/api/albums/${id}`, bob);
@@ -174,14 +179,24 @@ test("lecture : album privé d'un autre -> 404 (indiscernable d'un album inexist
   }
 });
 
-test("lecture : album public d'un autre -> 200", async () => {
+test("lecture : album public d'un autre -> 200, avec ma relation avec le propriétaire (étape 4)", async () => {
   const album = fakeAlbum({ ownerId: alice, visibility: "public" });
   mockFindById(album);
   mock.method(User, "findById", async () => ({ name: "Alice" }));
+  const cases = [
+    [null, "none"],
+    [{ requester: bob, recipient: alice, status: "pending" }, "sent"],
+    [{ requester: alice, recipient: bob, status: "pending" }, "received"],
+    [{ requester: alice, recipient: bob, status: "accepted" }, "friend"],
+  ];
 
-  const r = await call("GET", `/api/albums/${album.id}`, bob);
-
-  assert.equal(r.status, 200);
+  for (const [link, relation] of cases) {
+    const findLink = mock.method(Friendship, "findOne", async () => link);
+    const r = await call("GET", `/api/albums/${album.id}`, bob);
+    assert.equal(r.status, 200);
+    assert.deepEqual((await r.json()).owner, { id: alice, name: "Alice", relation }, relation);
+    assert.deepEqual(findLink.mock.calls[0].arguments[0], { pair: pairKey(alice, bob) });
+  }
 });
 
 // ------------------------------------------------------- modification

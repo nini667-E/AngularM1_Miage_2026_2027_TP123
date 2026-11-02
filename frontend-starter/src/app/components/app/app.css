@@ -50,6 +50,16 @@
 
 .burger { display: none; }
 
+/* Nombre d'invitations dans le menu mobile. */
+.menu-count {
+  margin-left: 0.5rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  color: var(--mat-sys-on-error);
+  font-weight: 700;
+  background: var(--mat-sys-error);
+}
+
 @media (max-width: 720px) {
   .links { display: none; }
   .burger { display: inline-flex; }

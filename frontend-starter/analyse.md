@@ -9,6 +9,11 @@
 > **01/11/2026 — V2, étape 1** : la partie audio de la V1 (page de pistes,
 > `TrackService`, lecteur) a été retirée ; sa description détaillée reste
 > consultable dans la version taguée `v1.0` de ce fichier.
+>
+> **02/11/2026 — V2, étape 4** : page Amis, `FriendService`, bouton
+> d'amitié réutilisable, badge d'invitations dans la barre du haut (§4.8).
+> **02/11/2026 — V2, étape 5** : partage (fenêtre de partage, onglet
+> « Partagés avec moi », indications de partage), §4.9.
 
 ## 1. Vue d'ensemble
 
@@ -18,8 +23,11 @@ Depuis la V2 (01/11/2026), l'application s'appelle **Card Vault** : un
 réseau de collectionneurs de cartes Pokémon (voir `../REPORT.md`). À
 l'étape 3, elle contient l'authentification, le profil, la navigation, les
 **albums** (création, thème, visibilité) et les **cartes** (recherche dans
-le catalogue, contrôle du thème, photo, classeur 3×3, zoom) ; le social
-arrive aux étapes 4 à 7 (voir §7 "État par rapport aux missions").
+le catalogue, contrôle du thème, photo, classeur 3×3, zoom). Depuis
+l'étape 4, elle gère les **amis** (recherche par pseudo, invitations,
+badge) et, depuis l'étape 5, le **partage** des albums privés avec des
+amis ; réactions et découverte arrivent aux étapes 6 et 7 (voir
+§7 "État par rapport aux missions").
 
 ### 1.1 Stack technique
 
@@ -55,14 +63,16 @@ frontend-starter/
 │   │   │   ├── album-form-dialog/   # création / modification d'un album (étape 2)
 │   │   │   ├── add-card-dialog/     # ajout d'une carte : MatStepper carte -> photo (étape 3)
 │   │   │   ├── card-zoom-dialog/    # zoom : photo + image officielle + infos (étape 3)
-│   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche, Amis)
+│   │   │   ├── friends-page/        # Amis : recherche + onglets amis / reçues / envoyées (étape 4)
+│   │   │   ├── share-dialog/        # partage d'un album privé : amis à cocher (étape 5)
+│   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche)
 │   │   └── shared/
-│   │       ├── components/          # album-cover, theme-chips, confirm-dialog (réutilisables)
+│   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button (réutilisables)
 │   │       ├── guards/auth.guard.ts
 │   │       ├── interceptors/auth.interceptor.ts
 │   │       ├── i18n/french-paginator-intl.ts
-│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes
-│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService (seuls points d'appel HTTP)
+│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis
+│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService (seuls points d'appel HTTP)
 │   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
@@ -167,7 +177,7 @@ album), ajouté dans `index.html`.
 | `/albums` | `AlbumsPageComponent` (Mes albums, étape 2) | oui |
 | `/albums/:id` | `AlbumPageComponent` (étape 2) | oui |
 | `/search` | `PlaceholderPageComponent` (Recherche, étape 7) | oui |
-| `/friends` | `PlaceholderPageComponent` (Amis, étape 4) | oui |
+| `/friends` | `FriendsPageComponent` (Amis, étape 4) | oui |
 | `/profile` | `ProfilePageComponent` | oui |
 | `/login` | `LoginPageComponent` | non |
 | `/register` | `RegisterPageComponent` | non |
@@ -307,7 +317,14 @@ logout(): void {
   - **visiteur** : **Connexion** et **Inscription** uniquement ;
   - **mobile** (< 720 px) : les liens passent dans un menu « burger ».
     Les liens sont définis une seule fois dans `links` et réutilisés par
-    la barre et par le menu mobile.
+    la barre et par le menu mobile ;
+  - **badge d'invitations (étape 4, 02/11/2026)** : `MatBadge` sur l'icône
+    « Amis » (et sur le « burger », avec le nombre dans le menu mobile),
+    lu dans le Signal `FriendService.receivedCount`. Il est rechargé à
+    chaque `NavigationEnd` (dont la première navigation et celle qui suit
+    la connexion), et après chaque action sur les invitations ; aucune
+    requête en arrière-plan. Un texte masqué (`.cv-visually-hidden`) donne
+    le nombre aux lecteurs d'écran.
 - **Déconnexion sans requête réseau.** `logout()` ne fait qu'un nettoyage
   client (`localStorage` + Signals) : un JWT est stateless, le backend ne
   garde aucune trace des tokens émis et n'expose aucune route `logout`
@@ -361,7 +378,7 @@ return next(authorizedRequest).pipe(
 
 | Service | Méthodes → requêtes | Particularité |
 |---|---|---|
-| `AlbumService` | `mine(page, limit)` → `GET /api/albums/mine` ; `get(id)` → `GET /api/albums/:id` ; `create(input)` → `POST /api/albums` ; `update(id, changes)` → `PUT` ; `delete(id)` → `DELETE` | identifiant encodé (`encodeURIComponent`) |
+| `AlbumService` | `mine(page, limit)` → `GET /api/albums/mine` ; `shared(page, limit)` → `GET /api/albums/shared`, `shares(id)` → `GET /api/albums/:id/shares`, `setShares(id, userIds)` → `PUT` (étape 5) ; `get(id)` → `GET /api/albums/:id` ; `create(input)` → `POST /api/albums` ; `update(id, changes)` → `PUT` ; `delete(id)` → `DELETE` | identifiant encodé (`encodeURIComponent`) |
 | `CatalogService` | `types()`, `series()`, `sets(serieId)` → `/api/catalog/…` | **une requête par liste et par session** : `shareReplay(1)` + `Map` des Observables par URL. Vérifié dans le navigateur : 5 ouvertures du formulaire, 1 seul appel par liste |
 | `CardService` (étape 3) | `search(name, albumId)`, `detail(id, albumId)` → `/api/catalog/cards…` ; `list(albumId, page, 9, category?)` → `/api/albums/:id/cards` ; `add(albumId, tcgdexId, photo)` → multipart, **`reportUploadProgress` + `observe: 'events'`** (le mécanisme du TP3, d'où `withXhr()`) ; `delete(id)` → `/api/cards/:id` | photos affichées par leurs URL signées : pas de Blob comme en V1 |
 
@@ -514,9 +531,11 @@ s'arrêtait à « dra »). Ouverture avec `autoFocus: 'input.card-search'`.
 
 | Composant | Rôle |
 |---|---|
-| `AlbumCoverComponent` | couverture façon classeur (cuir teinté par le type, dos, liseré doré), visibilité en icône **et** en texte pour les lecteurs d'écran, nombre de cartes accordé (« Aucune carte », « 1 carte », « N cartes ») ; réutilisée par l'accueil, la recherche et les profils aux étapes suivantes |
+| `AlbumCoverComponent` | couverture façon classeur (cuir teinté par le type, dos, liseré doré), visibilité en icône **et** en texte pour les lecteurs d'écran (étape 5 : « partagé avec N amis » pour le propriétaire, « partagé avec toi » et « par X » avec l'entrée facultative `owner`), nombre de cartes accordé (« Aucune carte », « 1 carte », « N cartes ») ; réutilisée par l'accueil, la recherche et les profils aux étapes suivantes |
 | `ThemeChipsComponent` | puces `mat-chip` : type (couleur + icône), série, extension (logo) ; « Collection libre » sans thème |
 | `ConfirmDialogComponent` | confirmation générique (`MAT_DIALOG_DATA` : titre, message, libellé), bouton aux couleurs « erreur » du thème |
+
+| `FriendButtonComponent` (étape 4) | bouton d'amitié envers un autre utilisateur selon la relation : « Inviter », « Invitation envoyée », « Accepter » ou « Ami » (rien pour soi-même) ; état local (`linkedSignal` sur l'entrée `relation`), anti double-clic, SnackBar, sortie `changed` ; utilisé dans la recherche de la page Amis et sur la page d'un album |
 
 `utils/card-types.ts` associe chaque type TCGdex (« Électrique »…) à sa
 variable de couleur `--cv-type-*` et à une icône Material Symbols, après
@@ -524,6 +543,57 @@ suppression des accents (`typeSlug`).
 
 La bibliothèque audio de la V1 (retirée à l'étape 1) est décrite dans la
 version taguée `v1.0` de ce fichier.
+
+### 4.8 Amis (`FriendsPageComponent`, `FriendService`, étape 4)
+
+**`FriendService`** : `search(q)` → `GET /api/users/search` ;
+`friends()` ; `requests()` (met à jour le Signal `receivedCount` au
+passage, d'où le badge toujours juste après un rechargement des listes) ;
+`refreshCount()` (rien et 0 sans session) ; `invite(userId)`,
+`accept(userId)`, `deleteRequest(userId)` (refus ou annulation),
+`remove(userId)`.
+
+**Page Amis** :
+- **recherche** : `FormControl` → `debounceTime(300)` →
+  `distinctUntilChanged` → `switchMap` (même schéma que l'ajout de carte) ;
+  rien sous 2 caractères ; chaque résultat porte un `FriendButtonComponent` ;
+- **onglets** `MatTabGroup` : **Amis** (date d'amitié, retrait avec
+  `ConfirmDialogComponent`), **Reçues** (Accepter / Refuser), **Envoyées**
+  (Annuler), avec leur nombre dans le libellé ;
+- après chaque action : SnackBar puis **rechargement des trois listes**
+  (`forkJoin`), y compris après une erreur (l'autre utilisateur a pu agir
+  entre-temps) ; les boutons de l'utilisateur concerné sont désactivés
+  pendant l'action (Signal `busy`, un `Set` d'identifiants) ;
+- la relation affichée dans les résultats de recherche est **déduite des
+  listes** (`computed`) dès qu'elles sont chargées : accepter une
+  invitation dans l'onglet « Reçues » met aussi à jour le bouton du
+  résultat de recherche correspondant.
+
+**Page d'album** : `AlbumDetail.owner.relation` (fourni par le backend)
+affiche `FriendButtonComponent` dans l'en-tête de l'album d'un autre ;
+rien sur ses propres albums (`relation: 'self'`, vérifié même avant que le
+profil ne soit rechargé après un F5).
+
+### 4.9 Partage (`ShareDialogComponent`, étape 5)
+
+- **Fenêtre de partage** : ouverte par « Partager » (propriétaire d'un
+  album **privé** seulement). Elle charge `shares(id)` (mes amis, cochés
+  s'ils reçoivent l'album) dans une `MatSelectionList`. Le Signal
+  `selected` (un `Set` d'identifiants) est comparé à l'état chargé
+  (`computed changed`) : « Enregistrer » reste inactif tant que rien ne
+  change. L'envoi fait `setShares` avec la liste complète ; la fenêtre
+  n'est pas fermable pendant l'envoi, garde le message en cas d'erreur, et
+  se ferme avec l'album mis à jour (`sharedCount`). Sans ami : message et
+  lien vers `/friends`.
+- **Page d'album** : `visibility` (`computed`) donne l'icône et le texte de
+  l'en-tête : public, privé, « partagé avec N amis » (propriétaire, reconnu
+  par `owner.relation === 'self'`), « partagé avec toi » (destinataire).
+  Après la fenêtre : `sharedCount` mis à jour et SnackBar (« Album partagé
+  avec N amis. » ou « Partage arrêté… »).
+- **Mes albums** : `MatTabGroup` à deux onglets. « Partagés avec moi » est
+  chargé (`shared()`) **à chaque ouverture de l'onglet**, car un ami a pu
+  partager ou arrêter un partage entre-temps ; il a sa propre pagination et
+  son état vide.
 
 ---
 
@@ -614,6 +684,8 @@ mini projet.
 | V2 · Étape 1 | Retrait de l'audio, identité Card Vault, thème sombre, navigation | ✅ Fait (01/11/2026) — pages audio supprimées ; `MatToolbar` + `MatMenu` (+ menu mobile) ; thème Material sombre or / bleu nuit ; connexion/inscription/profil en Material ; pages d'attente Accueil/Recherche/Amis ; 23 tests |
 | V2 · Étape 2 | Albums : création, modification, suppression, thème, visibilité | ✅ Fait (01/11/2026) — `AlbumService`, `CatalogService` (mémoire de session), « Mes albums » (couvertures, état vide, pagination), fenêtre de formulaire (extension dépendante de la série), page d'album (404, actions du propriétaire, classeur vide) ; `<base href="/">` ajouté ; 56 tests |
 | V2 · Étape 3 | Cartes : recherche TCGdex, contrôle du thème, photo, classeur, zoom | ✅ Fait (01/11/2026) — `CardService` (progression d'envoi), `AddCardDialogComponent` (MatStepper, MatAutocomplete, debounce + switchMap, verdict serveur, contrôle de la photo), classeur 3×3 paginé et filtrable (squelettes, reflet, URL signées, reprise si expirée), zoom ; focus de la fenêtre sur la recherche ; 78 tests |
+| V2 · Étape 4 | Amis : inviter, accepter, refuser, annuler, retirer ; badge | ✅ Fait (02/11/2026) — `FriendService` (Signal `receivedCount`), page Amis (recherche debounce + switchMap, onglets, confirmation de retrait), `FriendButtonComponent` réutilisé sur la page d'album, badge `MatBadge` rechargé à chaque navigation ; 110 tests |
+| V2 · Étape 5 | Partage d'un album privé avec des amis, arrêt du partage | ✅ Fait (02/11/2026) — `ShareDialogComponent` (`MatSelectionList`, enregistrement de la liste complète), « Partager » et en-tête « partagé avec… » sur la page d'album, onglet « Partagés avec moi » (`MatTabGroup`), couverture avec « par X » ; 125 tests |
 
 ---
 
@@ -717,3 +789,14 @@ mini projet.
 - **01/11/2026** — V2, étape 3 (complément) : recadrage au format carte et
   rotation par quarts de tour (`ngx-image-cropper`), `src/test-setup.ts`,
   84 tests (§1, §4.5).
+- **02/11/2026** — V2, étape 4 : amis (`FriendService`, page Amis,
+  `FriendButtonComponent`, badge d'invitations dans la barre, bouton
+  d'amitié sur la page d'album, `.cv-visually-hidden`), 110 tests (§1,
+  §1.2, §2.2, §3.5, §4.7, §4.8, §7).
+- **02/11/2026** — V2, étape 5 : partage (`ShareDialogComponent`, méthodes
+  de partage d'`AlbumService`, `sharedCount`, `SharedAlbum`, `AlbumShare`,
+  onglets de « Mes albums », couverture avec `owner`), 125 tests (§1,
+  §1.2, §4.1, §4.7, §4.9, §7).
+- **02/11/2026** — V2, étape 5 (correction) : `CardZoomData.ownerName`,
+  légende « Photo de X » dans l'album d'un autre au lieu de « Ta photo »,
+  127 tests (§4.6).

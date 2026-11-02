@@ -10,13 +10,18 @@ export function isOwner(album, userId) {
   return Boolean(album && userId) && String(album.ownerId) === String(userId);
 }
 
+/** Vrai si l'album est partagé avec `userId` (étape 5). */
+export function isSharedWith(album, userId) {
+  return Boolean(album && userId) && (album.sharedWith ?? []).some((id) => String(id) === String(userId));
+}
+
 /**
- * Vrai si `userId` peut voir l'album : son propriétaire, ou tout le monde
- * quand l'album est public.
- * Étape 5 : un album privé deviendra aussi visible par les amis avec qui il
- * est partagé (`sharedWith`).
+ * Vrai si `userId` peut voir l'album : son propriétaire, tout le monde
+ * quand l'album est public, et, quand il est privé, les amis avec qui il
+ * est partagé (`sharedWith`, étape 5). Retirer un ami le retire de
+ * `sharedWith` (routes/friends.js) : pas besoin de revérifier l'amitié ici.
  */
 export function canView(album, userId) {
   if (!album) return false;
-  return isOwner(album, userId) || album.visibility === "public";
+  return isOwner(album, userId) || album.visibility === "public" || isSharedWith(album, userId);
 }
