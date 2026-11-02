@@ -1,0 +1,95 @@
+.comments {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  background: var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 16px;
+}
+
+h2 { margin: 0 0 1rem; font: var(--mat-sys-title-large); }
+.total { color: var(--mat-sys-on-surface-variant); }
+
+.comment-form mat-form-field { width: 100%; }
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+.post-error { margin: 0; }
+
+.empty { margin: 1rem 0 0; color: var(--mat-sys-on-surface-variant); }
+
+.list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thread { display: grid; gap: 0.4rem; }
+
+.comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+/* Réponses du propriétaire : en retrait, sous le commentaire. */
+.replies {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0 2.75rem;
+  padding: 0 0 0 0.75rem;
+  list-style: none;
+  border-left: 2px solid rgb(201 162 77 / 0.35);
+}
+.reply .body { background: rgb(201 162 77 / 0.06); }
+.avatar.small { width: 28px; height: 28px; font-size: 0.8rem; }
+.owner-badge {
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  color: var(--mat-sys-on-primary-container);
+  font: var(--mat-sys-label-small);
+  background: var(--mat-sys-primary-container);
+}
+.reply-button { justify-self: start; margin-left: 2.75rem; }
+.reply-form { margin-left: 3.5rem; }
+.reply-form mat-form-field { width: 100%; }
+
+/* Même avatar que la page Amis : initiale sur fond or métallique. */
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--cv-bg);
+  font-weight: 700;
+  background: var(--cv-gold);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.85rem;
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid var(--cv-border);
+  border-radius: 12px;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  margin: 0 0 0.25rem;
+  font: var(--mat-sys-label-large);
+}
+.meta time { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+
+.more { margin-top: 0.75rem; }
+mat-progress-bar { margin-top: 0.75rem; }

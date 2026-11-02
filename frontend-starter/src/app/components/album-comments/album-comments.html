@@ -1,0 +1,146 @@
+<section class="comments" aria-labelledby="comments-title">
+  <h2 id="comments-title">
+    Commentaires
+    @if (total() > 0) {
+      <span class="total">({{ total() }})</span>
+    }
+  </h2>
+
+  @if (canComment()) {
+    <!-- (submit) natif : sans [formGroup], ngSubmit ne serait pas émis. -->
+    <form class="comment-form" (submit)="$event.preventDefault(); post()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Ton commentaire</mat-label>
+        <textarea
+          matInput
+          [formControl]="text"
+          rows="2"
+          [attr.maxlength]="max"
+          placeholder="Dis ce que tu penses de cet album…"
+        ></textarea>
+        <mat-hint align="end">{{ length() }} / {{ max }}</mat-hint>
+      </mat-form-field>
+      <div class="form-actions">
+        @if (postError()) {
+          <p class="error post-error" role="alert">{{ postError() }}</p>
+        }
+        <button mat-flat-button type="submit" class="publish" [disabled]="posting() || !canPost()">
+          <mat-icon>send</mat-icon>
+          {{ posting() ? 'Publication…' : 'Publier' }}
+        </button>
+      </div>
+    </form>
+  }
+
+  @if (error()) {
+    <p class="error load-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (loaded() && comments().length === 0 && !error()) {
+    <p class="empty">
+      @if (canComment()) {
+        Aucun commentaire pour l’instant : sois le premier à commenter.
+      } @else if (canReply()) {
+        Aucun commentaire pour l’instant : quand tes amis commenteront ton album, tu pourras leur répondre ici.
+      } @else {
+        Aucun commentaire pour l’instant.
+      }
+    </p>
+  }
+
+  <ul class="list">
+    @for (comment of comments(); track comment.id) {
+      <li class="thread">
+        <div class="comment">
+          <span class="avatar" aria-hidden="true">{{ initial(comment.author.name) }}</span>
+          <div class="body">
+            <p class="meta">
+              <b>{{ comment.author.name }}</b>
+              <time [attr.datetime]="comment.createdAt">{{ comment.createdAt | date: 'dd/MM/yyyy à HH:mm' }}</time>
+            </p>
+            <p class="text">{{ comment.text }}</p>
+          </div>
+          @if (comment.canDelete) {
+            <button
+              mat-icon-button
+              class="delete"
+              (click)="confirmDelete(comment)"
+              matTooltip="Supprimer le commentaire"
+              [attr.aria-label]="'Supprimer le commentaire de ' + comment.author.name"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+        </div>
+
+        <!-- Réponses du propriétaire (un seul niveau). -->
+        @if (comment.replies.length > 0) {
+          <ul class="replies" [attr.aria-label]="'Réponses au commentaire de ' + comment.author.name">
+            @for (reply of comment.replies; track reply.id) {
+              <li class="comment reply">
+                <span class="avatar small" aria-hidden="true">{{ initial(reply.author.name) }}</span>
+                <div class="body">
+                  <p class="meta">
+                    <b>{{ reply.author.name }}</b>
+                    <span class="owner-badge">propriétaire</span>
+                    <time [attr.datetime]="reply.createdAt">{{ reply.createdAt | date: 'dd/MM/yyyy à HH:mm' }}</time>
+                  </p>
+                  <p class="text">{{ reply.text }}</p>
+                </div>
+                @if (reply.canDelete) {
+                  <button
+                    mat-icon-button
+                    class="delete delete-reply"
+                    (click)="confirmDelete(reply)"
+                    matTooltip="Supprimer la réponse"
+                    aria-label="Supprimer la réponse"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        }
+
+        @if (canReply()) {
+          @if (replyingTo() === comment.id) {
+            <form class="reply-form" (submit)="$event.preventDefault(); postReply(comment)">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Ta réponse à {{ comment.author.name }}</mat-label>
+                <textarea matInput [formControl]="replyText" rows="2" [attr.maxlength]="max"></textarea>
+                <mat-hint align="end">{{ replyLength() }} / {{ max }}</mat-hint>
+              </mat-form-field>
+              <div class="form-actions">
+                @if (replyError()) {
+                  <p class="error reply-error" role="alert">{{ replyError() }}</p>
+                }
+                <button mat-button type="button" class="cancel-reply" (click)="cancelReply()" [disabled]="replying()">
+                  Annuler
+                </button>
+                <button mat-flat-button type="submit" class="publish-reply" [disabled]="replying() || !canPostReply()">
+                  {{ replying() ? 'Publication…' : 'Répondre' }}
+                </button>
+              </div>
+            </form>
+          } @else {
+            <button mat-button class="reply-button" (click)="startReply(comment)">
+              <mat-icon>reply</mat-icon>
+              Répondre
+            </button>
+          }
+        }
+      </li>
+    }
+  </ul>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement des commentaires" />
+  }
+  @if (hasMore() && !loading()) {
+    <button mat-button class="more" (click)="load()">
+      <mat-icon>expand_more</mat-icon>
+      Afficher plus de commentaires
+    </button>
+  }
+</section>

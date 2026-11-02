@@ -9,8 +9,9 @@
 
 **État au 02/11/2026** : conception terminée (points 1 à 4 du sujet) ;
 étapes 0 (préparation), 1 (nettoyage, identité, navigation), 2 (albums),
-3 (cartes et classeur), 4 (amis) et 5 (partage) terminées. Prochaine
-étape : 6 (likes et commentaires).
+3 (cartes et classeur), 4 (amis), 5 (partage) et 6 (likes et
+commentaires) terminées. Prochaine étape : 7 (découverte : récents,
+activité, recherche).
 
 **Fonctionnalités disponibles** : inscription, connexion, profil ;
 navigation ; **albums** (créer, modifier, supprimer ; thème facultatif
@@ -23,7 +24,11 @@ filtrable par catégorie, zoom photo / image officielle, retrait) ;
 refus, annulation, retrait, badge d'invitations reçues, bouton « Inviter »
 sur l'album d'un autre) ; **partage** (un album privé est partagé avec des
 amis cochés dans une fenêtre, décocher arrête le partage, retirer un ami
-arrête ses partages ; onglet « Partagés avec moi »).
+arrête ses partages ; onglet « Partagés avec moi ») ; **likes et
+commentaires** (cœur et commentaires pour les amis, **réponses du
+propriétaire** sous leurs commentaires, lecture seule pour les autres
+visiteurs, suppression de ses réactions et, pour le propriétaire, de
+celles reçues).
 
 ## 1. Le projet
 
@@ -47,7 +52,7 @@ et les composants d'interface. La partie audio de la V1 est retirée.
 | Cohérence du thème | un **Pokémon** ou une **Énergie typée** doit avoir le type de l'album ; **Dresseurs** et **Énergies sans type** toujours acceptés ; série et extension s'appliquent à toutes les cartes | — |
 | Amis | rechercher par pseudo, inviter, accepter, refuser (sans prévenir l'expéditeur), annuler, retirer ; invitations croisées acceptées automatiquement ; badge d'invitations reçues | réseau social : inviter / ajouter / supprimer des amis |
 | Activité | fil d'activité des amis (albums créés, cartes ajoutées, commentaires), limité à ce que je peux voir | voir l'activité des amis |
-| Réactions | likes et commentaires **réservés aux amis** (et au propriétaire) ; suppression de mes réactions et de celles reçues sur mes albums | — |
+| Réactions | likes et commentaires **réservés aux amis** ; le propriétaire n'aime ni ne commente son album, il **répond** aux commentaires (un niveau) ; lecture seule pour les autres visiteurs ; suppression de mes réactions et de celles reçues sur mes albums ; réactions d'un ex-ami conservées | — |
 | Découverte | **récemment ajoutés** (albums publics) ; **recherche** (titre, propriétaire, type, série, extension) parmi ce que je peux voir | récents, search files |
 | Profil | pseudo, avatar, bio ; albums visibles | — |
 
@@ -92,6 +97,7 @@ chargement, emplacements vides façon pochettes de classeur.
 | Série exclue | *Pokémon Pocket* (cartes numériques, impossibles à photographier) | — |
 | Amis (02/11/2026) | modèle `Friendship` : **un lien par paire** d'utilisateurs (clé unique formée des deux identifiants triés), `pending` puis `accepted`, supprimé au refus ou au retrait | pas de doublon, même si deux invitations partent au même instant ; une seule requête filtrée par action, sur la paire du token |
 | Partage (02/11/2026) | liste `sharedWith` dans l'album, **remplacée en entier** par le propriétaire (liste vide = plus de partage) ; `canView` l'inclut ; retirer un ami fait un `$pull` dans les deux sens | une seule règle d'accès pour l'album, ses cartes et ses photos ; l'amitié n'a pas à être revérifiée à chaque lecture |
+| Réactions (02/11/2026) | `Like` unique par personne et par album (index unique + `upsert`), `Comment` de 500 caractères, compteurs sur l'album ; `404` si l'album n'est pas visible, `403` s'il l'est mais que la réaction est interdite | pas de like en double ; le refus d'une action ne révèle rien de plus que ce que l'utilisateur voit déjà |
 | Affichage des images | **URL signées temporaires** (HMAC-SHA256, échéance arrondie à l'heure : 1 à 2 h) | `<img>` n'envoie pas le JWT ; même URL pendant l'heure, donc cache du navigateur et chargement différé |
 | Traitement des images | **`sharp`** : vérification que c'est une image, miniature, redressement, suppression des métadonnées EXIF (GPS) | performance et vie privée |
 | Recadrage (01/11/2026) | **`ngx-image-cropper`** côté Angular (cadre au format carte 63:88, rotation par quarts de tour) ; seules les **coordonnées** sont envoyées, `sharp` découpe l'original côté serveur | pochettes remplies par la carte seule, sans perte de qualité |
@@ -137,7 +143,7 @@ réponse prête à afficher. 4) Une seule adresse (`/api`) pour Angular.
 | 3 | Cartes et classeur : catalogue, cohérence, photos, URL signées | ✅ 01/11/2026 |
 | 4 | Amis | ✅ 02/11/2026 |
 | 5 | Partage et arrêt du partage | ✅ 02/11/2026 |
-| 6 | Likes et commentaires | à faire |
+| 6 | Likes et commentaires | ✅ 02/11/2026 |
 | 7 | Découverte : récents, activité, recherche | à faire |
 | 8 | Profil, finitions, check-up, tag `v2.0` | à faire |
 
@@ -157,6 +163,8 @@ Détail (tableaux attendu / observé) : [Tests.md](Tests.md), section V2.
 | 3, recadrage (01/11/2026) | 74/74 (7 fichiers) | 84/84 (17 fichiers) | ✅ | ✅ photo couchée et décentrée : rotation, cadre ajusté, carte rangée droite au format carte |
 | 4 (02/11/2026) | 91/91 (8 fichiers) | 110/110 (20 fichiers) | ✅ | ✅ 27 vérifications, vraie base, 3 comptes |
 | 5 (02/11/2026) | 102/102 (9 fichiers) | 125/125 (21 fichiers) | ✅ | ✅ 28 vérifications, vraies photos, 3 comptes |
+| 6 (02/11/2026) | 116/116 (10 fichiers) | 146/146 (24 fichiers) | ✅ | ✅ 28 vérifications, 3 comptes |
+| 6, réponses du propriétaire (02/11/2026) | 118/118 | 153/153 | ✅ | ✅ 14 vérifications |
 
 **Méthode.** Les tests frontend simulent le backend
 (`provideHttpClientTesting()`) ; les tests backend n'utilisent pas MongoDB
@@ -202,3 +210,11 @@ volontairement, tous détectés dès le premier passage : les tests avaient
 destinataire) et aux deux sens du retrait d'un ami. Ajouter le partage à
 la seule règle `canView` a suffi pour que les cartes et les photos
 suivent : c'est l'intérêt d'une règle d'accès centralisée.
+
+**Enseignement de l'étape 6 (02/11/2026).** 28 bugs introduits
+volontairement, tous détectés après l'ajout d'un test : on vérifiait que le
+propriétaire voit le bouton « retirer ce like », pas qu'un ami ne le voit
+pas. Comme à l'étape 4, un défaut n'était visible que sur une capture : le
+cœur « Aimé » restait vide, la police d'icônes étant chargée sans son axe
+de remplissage. Enfin, un test devenu lent à mesure que la suite grossissait
+a été diagnostiqué (dépassement de temps, pas d'erreur) et stabilisé.

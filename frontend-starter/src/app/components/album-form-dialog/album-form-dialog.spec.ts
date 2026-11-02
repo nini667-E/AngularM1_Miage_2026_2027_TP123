@@ -27,11 +27,17 @@ const ALBUM: Album = {
   },
   cardCount: 0,
   sharedCount: 0,
+  likeCount: 0,
+  commentCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };
 
-describe('AlbumFormDialogComponent', () => {
+// Limite portée à 15 s pour ce fichier (02/11/2026) : son premier test paie
+// le premier affichage des champs Material (select, extension…) pendant que
+// les autres fichiers tournent en parallèle, et dépassait parfois les 5 s
+// par défaut (jusqu'à 9,6 s mesurés) sans aucune erreur de logique.
+describe('AlbumFormDialogComponent', { timeout: 15_000 }, () => {
   let fixture: ComponentFixture<AlbumFormDialogComponent>;
   let component: AlbumFormDialogComponent;
   let httpMock: HttpTestingController;

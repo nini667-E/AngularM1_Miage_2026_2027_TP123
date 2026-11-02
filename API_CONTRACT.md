@@ -18,6 +18,13 @@
 > (`/albums/shared`, `/albums/:id/shares`) ; `Album.sharedCount` ; un album
 > privé est visible par les amis destinataires ; retirer un ami arrête les
 > partages.
+> **02/11/2026 — étape 6** : likes et commentaires (`/albums/:id/reactions`,
+> `/albums/:id/likes`, `/albums/:id/comments`, `/comments/:id`) ;
+> `Album.likeCount` et `commentCount` ; la suppression d'un album supprime
+> aussi ses réactions.
+> **02/11/2026 — étape 6 (correction)** : le propriétaire ne commente plus
+> son album, il **répond** aux commentaires de ses amis (`parentId`) ;
+> `ReactionSummary.canReply`, `Comment.parentId` et `Comment.replies`.
 
 Base : `/api`. Sauf santé, inscription et connexion, envoyer
 `Authorization: Bearer <token>` (sinon `401`).
@@ -44,6 +51,13 @@ Le backend utilise Mongoose et MongoDB (base `card-vault`).
 | DELETE | `/albums/:id` | JWT | `204` (cartes et photos comprises) |
 | GET | `/albums/:id/shares` | JWT | `200 AlbumShare[]` |
 | PUT | `/albums/:id/shares` | `{userIds}` + JWT | `200 Album` |
+| GET | `/albums/:id/reactions` | JWT | `200 ReactionSummary` |
+| PUT | `/albums/:id/likes/me` | JWT | `200 LikeResult` |
+| DELETE | `/albums/:id/likes/me` | JWT | `200 LikeResult` |
+| DELETE | `/albums/:id/likes/:userId` | JWT (propriétaire) | `204` |
+| GET | `/albums/:id/comments?page=1&limit=10` | JWT | `200 Page<Comment>` |
+| POST | `/albums/:id/comments` | `{text, parentId?}` + JWT | `201 Comment` |
+| DELETE | `/comments/:id` | JWT | `204` |
 | GET | `/catalog/cards?name=&albumId=` | JWT | `200 CardSearchResult[]` |
 | GET | `/catalog/cards/:id?albumId=` | JWT | `200 CardDetail` |
 | GET | `/albums/:id/cards?page=1&limit=9&category=` | JWT | `200 Page<AlbumCard>` |
@@ -61,7 +75,8 @@ Le backend utilise Mongoose et MongoDB (base `card-vault`).
 `Page<T>` contient `items`, `page`, `limit`, `total` et `pages`.
 
 Erreurs courantes : `400` validation, `401` authentification, `403` lien
-d'image invalide ou expiré, `404` ressource (ou ressource d'un autre
+d'image invalide ou expiré, ou réaction interdite sur un album visible
+(étape 6), `404` ressource (ou ressource d'un autre
 utilisateur), `409` email déjà utilisé, thème incompatible avec les
 cartes, ou invitation impossible (déjà amis, déjà invité), `502` catalogue TCGdex indisponible. Toute erreur renvoie
 `{ "message" }`.
@@ -91,6 +106,7 @@ Album = {
   id, ownerId, title, description, visibility,
   theme: { type: string | null, serie: Ref | null, set: Ref | null },  // Ref = { id, name, logo }
   cardCount,
+  likeCount, commentCount,      // étape 6
   sharedCount: number | null,   // étape 5 : nombre d'amis destinataires,
                                 // pour le propriétaire seulement (sinon null)
   createdAt, updatedAt
@@ -116,7 +132,7 @@ partagé** (étape 5, voir « Partage »).
 | `GET /albums/mine` | ses propres albums, plus récents d'abord ; `page` ≥ 1, `limit` entre 1 et 48 (défaut 12) | `200 Page<Album>` | `401` |
 | `GET /albums/:id` | propriétaire, tout utilisateur si l'album est public, ami destinataire si l'album est privé et partagé avec lui | `200 AlbumDetail` | `401`, `404 Album inconnu` (inexistant, identifiant invalide, ou privé d'un autre : volontairement indiscernables) |
 | `PUT /albums/:id` | propriétaire seulement ; seuls les champs envoyés sont modifiés | `200 Album` | `400` (mêmes règles que la création), `401`, `404`, **`409`** (nouveau thème non respecté par des cartes déjà rangées, étape 3), `502` |
-| `DELETE /albums/:id` | propriétaire seulement ; supprime aussi ses cartes et leurs photos | `204` | `401`, `404` |
+| `DELETE /albums/:id` | propriétaire seulement ; supprime aussi ses cartes, leurs photos, ses likes et ses commentaires (étape 6) | `204` | `401`, `404` |
 
 ## Cartes (étape 3)
 
@@ -219,3 +235,52 @@ destinataire ne voit ni la liste ni le nombre des autres destinataires.
 Une URL de photo déjà délivrée à un destinataire reste valable jusqu'à son
 échéance (1 à 2 h) après l'arrêt du partage : limite déjà décrite pour les
 images (étape 3).
+
+## Likes et commentaires (étape 6, 02/11/2026)
+
+```ts
+ReactionSummary = {
+  likeCount, likedByMe: boolean,
+  likers: PublicUser[],            // qui aime, plus récents d'abord
+  commentCount,
+  canLike: boolean,                // ami du propriétaire (pas le propriétaire)
+  canComment: boolean,             // ami du propriétaire (pas le propriétaire)
+  canReply: boolean,               // propriétaire : répond aux commentaires
+  canRemoveLikes: boolean          // propriétaire
+}
+LikeResult = { likeCount, likedByMe }
+Comment = {
+  id, albumId, parentId: string | null,    // null : commentaire principal
+  author: PublicUser, text, createdAt, canDelete: boolean,
+  replies: Comment[]                       // réponses du propriétaire (un niveau)
+}
+```
+
+**Lire** (résumé, liste des likes, commentaires) : quiconque **voit**
+l'album (`canView`). Sur un album public, un visiteur qui n'est pas ami
+voit donc tout, en lecture seule.
+
+**Réagir** : aimer et commenter sont réservés aux **amis** du
+propriétaire. Le **propriétaire** n'aime pas et ne commente pas son propre
+album : il **répond** aux commentaires de ses amis (un seul niveau,
+correction du 02/11/2026). Un album invisible répond `404` comme
+partout. Un album visible mais une réaction interdite répond `403` :
+l'album existe pour l'utilisateur, seule l'action est refusée.
+
+**Supprimer** :
+- ses propres réactions, même si l'amitié a pris fin ;
+- pour le propriétaire, les likes et commentaires reçus sur ses albums.
+
+Une amitié retirée **conserve** les réactions déjà laissées. Un like est
+**unique** par personne et par album (index unique) : aimer deux fois ne
+change rien.
+
+| Route | Accès | Réponses | Erreurs |
+|---|---|---|---|
+| `GET /albums/:id/reactions` | qui voit l'album | `200 ReactionSummary` | `401`, `404` |
+| `PUT /albums/:id/likes/me` | ami du propriétaire ; répéter ne change rien | `200 { likeCount, likedByMe: true }` | `401`, `403` (« Tu ne peux pas aimer ton propre album », ou non-ami), `404` |
+| `DELETE /albums/:id/likes/me` | qui voit l'album (retirer son like) | `200 { likeCount, likedByMe: false }` | `401`, `404` |
+| `DELETE /albums/:id/likes/:userId` | propriétaire seulement | `204` | `401`, `404` (album d'un autre, ou like inconnu) |
+| `GET /albums/:id/comments` | qui voit l'album ; **commentaires principaux**, plus récents d'abord, chacun avec ses `replies` (ordre chronologique) ; `page` ≥ 1, `limit` 1-50 (défaut 10) ; `total` = commentaires principaux ; `canDelete` = auteur ou propriétaire de l'album | `200 Page<Comment>` | `401`, `404` |
+| `POST /albums/:id/comments` | sans `parentId` : commentaire, **ami** du propriétaire ; avec `parentId` : **réponse**, **propriétaire** seulement, à un commentaire principal de cet album ; `text` 1 à 500 caractères (espaces retirés) | `201 Comment` | `400` (vide, trop long, pas une chaîne), `401`, `403` (propriétaire qui commente : « Tu ne peux pas commenter ton propre album : réponds aux commentaires de tes amis » ; non-ami ; ami qui répond), `404` (album invisible ; `parentId` inconnu, invalide, d'un autre album ou déjà une réponse) |
+| `DELETE /comments/:id` | son auteur, ou le propriétaire de l'album ; un commentaire principal **emporte ses réponses** | `204` | `401`, `404` (inexistant, identifiant invalide, ou pas le droit : indiscernables) |

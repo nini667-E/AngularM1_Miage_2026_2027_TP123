@@ -3206,3 +3206,164 @@ au calme, deux fois de suite. Rien n'a été modifié ; c'est noté dans
   `album-page/album-page.ts`, `album-page.spec.ts`, `analyse.md`.
 - Racine : `compte-rendu/V2.md`, `Tests.md`, capture
   `v2-etape5-zoom-photo-ami.png`, cette entrée.
+
+### Entrée V2.6 — Étapes 4 et 5 commitées, étape 6 : likes et commentaires (02/11/2026)
+
+**Objectif.** Commiter les étapes 4 et 5, puis permettre aux amis d'un
+collectionneur d'**aimer** et de **commenter** ses albums, avec la
+suppression des réactions. Ce sont les fonctions sociales prévues dans
+`REPORT.md`.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets) :**
+> ok fais le git des étapes 4 et 5 et on passe à la 6
+>
+> [Visiteurs : Tout, en lecture seule] [Auto-like : Non]
+> [Ex-ami : Conservés] [Démarrage : Oui, implémente directement]
+
+**Démarche de l'agent.**
+- **Commit** : vérification de la copie de travail (aucun `.env`,
+  harnais ou script de vérification). Les étapes 4 et 5 touchent les
+  mêmes fichiers, elles ont donc été regroupées en un seul commit
+  (`832af77`), puis poussées.
+- **Plan** : objectif vulgarisé, fichiers, routes, règle 404 / 403,
+  quatre questions dont la validation du plan.
+
+**Choix techniques.**
+- **Droits** : `reactionRights` est une fonction pure. L'amitié est
+  calculée par la route, qui seule accède à la base.
+- **Codes d'erreur** : `404` si l'album n'est pas visible, `403` s'il
+  l'est mais que la réaction est interdite. C'est une exception assumée à
+  la règle « jamais 403 », car l'album existe déjà pour l'utilisateur.
+- **Likes** : index unique et `upsert`, donc aimer deux fois ne change
+  rien. Compteurs `$inc`, décrémentés seulement s'ils sont positifs.
+- **Frontend** :
+  - l'état des réactions appartient à la page ; la barre de likes le
+    reçoit et le renvoie (`summaryChange`) ;
+  - le cœur s'affiche tout de suite et revient en arrière si le serveur
+    refuse ;
+  - « Afficher plus » est dédoublonné par identifiant.
+
+**Vérifications réalisées.**
+- Backend 116/116 (+14), frontend 146/146 (+16), build sans
+  avertissement.
+- **Vérification croisée : 28 bugs** (14 backend, 14 frontend). 27 ont
+  été détectés d'emblée ; le dernier après l'ajout d'un test (erreur 2).
+- Harnais Playwright, vraie base, trois comptes : 28 vérifications
+  réussies (droits des trois profils, `403` et `404`, 501 caractères,
+  « Aimé par », suppression confirmée, pagination, ex-ami, mobile,
+  console).
+- Relecture de chaque capture.
+
+**Erreurs, bugs et décisions.**
+1. **Cœur jamais rempli, vu sur une capture.** `index.html` chargeait
+   *Material Symbols* par l'adresse `icon?family=`, qui fournit une
+   version figée sans l'axe FILL : la règle `font-variation-settings`
+   n'avait aucun effet. Le lien demande maintenant l'axe
+   (`css2?…FILL…0..1`), et le cœur est vérifié plein sur une nouvelle
+   capture. Les tests unitaires ne pouvaient pas le voir (jsdom ne dessine
+   pas les polices).
+2. **Test manquant (vérification croisée)** : le bouton « retirer ce
+   like » montré à tout le monde. Le test vérifiait seulement que le
+   propriétaire le voit. Test ajouté pour un ami ; il échoue bien avec le
+   bug.
+3. **Test devenu instable** : le premier test d'`album-form-dialog`
+   dépassait 5 s de plus en plus souvent. L'agent a d'abord confirmé qu'il
+   s'agissait d'un dépassement de temps et non d'une erreur, en relançant
+   jusqu'à capturer le message. Il a ensuite porté la limite à 15 s pour
+   ce fichier seulement, avec un commentaire qui l'explique. Trois
+   passages de suite ont réussi.
+4. **Piège évité** : le formulaire de commentaire utilise l'événement
+   natif `submit`, car `ngSubmit` n'est pas émis sans `[formGroup]` (bug du
+   TP2).
+5. **Erreurs de l'agent dans le harnais**, sans conséquence sur
+   l'application :
+   - une ancienne SnackBar lue à la place de la nouvelle ;
+   - un sélecteur ambigu (deux éléments portent la classe de la SnackBar) ;
+   - une commande `sed` qui a cassé une chaîne du harnais, corrigée avec
+     l'outil d'édition.
+
+**Fichiers effectivement modifiés.**
+- Backend : nouveaux `src/models/Like.js`, `src/models/Comment.js`,
+  `src/routes/reactions.js`, `test/reactions.test.js` ; modifiés
+  `src/access.js`, `src/app.js`, `src/models/Album.js`,
+  `src/routes/albums.js`, `test/albums.test.js`, `test/cards.test.js`,
+  `analyse.md`.
+- Frontend : nouveaux `components/like-bar/`, `components/album-comments/`,
+  `shared/models/reaction.model.ts`, `shared/services/reaction.service.ts`,
+  avec leurs tests ; modifiés `album-page/` (et son test),
+  `shared/models/album.model.ts`, `index.html` (police), données de test
+  (`likeCount`, `commentCount`), `album-form-dialog.spec.ts` (limite de
+  temps), `analyse.md`.
+- Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+  `compte-rendu/V2.md`, 6 captures `v2-etape6-*.png`, cette entrée.
+
+**Preuve de fonctionnement.** Sorties de `npm test` (116 et 146) et de
+`npm run build` ; tableau des vérifications dans le navigateur et captures
+dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.**
+- La différence entre « je ne vois pas l'album » (`404`) et « je le vois
+  mais ne peux pas réagir » (`403`), et pourquoi le second ne révèle rien.
+- Pourquoi un index unique et un `upsert` empêchent un double like.
+- Pourquoi un compteur ne doit pas descendre sous zéro, et comment le
+  filtre `$gt: 0` l'empêche.
+- Ce qu'est un affichage « optimiste » et pourquoi il faut savoir revenir
+  en arrière.
+- Pourquoi « Afficher plus » doit dédoublonner.
+- Pourquoi un test peut passer alors que l'écran est faux (la police).
+- Comment distinguer un test lent d'un test faux.
+
+### Entrée V2.6b — Correction : le propriétaire répond au lieu de commenter (02/11/2026)
+
+**Prompts (recopiés tels quels, réponses à choix entre crochets) :**
+> je vois que je peux commenter mon propre album, c est incoherent avec le
+> fait que je ne puisse pas liker mon propre album, retire ca et a la place
+> ajoute une option de description pour un album qui m appartien
+>
+> [Description : Rien de plus] [Anciens : « enfaite il ne peut pas mettre
+> de commentaire il peut juste mettre des reponses a ceux des autres »]
+>
+> [Réponses : Propriétaire seulement]
+
+**Démarche de l'agent.**
+- **Avant de coder**, l'agent a signalé que les albums avaient **déjà**
+  une description, modifiable dans la fenêtre « Modifier » et affichée
+  sous le titre. Il a demandé ce que l'utilisateur voulait vraiment.
+- Sa réponse a changé la demande : pas de description de plus, mais des
+  **réponses** du propriétaire aux commentaires.
+- Une seconde question a fixé qui peut répondre (le propriétaire
+  seulement) et la profondeur (un niveau).
+
+**Choix techniques.**
+- `Comment.parentId` ; `reactionRights` donne `canReply` au seul
+  propriétaire, et `canComment` aux seuls amis.
+- La liste pagine les commentaires principaux et joint leurs réponses en
+  une seule requête.
+- Supprimer un commentaire supprime ses réponses. Le décompte suit
+  (−1−n), et le filtre `$gte` empêche tout passage sous zéro.
+
+**Vérifications.**
+- Backend 118/118, frontend 153/153, build OK.
+- 12 bugs réintroduits, tous détectés.
+- Navigateur : 14 vérifications réussies, dont les refus côté serveur
+  (propriétaire qui commente, ami qui répond).
+- L'ancienne capture montrant un commentaire du propriétaire a été
+  supprimée et remplacée par deux captures des réponses.
+
+**Erreurs ou incidents de l'agent**, sans conséquence :
+- un heredoc du shell a de nouveau échoué ; le script a été écrit dans un
+  fichier ;
+- une réécriture de fichier a été refusée parce que le fichier avait
+  changé depuis la dernière lecture : il a été relu avant d'être réécrit.
+
+**Fichiers effectivement modifiés.**
+- Backend : `src/access.js`, `src/models/Comment.js`,
+  `src/routes/reactions.js`, `test/reactions.test.js`, `analyse.md`.
+- Frontend : `album-comments/` (`.ts`, `.html`, `.css`, `.spec.ts`),
+  `like-bar/` (gabarit, test), `album-page/` (gabarit, test),
+  `shared/models/reaction.model.ts`, `shared/services/reaction.service.ts`
+  (et son test), `analyse.md`.
+- Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+  `compte-rendu/V2.md`, captures `v2-etape6-reponse-*.png` (une capture
+  obsolète supprimée), cette entrée.

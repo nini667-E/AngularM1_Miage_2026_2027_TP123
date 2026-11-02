@@ -33,6 +33,9 @@ const schema = new mongoose.Schema(
     // l'album devient public : il reprend effet s'il redevient privé.
     sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     cardCount: { type: Number, default: 0, min: 0 },
+    // Compteurs des réactions (étape 6), tenus à jour comme cardCount.
+    likeCount: { type: Number, default: 0, min: 0 },
+    commentCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );
@@ -62,6 +65,8 @@ schema.methods.toPublic = function (viewerId) {
       set: publicRef(this.theme?.set),
     },
     cardCount: this.cardCount,
+    likeCount: this.likeCount ?? 0,
+    commentCount: this.commentCount ?? 0,
     sharedCount: isOwner(this, viewerId) ? (this.sharedWith?.length ?? 0) : null,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,

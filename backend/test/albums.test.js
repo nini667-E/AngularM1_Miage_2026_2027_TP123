@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { Album } from "../src/models/Album.js";
 import { Card } from "../src/models/Card.js";
+import { Comment } from "../src/models/Comment.js";
+import { Like } from "../src/models/Like.js";
 import { Friendship, pairKey } from "../src/models/Friendship.js";
 import { User } from "../src/models/User.js";
 import { clearCatalogCache } from "../src/services/tcgdex.js";
@@ -249,6 +251,8 @@ test("suppression : filtre { _id, ownerId du token } -> 204 pour le propriétair
   // Album sans carte (la suppression en cascade est testée dans cards.test.js).
   mock.method(Card, "find", () => ({ select: async () => [] }));
   mock.method(Card, "deleteMany", async () => ({ deletedCount: 0 }));
+  mock.method(Like, "deleteMany", async () => ({ deletedCount: 0 }));
+  mock.method(Comment, "deleteMany", async () => ({ deletedCount: 0 }));
 
   const byBob = await call("DELETE", `/api/albums/${album.id}`, bob);
   const byAlice = await call("DELETE", `/api/albums/${album.id}`, alice);

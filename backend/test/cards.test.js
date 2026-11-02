@@ -7,6 +7,8 @@ import sharp from "sharp";
 import { UPLOADS } from "../src/config.js";
 import { Album } from "../src/models/Album.js";
 import { Card } from "../src/models/Card.js";
+import { Comment } from "../src/models/Comment.js";
+import { Like } from "../src/models/Like.js";
 import { User } from "../src/models/User.js";
 import { clearCatalogCache } from "../src/services/tcgdex.js";
 import { deletePhotoFiles, MAX_PHOTO_SIZE, verifyImageSignature } from "../src/services/images.js";
@@ -383,7 +385,7 @@ test("suppression d'une carte : propriétaire seulement, fichiers effacés, comp
   assert.equal(String(deleteCall.mock.calls[0].arguments[0].ownerId), bob);
 });
 
-test("suppression d'un album : ses cartes et leurs fichiers aussi", async () => {
+test("suppression d'un album : ses cartes, leurs fichiers et ses réactions aussi", async () => {
   mockTcgdex();
   const album = fakeAlbum({});
   mockAlbum(album);
@@ -393,11 +395,16 @@ test("suppression d'un album : ses cartes et leurs fichiers aussi", async () => 
   mock.method(Album, "findOneAndDelete", async () => album);
   mock.method(Card, "find", () => ({ select: async () => [{ photo: stored }] }));
   const deleteMany = mock.method(Card, "deleteMany", async () => ({ deletedCount: 1 }));
+  const likes = mock.method(Like, "deleteMany", async () => ({ deletedCount: 2 }));
+  const comments = mock.method(Comment, "deleteMany", async () => ({ deletedCount: 3 }));
 
   const r = await realFetch(`${server.base}/api/albums/${album.id}`, { method: "DELETE", headers: authHeaders(alice) });
 
   assert.equal(r.status, 204);
   assert.deepEqual(deleteMany.mock.calls[0].arguments[0], { albumId: album._id });
+  // Étape 6 : likes et commentaires de l'album.
+  assert.deepEqual(likes.mock.calls[0].arguments[0], { albumId: album._id });
+  assert.deepEqual(comments.mock.calls[0].arguments[0], { albumId: album._id });
   assert.equal(fs.existsSync(path.join(UPLOADS, stored.thumb)), false);
 });
 

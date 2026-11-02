@@ -14,6 +14,8 @@
 > **02/11/2026 — V2, étape 5** : partage des albums privés avec des amis
 > (`canView` étendu, routes `/api/albums/shared` et `/api/albums/:id/shares`,
 > partages arrêtés au retrait d'un ami), §4.8.
+> **02/11/2026 — V2, étape 6** : likes et commentaires (modèles `Like` et
+> `Comment`, `reactionRights`, routes `routes/reactions.js`), §4.9.
 
 ## 1. Vue d'ensemble
 
@@ -26,8 +28,9 @@ le serveur) et les **cartes** rangées dans les albums, avec leur **photo**
 (traitée par `sharp`, stockée sur le disque local, servie par URL signées).
 Depuis l'étape 4, elle gère aussi les **amis** (recherche d'utilisateurs
 par pseudo, invitations, acceptation, refus, retrait), et depuis l'étape 5
-le **partage** des albums privés avec des amis choisis. Réactions et
-activité arrivent aux étapes 6 et 7.
+le **partage** des albums privés avec des amis choisis, et depuis l'étape 6
+les **likes et commentaires**. L'activité et la découverte arrivent à
+l'étape 7.
 
 ### 1.1 Stack technique
 
@@ -54,17 +57,20 @@ backend/
 │   ├── server.js         # Point d'entrée : connexion Mongo + écoute HTTP
 │   ├── config.js         # UPLOADS (dossier des photos) et SECRET (JWT + signatures d'images)
 │   ├── errors.js         # HttpError (erreur métier portant son code HTTP)
-│   ├── access.js         # Règles d'accès aux albums : isOwner, isSharedWith, canView
+│   ├── access.js         # Règles d'accès aux albums : isOwner, isSharedWith, canView, reactionRights
 │   ├── models/
 │   │   ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
 │   │   ├── Album.js      # Album (visibilité, thème, sharedWith, cardCount)
 │   │   ├── Card.js       # Carte d'un album (fiche TCGdex recopiée + photo)
-│   │   └── Friendship.js # Lien d'amitié : invitation en attente ou amis (étape 4)
+│   │   ├── Friendship.js # Lien d'amitié : invitation en attente ou amis (étape 4)
+│   │   ├── Like.js       # « J'aime » : unique par personne et par album (étape 6)
+│   │   └── Comment.js    # Commentaire d'album, 500 caractères (étape 6)
 │   ├── routes/
 │   │   ├── albums.js     # /api/albums (CRUD, 409 de changement de thème, cascade)
 │   │   ├── cards.js      # /api/albums/:id/cards, /api/cards/:id, /api/images
 │   │   ├── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
-│   │   └── friends.js    # /api/users/search, /api/friends (amis et invitations)
+│   │   ├── friends.js    # /api/users/search, /api/friends (amis et invitations)
+│   │   └── reactions.js  # /api/albums/:id/reactions|likes|comments, /api/comments (étape 6)
 │   └── services/
 │       ├── tcgdex.js     # Accès à TCGdex (mémoire, Pocket exclue, 502)
 │       ├── theme.js      # Validation du thème d'un album
@@ -72,14 +78,15 @@ backend/
 │       ├── friends.js    # relationOf, relationBetween, areFriends, friendIds
 │       └── images.js     # sharp + URL signées (HMAC-SHA256)
 ├── data/uploads/         # Photos WebP (hors Git), jamais servies directement
-├── test/                 # 102 tests node:test (sans MongoDB ni vrai TCGdex)
+├── test/                 # 116 tests node:test (sans MongoDB ni vrai TCGdex)
 │   ├── helpers.js        # serveur de test, tokens, faux TCGdex (cartes, recherche)
 │   ├── api.test.js, access.test.js, catalog.test.js, albums.test.js
 │   ├── card-info.test.js # type des Énergies, règles de cohérence
 │   ├── images.test.js    # vraies images : redressement, EXIF/GPS, tailles, signatures
 │   ├── cards.test.js     # recherche, détail, ajout avec photo, classeur, images, suppressions
 │   ├── friends.test.js   # relations, recherche d'utilisateurs, invitations, amis (étape 4)
-│   └── shares.test.js    # partage : canView, liste, partager / arrêter, partagés avec moi (étape 5)
+│   ├── shares.test.js    # partage : canView, liste, partager / arrêter, partagés avec moi (étape 5)
+│   └── reactions.test.js # droits, likes, commentaires, suppressions (étape 6)
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
@@ -179,7 +186,21 @@ erDiagram
         date acceptedAt
         date createdAt
     }
+    LIKE {
+        ObjectId albumId FK "index unique avec userId"
+        ObjectId userId FK
+        date createdAt
+    }
+    COMMENT {
+        ObjectId albumId FK "index albumId + createdAt"
+        ObjectId authorId FK
+        string text "1-500 caractères"
+        ObjectId parentId FK "réponse du propriétaire (un niveau), sinon null"
+        date createdAt
+    }
     USER ||--o{ ALBUM : "possède (ownerId)"
+    ALBUM ||--o{ LIKE : "reçoit"
+    ALBUM ||--o{ COMMENT : "reçoit"
     USER ||--o{ FRIENDSHIP : "invite / est invité"
     ALBUM ||--o{ CARD : "contient (albumId)"
 ```
@@ -345,6 +366,7 @@ quels dans l'album.
 | `isOwner(album, userId)` | `album.ownerId` = identité du token (comparaison en chaîne, ObjectId vs string) | `PUT /albums/:id` |
 | `canView(album, userId)` | propriétaire, **ou** album `public`, **ou** utilisateur présent dans `sharedWith` (étape 5) | `GET /albums/:id`, cartes, URL signées des photos |
 | `isSharedWith(album, userId)` | `userId` figure dans `sharedWith` (étape 5) | `canView` |
+| `reactionRights(album, userId, isFriend)` | `canLike` et `canComment` = ami (jamais le propriétaire) ; `canReply` = propriétaire (étape 6, corrigé le 02/11/2026) ; l'amitié est calculée par l'appelant (`areFriends`), la fonction reste pure | routes des réactions |
 
 `DELETE` applique la même règle directement dans la requête
 (`findOneAndDelete({ _id, ownerId: req.auth.sub })`). Refus = **`404`**,
@@ -560,6 +582,67 @@ flowchart TD
     D -- non --> N[404 Album inconnu]
 ```
 
+### 4.9 Likes et commentaires (`routes/reactions.js`, étape 6)
+
+**Deux niveaux de contrôle.**
+1. `canView` décide si l'album existe pour l'utilisateur ; sinon `404`.
+2. `reactionRights` décide s'il peut réagir. Sinon, la réponse est
+   `403` : l'album est visible et seule l'action est refusée. C'est la
+   seule exception à la règle « 404 plutôt que 403 », et elle ne révèle
+   rien de plus.
+
+**Likes.**
+- **Aimer** est un `updateOne` avec `upsert` et `$setOnInsert`, sur le
+  filtre `{ albumId, userId }` couvert par un index unique. Le like
+  n'est créé qu'une fois, même en cas de double clic ; le compteur
+  `likeCount` n'augmente que si un like a vraiment été créé
+  (`upsertedCount`).
+- **Ne plus aimer** reste possible sans être ami, pour retirer sa propre
+  réaction.
+- Le propriétaire retire un like reçu avec `DELETE
+  /albums/:id/likes/:userId`.
+
+**Commentaires.**
+- Les amis écrivent les commentaires principaux ; le propriétaire
+  **répond** sous l'un d'eux (`parentId`, un seul niveau : la réponse doit
+  viser un commentaire principal du même album, sinon `404`). Le
+  propriétaire qui écrit un commentaire principal reçoit `403` avec un
+  message explicite.
+- La liste pagine les seuls commentaires principaux, puis joint leurs
+  réponses en une requête (`parentId: { $in }`).
+- Supprimer un commentaire principal supprime ses réponses ; le compteur
+  baisse de 1 + n (filtre `$gte`).
+- Texte nettoyé (espaces retirés), de 1 à 500 caractères.
+- Liste paginée par 10, les plus récents d'abord. Chaque commentaire porte
+  `canDelete` (son auteur, ou le propriétaire de l'album).
+- `DELETE /api/comments/:id` répond `404` à tout autre utilisateur.
+
+**Compteurs.** `likeCount` et `commentCount` sur l'album sont tenus à jour
+par `$inc`. Une décrémentation filtre sur `{ compteur: { $gt: 0 } }` et ne
+peut donc pas descendre sous zéro. Le résumé recompte les likes réels.
+
+**Cycle de vie.**
+- La suppression d'un album supprime ses likes et ses commentaires.
+- Retirer un ami **conserve** les réactions déjà laissées : l'ex-ami ne
+  peut plus réagir, mais peut retirer ce qu'il a laissé.
+
+```mermaid
+flowchart TD
+    A[POST /api/albums/:id/comments] --> B{canView ?}
+    B -- non --> N[404 Album inconnu]
+    B -- oui --> C{texte 1-500 ?}
+    C -- non --> E[400]
+    C -- oui --> P{parentId ?}
+    P -- non --> D{ami ?}
+    D -- non --> F[403]
+    D -- oui --> G[Comment.create + commentCount +1] --> OK[201]
+    P -- oui --> Q{propriétaire ?}
+    Q -- non --> F
+    Q -- oui --> R{commentaire principal de cet album ?}
+    R -- non --> N2[404]
+    R -- oui --> G
+```
+
 ---
 
 ## 5. Gestion des erreurs et journalisation
@@ -686,3 +769,10 @@ Les autres flux sociaux (étapes 5 à 7) seront ajoutés au fil des étapes de l
   `/api/albums/shared` et `/api/albums/:id/shares`, `publicUsers` et
   `byName` déplacés dans `services/friends.js`, partages arrêtés au retrait
   d'un ami), 102 tests (§1, §1.2, §2.1, §4.3, §4.8).
+- **02/11/2026** — V2, étape 6 : likes et commentaires (modèles `Like`,
+  `Comment`, `reactionRights`, `routes/reactions.js`, compteurs
+  `likeCount` / `commentCount`, suppression en cascade), 116 tests (§1,
+  §1.2, §2.1, §4.3, §4.9).
+- **02/11/2026** — V2, étape 6 (correction) : le propriétaire répond
+  (`parentId`, `canReply`) au lieu de commenter ; suppression en cascade
+  des réponses, 118 tests (§2.1, §4.3, §4.9).

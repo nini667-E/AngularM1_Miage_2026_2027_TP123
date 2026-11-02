@@ -25,6 +25,10 @@ import { AddCardDialogComponent, AddCardDialogData } from '../add-card-dialog/ad
 import { ALBUM_DIALOG_CONFIG, AlbumFormDialogComponent } from '../album-form-dialog/album-form-dialog';
 import { CardZoomData, CardZoomDialogComponent, CardZoomResult } from '../card-zoom-dialog/card-zoom-dialog';
 import { ShareDialogComponent, ShareDialogData } from '../share-dialog/share-dialog';
+import { AlbumCommentsComponent } from '../album-comments/album-comments';
+import { LikeBarComponent } from '../like-bar/like-bar';
+import { ReactionSummary } from '../../shared/models/reaction.model';
+import { ReactionService } from '../../shared/services/reaction.service';
 
 /** Une page de classeur = 9 pochettes, comme un vrai classeur de collection. */
 export const CARDS_PER_PAGE = 9;
@@ -42,6 +46,8 @@ export const CARDS_PER_PAGE = 9;
     MatTooltipModule,
     ThemeChipsComponent,
     FriendButtonComponent,
+    LikeBarComponent,
+    AlbumCommentsComponent,
   ],
   templateUrl: './album-page.html',
   styleUrl: './album-page.css',
@@ -49,6 +55,7 @@ export const CARDS_PER_PAGE = 9;
 export class AlbumPageComponent {
   private readonly albumService = inject(AlbumService);
   private readonly cardService = inject(CardService);
+  private readonly reactionService = inject(ReactionService);
   private readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -59,6 +66,8 @@ export class AlbumPageComponent {
   readonly error = signal('');
   readonly notFound = signal(false);
   readonly deleting = signal(false);
+  /** Likes et droits de réaction (étape 6) ; null tant qu'ils ne sont pas chargés. */
+  readonly reactions = signal<ReactionSummary | null>(null);
 
   // Classeur.
   readonly cards = signal<AlbumCard[]>([]);
@@ -116,6 +125,7 @@ export class AlbumPageComponent {
         this.loading.set(false);
         this.page.set(1);
         this.loadCards();
+        this.loadReactions(album.id);
       },
       error: (error: HttpErrorResponse) => {
         console.error('[AlbumPage] Chargement impossible', error);
@@ -125,6 +135,15 @@ export class AlbumPageComponent {
         if (error.status === 404) this.notFound.set(true);
         else this.error.set(serverErrorMessage(error, "Impossible de charger l'album"));
       },
+    });
+  }
+
+  /** Réactions (étape 6) : un échec ne bloque pas l'album, la barre est simplement absente. */
+  loadReactions(albumId: string): void {
+    this.reactions.set(null);
+    this.reactionService.summary(albumId).subscribe({
+      next: (summary) => this.reactions.set(summary),
+      error: (error: HttpErrorResponse) => console.error('[AlbumPage] Réactions indisponibles', error),
     });
   }
 

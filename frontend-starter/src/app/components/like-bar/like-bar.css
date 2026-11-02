@@ -1,0 +1,37 @@
+.like-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+
+/* Cœur plein et rose une fois aimé (police Material Symbols : axe FILL). */
+.heart.liked {
+  --mat-button-outlined-label-text-color: #ff6b8b;
+  --mat-button-outlined-outline-color: rgb(255 107 139 / 0.6);
+}
+.heart.liked mat-icon { font-variation-settings: 'FILL' 1; }
+
+.count { color: var(--mat-sys-on-surface-variant); }
+.count-icon { color: #ff6b8b; font-variation-settings: 'FILL' 1; }
+.count.none { padding: 0 0.5rem; font: var(--mat-sys-label-large); }
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+.hint mat-icon { width: 18px; height: 18px; font-size: 18px; }
+
+.menu-title {
+  margin: 0;
+  padding: 0.5rem 1rem 0.25rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+.liker { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 40px; padding: 0 0.5rem 0 1rem; }
+.liker .name { flex: 1; }

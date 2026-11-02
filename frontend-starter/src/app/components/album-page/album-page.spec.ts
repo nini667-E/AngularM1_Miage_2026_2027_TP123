@@ -6,6 +6,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angul
 import { of } from 'rxjs';
 import { AlbumDetail } from '../../shared/models/album.model';
 import { AlbumCard } from '../../shared/models/card.model';
+import { ReactionSummary } from '../../shared/models/reaction.model';
 import { AuthService } from '../../shared/services/auth.service';
 import { AlbumPageComponent } from './album-page';
 
@@ -19,6 +20,8 @@ const ALBUM: AlbumDetail = {
   theme: { type: 'Feu', serie: null, set: null },
   cardCount: 3,
   sharedCount: 0,
+  likeCount: 0,
+  commentCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };
@@ -64,15 +67,33 @@ describe('AlbumPageComponent', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    // Réactions (étape 6) : demandées dès que l'album est affiché ; les tests
+    // qui ne passent pas par showAlbum() n'y répondent pas.
+    httpMock.match((r) => r.url === '/api/albums/a1/reactions' || r.url === '/api/albums/a1/comments');
+    httpMock.verify();
+  });
 
   const text = (selector: string) => el.querySelector(selector)?.textContent ?? '';
   const cardsRequest = (): TestRequest => httpMock.expectOne((r) => r.url === '/api/albums/a1/cards');
   const flushCards = (items: AlbumCard[], total = items.length) =>
     cardsRequest().flush({ items, page: 1, limit: 9, total, pages: Math.max(1, Math.ceil(total / 9)) });
 
-  /** Album affiché pour un utilisateur donné, avec une première page de cartes. */
-  function showAlbum(currentUserId: string, cards: AlbumCard[] = [], album = ALBUM): void {
+  /** Réactions selon la personne : propriétaire (commente), visiteur non ami (lit seulement). */
+  const summaryFor = (owner: boolean, fields: Partial<ReactionSummary> = {}): ReactionSummary => ({
+    likeCount: 0,
+    likedByMe: false,
+    likers: [],
+    commentCount: 0,
+    canLike: false,
+    canComment: false,
+    canReply: owner,
+    canRemoveLikes: owner,
+    ...fields,
+  });
+
+  /** Album affiché pour un utilisateur donné, avec une première page de cartes, ses réactions et ses commentaires. */
+  function showAlbum(currentUserId: string, cards: AlbumCard[] = [], album = ALBUM, summary?: ReactionSummary): void {
     TestBed.inject(AuthService).currentUser.set({ id: currentUserId, name: 'X', email: 'x@x', createdAt: '' });
     // Comme le backend : relation « self » pour le propriétaire seulement.
     if (currentUserId !== album.ownerId && album.owner.relation === 'self') {
@@ -80,6 +101,9 @@ describe('AlbumPageComponent', () => {
     }
     httpMock.expectOne('/api/albums/a1').flush(album);
     flushCards(cards, Math.max(cards.length, 0));
+    httpMock.expectOne('/api/albums/a1/reactions').flush(summary ?? summaryFor(currentUserId === album.ownerId));
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === '/api/albums/a1/comments').flush({ items: [], page: 1, limit: 10, total: 0, pages: 1 });
     fixture.detectChanges();
   }
 
@@ -184,6 +208,46 @@ describe('AlbumPageComponent', () => {
     open.mockReturnValueOnce({ afterClosed: () => of(undefined) } as never);
     component.share();
     expect(snack).toHaveBeenCalledTimes(2);
+  });
+
+  // ------------------------------------------- réactions (étape 6)
+
+  it('réactions : barre de likes et commentaires affichées ; visiteur non ami en lecture seule', () => {
+    showAlbum('someone-else', [], ALBUM, summaryFor(false, { likeCount: 2, likers: [{ id: 'u2', name: 'Ondine' }, { id: 'u3', name: 'Pierre' }] }));
+
+    expect(text('app-like-bar .count')).toContain('2 j’aime');
+    expect(el.querySelector('app-like-bar .heart')).toBeNull();
+    expect(text('app-like-bar .hint')).toContain('Seuls les amis de Sacha peuvent aimer et commenter');
+    expect(el.querySelector('app-album-comments')).not.toBeNull();
+    expect(el.querySelector('app-album-comments form')).toBeNull();
+  });
+
+  it('réactions : un ami peut aimer (cœur) et commenter (formulaire)', () => {
+    showAlbum('someone-else', [], { ...ALBUM, owner: { ...ALBUM.owner, relation: 'friend' } }, summaryFor(false, { canLike: true, canComment: true }));
+
+    expect(el.querySelector('app-like-bar .heart')).not.toBeNull();
+    expect(el.querySelector('app-like-bar .hint')).toBeNull();
+    expect(el.querySelector('app-album-comments form')).not.toBeNull();
+  });
+
+  it('réactions : le propriétaire ne commente pas son album (pas de formulaire), il répondra aux commentaires', () => {
+    showAlbum('owner');
+
+    expect(el.querySelector('app-like-bar .heart')).toBeNull();
+    expect(el.querySelector('app-like-bar .hint')).toBeNull();
+    expect(el.querySelector('app-album-comments form')).toBeNull();
+    expect(text('app-album-comments .empty')).toContain('tu pourras leur répondre');
+  });
+
+  it('réactions indisponibles : l’album reste affiché, sans barre de likes', () => {
+    TestBed.inject(AuthService).currentUser.set({ id: 'owner', name: 'X', email: 'x@x', createdAt: '' });
+    httpMock.expectOne('/api/albums/a1').flush(ALBUM);
+    flushCards([]);
+    httpMock.expectOne('/api/albums/a1/reactions').flush({ message: 'x' }, { status: 500, statusText: 'Error' });
+    fixture.detectChanges();
+
+    expect(text('h1')).toContain('Mes Dracaufeu');
+    expect(el.querySelector('app-like-bar')).toBeNull();
   });
 
   it('404 (inexistant ou privé d’un autre) : « Album introuvable », aucune carte demandée', () => {

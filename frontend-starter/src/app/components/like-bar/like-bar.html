@@ -1,0 +1,53 @@
+@let s = summary();
+<div class="like-bar">
+  @if (s.canLike) {
+    <button
+      mat-stroked-button
+      class="heart"
+      [class.liked]="s.likedByMe"
+      (click)="toggle()"
+      [disabled]="busy()"
+      [attr.aria-pressed]="s.likedByMe"
+      [attr.aria-label]="s.likedByMe ? 'Ne plus aimer cet album' : 'Aimer cet album'"
+    >
+      <mat-icon>favorite</mat-icon>
+      {{ s.likedByMe ? 'Aimé' : 'J’aime' }}
+    </button>
+  }
+
+  @if (s.likeCount > 0) {
+    <button mat-button class="count" [matMenuTriggerFor]="likersMenu" aria-label="Voir qui aime cet album">
+      <mat-icon class="count-icon" aria-hidden="true">favorite</mat-icon>
+      {{ label(s.likeCount) }}
+    </button>
+    <mat-menu #likersMenu="matMenu" class="likers-menu">
+      <p class="menu-title">Aimé par</p>
+      @for (liker of s.likers; track liker.id) {
+        <div class="liker">
+          <span class="name">{{ liker.name }}</span>
+          @if (s.canRemoveLikes) {
+            <button
+              mat-icon-button
+              class="remove-like"
+              (click)="removeLike(liker); $event.stopPropagation()"
+              [disabled]="busy()"
+              matTooltip="Retirer ce like"
+              [attr.aria-label]="'Retirer le like de ' + liker.name"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </div>
+      }
+    </mat-menu>
+  } @else {
+    <span class="count none">{{ label(0) }}</span>
+  }
+
+  @if (!s.canComment && !s.canReply) {
+    <p class="hint">
+      <mat-icon aria-hidden="true">lock</mat-icon>
+      Seuls les amis de {{ ownerName() }} peuvent aimer et commenter cet album.
+    </p>
+  }
+</div>

@@ -3,6 +3,8 @@ import { canView, isOwner } from "../access.js";
 import { HttpError } from "../errors.js";
 import { Album, DESCRIPTION_MAX, TITLE_MAX, VISIBILITIES } from "../models/Album.js";
 import { Card } from "../models/Card.js";
+import { Comment } from "../models/Comment.js";
+import { Like } from "../models/Like.js";
 import { checkTheme } from "../services/card-info.js";
 import { deletePhotoFiles } from "../services/images.js";
 import { User } from "../models/User.js";
@@ -211,13 +213,18 @@ export function albumRoutes(auth) {
     }
   });
 
-  /** Supprime un album (propriétaire uniquement), avec ses cartes et leurs photos. */
+  /** Supprime un album (propriétaire uniquement), avec ses cartes, leurs photos et ses réactions. */
   router.delete("/:id", auth, async (req, res, next) => {
     try {
       const album = await Album.findOneAndDelete({ _id: req.params.id, ownerId: req.auth.sub });
       if (!album) throw notFound();
       const cards = await Card.find({ albumId: album._id }).select("+photo.thumb +photo.full");
-      await Card.deleteMany({ albumId: album._id });
+      await Promise.all([
+        Card.deleteMany({ albumId: album._id }),
+        // Réactions de l'album (étape 6).
+        Like.deleteMany({ albumId: album._id }),
+        Comment.deleteMany({ albumId: album._id }),
+      ]);
       for (const card of cards) await deletePhotoFiles(card.photo);
       console.log(`[albums] Album supprimé : ${album.id} (${cards.length} carte(s))`);
       res.status(204).end();

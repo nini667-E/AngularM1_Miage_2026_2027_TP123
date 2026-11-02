@@ -14,6 +14,8 @@
 > d'amitié réutilisable, badge d'invitations dans la barre du haut (§4.8).
 > **02/11/2026 — V2, étape 5** : partage (fenêtre de partage, onglet
 > « Partagés avec moi », indications de partage), §4.9.
+> **02/11/2026 — V2, étape 6** : likes et commentaires (`ReactionService`,
+> `LikeBarComponent`, `AlbumCommentsComponent`), §4.10.
 
 ## 1. Vue d'ensemble
 
@@ -26,7 +28,8 @@ l'étape 3, elle contient l'authentification, le profil, la navigation, les
 le catalogue, contrôle du thème, photo, classeur 3×3, zoom). Depuis
 l'étape 4, elle gère les **amis** (recherche par pseudo, invitations,
 badge) et, depuis l'étape 5, le **partage** des albums privés avec des
-amis ; réactions et découverte arrivent aux étapes 6 et 7 (voir
+amis, et depuis l'étape 6 les **likes et commentaires** ; la découverte
+arrive à l'étape 7 (voir
 §7 "État par rapport aux missions").
 
 ### 1.1 Stack technique
@@ -48,7 +51,7 @@ amis ; réactions et découverte arrivent aux étapes 6 et 7 (voir
 frontend-starter/
 ├── proxy.conf.json                  # /api -> http://localhost:3000
 ├── src/
-│   ├── index.html                   # <base href="/"> (indispensable aux URL /albums/:id)
+│   ├── index.html                   # <base href="/"> (indispensable aux URL /albums/:id) ; police d'icônes avec axe FILL (étape 6)
 │   ├── main.ts                      # bootstrap standalone + providers globaux
 │   ├── material-theme.scss          # thème Material 3 sombre (or / bleu nuit)
 │   ├── _theme-colors.scss           # palettes générées (ng generate @angular/material:theme-color)
@@ -65,14 +68,16 @@ frontend-starter/
 │   │   │   ├── card-zoom-dialog/    # zoom : photo + image officielle + infos (étape 3)
 │   │   │   ├── friends-page/        # Amis : recherche + onglets amis / reçues / envoyées (étape 4)
 │   │   │   ├── share-dialog/        # partage d'un album privé : amis à cocher (étape 5)
+│   │   │   ├── like-bar/            # cœur, nombre de likes, « Aimé par » (étape 6)
+│   │   │   ├── album-comments/      # fil de commentaires d'un album (étape 6)
 │   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche)
 │   │   └── shared/
 │   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button (réutilisables)
 │   │       ├── guards/auth.guard.ts
 │   │       ├── interceptors/auth.interceptor.ts
 │   │       ├── i18n/french-paginator-intl.ts
-│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis
-│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService (seuls points d'appel HTTP)
+│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis, réactions
+│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService, ReactionService (seuls points d'appel HTTP)
 │   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
@@ -595,6 +600,53 @@ profil ne soit rechargé après un F5).
   partager ou arrêter un partage entre-temps ; il a sa propre pagination et
   son état vide.
 
+### 4.10 Likes et commentaires (`LikeBarComponent`, `AlbumCommentsComponent`, étape 6)
+
+**`ReactionService`** :
+- `summary(albumId)` → `GET /api/albums/:id/reactions` ;
+- `like` / `unlike` → `PUT` / `DELETE …/likes/me` ;
+- `removeLike(albumId, userId)` ;
+- `comments(albumId, page, 10)`, `addComment`, `deleteComment(id)`.
+
+**Page d'album.** Après l'album, elle charge le résumé des réactions
+(Signal `reactions`). Un échec ne bloque pas l'album : la barre de likes
+n'apparaît simplement pas. Elle place :
+- la **barre de likes** sous l'en-tête, avec l'entrée `summary` et la
+  sortie `summaryChange` : l'état reste dans la page ;
+- les **commentaires** sous le classeur, avec l'entrée `canComment` venue
+  du résumé.
+
+**Barre de likes.**
+- **Cœur**, pour les amis seulement :
+  - il change tout de suite, puis prend la valeur du serveur ;
+  - il revient à l'état d'avant en cas d'erreur, avec la SnackBar du
+    message serveur ;
+  - un Signal `busy` empêche le double envoi.
+- Le **compteur** ouvre un `MatMenu` « Aimé par », où le propriétaire
+  peut retirer chaque like reçu.
+- **Sans droit de commenter**, un message s'affiche : « Seuls les amis de
+  X peuvent aimer et commenter cet album. ».
+
+**Commentaires.**
+- **Rôles** : les amis ont le formulaire principal (`canComment`) ; le
+  propriétaire a un bouton **« Répondre »** sous chaque commentaire
+  (`canReply`), qui ouvre un formulaire de réponse (un seul ouvert à la
+  fois : Signal `replyingTo`). Les réponses s'affichent en retrait, avec
+  un badge « propriétaire ». Supprimer un commentaire retire aussi ses
+  réponses, et supprimer une réponse ne retire qu'elle.
+- **Formulaire réactif** (`FormControl`, `required` + `maxLength(500)`) :
+  - un texte fait seulement d'espaces ne peut pas être publié (`computed
+    canPost`), et un compteur « n / 500 » s'affiche ;
+  - le formulaire réagit à l'événement **natif `submit`** : sans
+    `[formGroup]`, `ngSubmit` n'est pas émis (piège déjà rencontré au TP2).
+- **Liste** : plus récents d'abord. Le bouton supprimer n'apparaît que si
+  le serveur indique `canDelete`, et la suppression passe par
+  `ConfirmDialogComponent`.
+- **« Afficher plus »** demande la page qui suit ce qui est déjà affiché,
+  et ignore les commentaires déjà présents (dédoublonnage par
+  identifiant). Les ajouts et suppressions décalent les pages, sans
+  doublon ni oubli.
+
 ---
 
 ## 5. Formulaires réactifs — pattern commun
@@ -686,6 +738,7 @@ mini projet.
 | V2 · Étape 3 | Cartes : recherche TCGdex, contrôle du thème, photo, classeur, zoom | ✅ Fait (01/11/2026) — `CardService` (progression d'envoi), `AddCardDialogComponent` (MatStepper, MatAutocomplete, debounce + switchMap, verdict serveur, contrôle de la photo), classeur 3×3 paginé et filtrable (squelettes, reflet, URL signées, reprise si expirée), zoom ; focus de la fenêtre sur la recherche ; 78 tests |
 | V2 · Étape 4 | Amis : inviter, accepter, refuser, annuler, retirer ; badge | ✅ Fait (02/11/2026) — `FriendService` (Signal `receivedCount`), page Amis (recherche debounce + switchMap, onglets, confirmation de retrait), `FriendButtonComponent` réutilisé sur la page d'album, badge `MatBadge` rechargé à chaque navigation ; 110 tests |
 | V2 · Étape 5 | Partage d'un album privé avec des amis, arrêt du partage | ✅ Fait (02/11/2026) — `ShareDialogComponent` (`MatSelectionList`, enregistrement de la liste complète), « Partager » et en-tête « partagé avec… » sur la page d'album, onglet « Partagés avec moi » (`MatTabGroup`), couverture avec « par X » ; 125 tests |
+| V2 · Étape 6 | Likes et commentaires | ✅ Fait (02/11/2026) — `ReactionService`, `LikeBarComponent` (cœur à affichage immédiat avec retour en arrière, « Aimé par » et retrait par le propriétaire), `AlbumCommentsComponent` (formulaire réactif, compteur 500, « Afficher plus » dédoublonné, suppression confirmée), lecture seule pour un visiteur non ami ; 145 tests |
 
 ---
 
@@ -800,3 +853,14 @@ mini projet.
 - **02/11/2026** — V2, étape 5 (correction) : `CardZoomData.ownerName`,
   légende « Photo de X » dans l'album d'un autre au lieu de « Ta photo »,
   127 tests (§4.6).
+- **02/11/2026** — V2, étape 6 : likes et commentaires (`ReactionService`,
+  `LikeBarComponent`, `AlbumCommentsComponent`, Signal `reactions` de la
+  page d'album, `likeCount` / `commentCount` sur `Album`), limite de temps
+  portée à 15 s pour `album-form-dialog.spec.ts`, 145 tests (§1, §1.2,
+  §4.10, §7).
+- **02/11/2026** — V2, étape 6 (suite) : police *Material Symbols* chargée
+  avec l'axe de remplissage variable (`css2?…FILL…0..1`) au lieu de
+  l'adresse `icon?family=`, qui fournit une version figée : le cœur
+  « Aimé » restait vide (§1.2).
+- **02/11/2026** — V2, étape 6 (correction) : réponses du propriétaire
+  (`canReply`, `replies`, formulaire de réponse, badge), 153 tests (§4.10).

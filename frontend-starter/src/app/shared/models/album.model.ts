@@ -27,6 +27,9 @@ export interface Album {
   cardCount: number;
   /** Nombre d'amis destinataires (étape 5) : pour le propriétaire seulement, sinon null. */
   sharedCount: number | null;
+  /** Réactions (étape 6). */
+  likeCount: number;
+  commentCount: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -16,6 +16,8 @@ const ALBUM: Album = {
   theme: { type: null, serie: null, set: null },
   cardCount: 2,
   sharedCount: 1,
+  likeCount: 0,
+  commentCount: 0,
   createdAt: '2026-11-01',
   updatedAt: '2026-11-01',
 };

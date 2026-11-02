@@ -68,6 +68,16 @@
       }
     </header>
 
+    <!-- Likes (étape 6). -->
+    @if (reactions(); as summary) {
+      <app-like-bar
+        [albumId]="album.id"
+        [ownerName]="album.owner.name"
+        [summary]="summary"
+        (summaryChange)="reactions.set($event)"
+      />
+    }
+
     <section class="binder" aria-label="Classeur de l'album">
       <div class="binder-toolbar">
         <mat-button-toggle-group
@@ -142,5 +152,12 @@
       }
       <p class="credit">Données et images officielles des cartes : TCGdex.</p>
     </section>
+
+    <!-- Commentaires (étape 6). -->
+    <app-album-comments
+      [albumId]="album.id"
+      [canComment]="reactions()?.canComment ?? false"
+      [canReply]="reactions()?.canReply ?? false"
+    />
   }
 </section>

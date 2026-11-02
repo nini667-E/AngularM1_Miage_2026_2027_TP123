@@ -709,3 +709,135 @@ d'album a deux fois dépassé la limite de 5 s par test de Vitest (jusqu'à
 calme, ils passent (127/127 deux fois de suite). Rien n'a été modifié, et
 le cas est noté pour le check-up de l'étape 8 : on pourra augmenter la
 limite pour ces fichiers si ça se reproduit.
+
+### Étape 6 — Likes et commentaires (02/11/2026)
+
+**Backend — 10 fichiers de test, 116 tests** (+14), sans MongoDB.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `reactions.test.js` **(nouveau, 14)** | `reactionRights` | ami : aimer et commenter ; propriétaire : commenter ; autre : rien | ✅ |
+| | résumé | nombre, qui aime (sans email), « j'aime », droits selon la personne ; lecture seule pour un non-ami ; `404` sur un album privé non partagé ; un ami destinataire d'un partage peut réagir | ✅ |
+| | aimer | `upsert` sur `{ albumId, userId }`, compteur +1 ; aimer deux fois sans second +1 | ✅ |
+| | aimer refusé | propriétaire et non-ami `403` (avec la raison) ; album invisible `404` ; rien enregistré | ✅ |
+| | ne plus aimer | mon like seulement, compteur −1 filtré `$gt: 0` ; possible sans être ami ; rien à retirer = compteur inchangé | ✅ |
+| | retirer un like reçu | propriétaire seulement (`404` sinon), like inconnu ou identifiant invalide `404` | ✅ |
+| | commentaires | plus récents d'abord, 10 par page (50 au plus), auteur sans email, `canDelete` = auteur ou propriétaire | ✅ |
+| | commenter | ami et propriétaire `201`, texte nettoyé, compteur +1 ; non-ami `403` ; vide, 501 caractères, absent, pas une chaîne `400` ; 500 accepté ; album invisible `404` | ✅ |
+| | supprimer un commentaire | auteur ou propriétaire (compteur −1) ; autre, inconnu, identifiant invalide `404` | ✅ |
+| | sans token | `401` sur les 6 routes | ✅ |
+| | modèles | commentaire > 500 refusé ; compteurs exposés | ✅ |
+| `albums.test.js`, `cards.test.js` (modifiés) | suppression d'un album | likes et commentaires supprimés aussi | ✅ |
+
+**Frontend — 24 fichiers, 146 tests** (+16) :
+- `ReactionService` **(nouveau, 2)** ;
+- `LikeBarComponent` **(nouveau, 7)** :
+  - affichage immédiat puis valeur du serveur ; ne plus aimer ;
+  - échec `403` : retour en arrière et message, double clic = une requête ;
+  - propriétaire : pas de cœur, retrait d'un like reçu ;
+  - « Aimé par » : bouton de retrait pour le propriétaire, et aucun pour
+    un ami ;
+  - visiteur non ami : message, aucune requête ;
+- `AlbumCommentsComponent` **(nouveau, 7)** :
+  - liste et `canDelete`, pas de formulaire en lecture seule ;
+  - état vide ; « Afficher plus » sans doublon ;
+  - publier (texte nettoyé, en tête, compteur, champ vidé, bouton inactif
+    pour des espaces) ; refus avec texte gardé et double envoi impossible ;
+  - suppression confirmée ou annulée ; erreur de chargement ;
+- `AlbumPageComponent` (+3) : visiteur non ami en lecture seule, ami avec
+  cœur et formulaire, réactions indisponibles sans bloquer l'album.
+  `showAlbum()` répond maintenant aussi aux requêtes de réactions et de
+  commentaires.
+
+Les données de test typées `Album` ont reçu `likeCount` et `commentCount`.
+
+**Limite de temps (02/11/2026).** `album-form-dialog.spec.ts` est passé à
+15 s par test (`describe(…, { timeout: 15_000 })`). Son premier test
+dépassait les 5 s par défaut de plus en plus souvent à mesure que la suite
+grossissait. Diagnostic : « Test timed out in 5000ms », sans erreur de
+logique. Ce test paie le premier affichage des champs Material, pendant
+que les 24 fichiers tournent en parallèle. Après la correction, trois
+passages complets de suite ont réussi.
+
+**Vérification croisée (28 bugs introduits volontairement : 14 backend, 14 frontend) :**
+
+| Bug introduit | Test qui a échoué |
+|---|---|
+| le propriétaire peut aimer son album | 3 tests |
+| tout le monde peut commenter | 3 tests |
+| album invisible accessible | 3 tests |
+| like compté deux fois | `aimer (ami) : … répéter ne change rien` |
+| compteur qui passe sous zéro | 2 tests |
+| like retiré par un non-propriétaire | `retirer un like reçu : propriétaire seulement…` |
+| texte non nettoyé | 2 tests |
+| longueur non contrôlée | `commenter : texte vide, trop long…` |
+| propriétaire sans droit de suppression affiché | `commentaires : … canDelete…` |
+| commentaire supprimable par tous | `supprimer un commentaire…` |
+| likes non supprimés avec l'album | `suppression d'un album : … ses réactions aussi` |
+| « j'aime » vrai dès qu'il y a un like | `résumé : …` |
+| commentaires du plus ancien au plus récent | `commentaires : plus récents d'abord…` |
+| un ex-ami ne peut plus retirer son like | `ne plus aimer : … possible sans être ami` |
+| cœur sans affichage immédiat | 4 tests |
+| pas de retour en arrière après un échec | `échec (403) : …` |
+| double clic sur le cœur | idem |
+| le cœur aime toujours | `ne plus aimer : DELETE…` |
+| message « Seuls les amis » toujours affiché | 2 tests |
+| retrait de like proposé à tous | **aucun au premier essai** → test « vue par un ami » ajouté, qui échoue |
+| commentaires en double après « Afficher plus » | `« Afficher plus » : …` |
+| texte envoyé sans nettoyage | `publier : …` |
+| commentaire fait d'espaces accepté | idem |
+| suppression sans confirmation | `supprimer : confirmation…` |
+| formulaire affiché en lecture seule | 2 tests |
+| nouveau commentaire ajouté en bas | `publier : …` |
+| poubelle sur tous les commentaires | `liste : … supprimer seulement si canDelete…` |
+| page : droit de commenter ignoré | `réactions : … visiteur non ami en lecture seule` |
+
+**Vérification navigateur** : 28 vérifications, toutes réussies (détail
+dans `compte-rendu/V2.md`, étape 6). **Trouvé uniquement sur capture** :
+le cœur « Aimé » restait vide, car la police d'icônes était chargée sans
+l'axe de remplissage. Corrigé dans `index.html` ; jsdom ne dessine pas les
+polices, aucun test unitaire ne pouvait le voir.
+
+#### Complément — le propriétaire répond, il ne commente pas (02/11/2026)
+
+**Backend — 118 tests** (+2) : `reactionRights` (le propriétaire ne fait
+que répondre, même s'il se prétend ami) ; liste (commentaires principaux
+seulement, réponses jointes dans l'ordre chronologique, aucune recherche
+de réponses sans commentaire) ; commenter (le propriétaire reçoit `403` et
+le message explicite) ; **répondre** (propriétaire `201` avec `parentId` ;
+ami et non-ami `403` ; réponse à une réponse, commentaire d'un autre album,
+inconnu, identifiant invalide `404`) ; supprimer un commentaire principal
+emporte ses réponses (compteur −1−n, filtré `$gte`).
+
+**Frontend — 153 tests** (+7) :
+- `AlbumCommentsComponent` (+6) :
+  - propriétaire : pas de formulaire principal, « Répondre » sous chaque
+    commentaire, réponses avec badge, message d'état vide ;
+  - répondre : `parentId` envoyé, réponse ajoutée sous le bon
+    commentaire ;
+  - réponse refusée, avec formulaire gardé ; Annuler ;
+  - supprimer une réponse ;
+  - un ami ne voit pas « Répondre » ;
+- `AlbumPageComponent` (+1) : le propriétaire n'a pas de formulaire ;
+- `ReactionService` : `parentId` transmis ;
+- `LikeBarComponent` : pas de message « Seuls les amis… » pour le
+  propriétaire.
+
+**Vérification croisée (12 bugs : 6 backend, 6 frontend), tous détectés :**
+- côté serveur :
+  - le propriétaire commente ;
+  - un ami répond ;
+  - réponse à une réponse acceptée ;
+  - réponse à un commentaire d'un autre album ;
+  - réponses non supprimées avec leur commentaire ;
+  - réponses listées comme des commentaires principaux ;
+- côté page :
+  - « Répondre » montré à un ami ;
+  - réponse non ajoutée ;
+  - supprimer une réponse retire tout le commentaire ;
+  - message « Seuls les amis » montré au propriétaire ;
+  - `parentId` perdu par le service ;
+  - droit de répondre non transmis par la page.
+
+**Vérification navigateur** : 14 vérifications, toutes réussies
+(`compte-rendu/V2.md`).
