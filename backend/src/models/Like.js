@@ -14,5 +14,7 @@ const schema = new mongoose.Schema(
 );
 
 schema.index({ albumId: 1, userId: 1 }, { unique: true });
+// Activité des amis : leurs derniers likes (étape 7).
+schema.index({ userId: 1, createdAt: -1 });
 
 export const Like = mongoose.model("Like", schema);

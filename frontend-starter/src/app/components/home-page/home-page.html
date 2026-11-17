@@ -1,0 +1,117 @@
+<section class="cv-page">
+  <header class="page-header">
+    <!-- Espace hors du <span> : un inline-block supprime l'espace placé à son début. -->
+    <h1 class="cv-page-title">
+      Bonjour @if (auth.currentUser(); as user) {<span class="cv-gold-text">{{ user.name }}</span>}
+    </h1>
+    <p class="subtitle">Les dernières trouvailles des collectionneurs, et ce que font tes amis.</p>
+  </header>
+
+  <!-- Récemment ajouté (albums publics). -->
+  <section class="block" aria-labelledby="recent-cards-title">
+    <h2 id="recent-cards-title">
+      <mat-icon aria-hidden="true">new_releases</mat-icon>
+      Dernières cartes
+    </h2>
+    @if (recentError()) {
+      <p class="error recent-error" role="alert">{{ recentError() }}</p>
+    } @else if (recent(); as r) {
+      @if (r.cards.length === 0) {
+        <p class="hint empty-cards">Aucune carte dans les albums publics pour l’instant.</p>
+      } @else {
+        <ul class="cards">
+          @for (card of r.cards; track card.id) {
+            <li><app-card-tile [card]="card" /></li>
+          }
+        </ul>
+      }
+    } @else {
+      <mat-progress-bar mode="indeterminate" aria-label="Chargement des nouveautés" />
+    }
+  </section>
+
+  <section class="block" aria-labelledby="recent-albums-title">
+    <h2 id="recent-albums-title">
+      <mat-icon aria-hidden="true">collections_bookmark</mat-icon>
+      Nouveaux albums
+    </h2>
+    @if (recent(); as r) {
+      @if (r.albums.length === 0) {
+        <p class="hint empty-albums">Aucun album public pour l’instant.</p>
+      } @else {
+        <ul class="albums">
+          @for (album of r.albums; track album.id) {
+            <li><app-album-cover [album]="album" [owner]="album.owner" /></li>
+          }
+        </ul>
+      }
+    }
+  </section>
+
+  <!-- Activité des amis. -->
+  <section class="block" aria-labelledby="activity-title">
+    <h2 id="activity-title">
+      <mat-icon aria-hidden="true">dynamic_feed</mat-icon>
+      Activité de tes amis
+    </h2>
+    @if (activityError()) {
+      <p class="error activity-error" role="alert">{{ activityError() }}</p>
+    } @else if (activity(); as a) {
+      @if (!a.hasFriends) {
+        <div class="no-friends">
+          <p>Ajoute des amis pour suivre leurs nouvelles cartes, leurs albums et leurs commentaires.</p>
+          <a mat-stroked-button routerLink="/friends">
+            <mat-icon>group_add</mat-icon>
+            Trouver des amis
+          </a>
+        </div>
+      } @else if (a.items.length === 0) {
+        <p class="hint empty-activity">Rien de neuf du côté de tes amis pour l’instant.</p>
+      } @else {
+        <ul class="activity">
+          @for (item of a.items; track item.id) {
+            <li class="event" [attr.data-type]="item.type">
+              <span class="avatar" aria-hidden="true">{{ initial(item.actor.name) }}</span>
+              <div class="body">
+                <p class="sentence">
+                  <b>{{ item.actor.name }}</b>
+                  @switch (item.type) {
+                    @case ('album') {
+                      a créé l’album <a [routerLink]="['/albums', item.album.id]">{{ item.album.title }}</a>
+                    }
+                    @case ('cards') {
+                      a ajouté {{ item.cards!.count }} carte{{ item.cards!.count > 1 ? 's' : '' }} à
+                      <a [routerLink]="['/albums', item.album.id]">{{ item.album.title }}</a>
+                    }
+                    @case ('comment') {
+                      {{ item.comment!.isReply ? 'a répondu sur' : 'a commenté' }} {{ albumOwnerLabel(item) }}
+                      <a [routerLink]="['/albums', item.album.id]">{{ item.album.title }}</a>
+                    }
+                    @case ('like') {
+                      <mat-icon class="like-icon" aria-hidden="true">favorite</mat-icon>
+                      aime {{ albumOwnerLabel(item) }}
+                      <a [routerLink]="['/albums', item.album.id]">{{ item.album.title }}</a>
+                    }
+                  }
+                </p>
+                @if (item.comment; as comment) {
+                  <blockquote class="excerpt">{{ comment.text }}</blockquote>
+                }
+                @if (item.cards; as cards) {
+                  <div class="previews">
+                    @for (preview of cards.previews; track preview.id) {
+                      <img [src]="preview.thumb" [alt]="preview.name" loading="lazy" />
+                    }
+                  </div>
+                }
+                <time class="date" [attr.datetime]="item.date">{{ item.date | date: 'dd/MM/yyyy à HH:mm' }}</time>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    } @else {
+      <mat-progress-bar mode="indeterminate" aria-label="Chargement de l’activité" />
+    }
+  </section>
+</section>

@@ -21,5 +21,7 @@ const schema = new mongoose.Schema(
 // Fil des commentaires principaux d'un album, les plus récents d'abord ;
 // réponses d'un commentaire.
 schema.index({ albumId: 1, parentId: 1, createdAt: -1 });
+// Activité des amis : leurs derniers commentaires (étape 7).
+schema.index({ authorId: 1, createdAt: -1 });
 
 export const Comment = mongoose.model("Comment", schema);

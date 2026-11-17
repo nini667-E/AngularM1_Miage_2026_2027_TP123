@@ -33,5 +33,7 @@ const schema = new mongoose.Schema(
 
 // Classeur d'un album : ses cartes dans l'ordre d'ajout.
 schema.index({ albumId: 1, createdAt: 1 });
+// Activité des amis : leurs dernières cartes (étape 7).
+schema.index({ ownerId: 1, createdAt: -1 });
 
 export const Card = mongoose.model("Card", schema);

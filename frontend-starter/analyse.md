@@ -16,6 +16,9 @@
 > « Partagés avec moi », indications de partage), §4.9.
 > **02/11/2026 — V2, étape 6** : likes et commentaires (`ReactionService`,
 > `LikeBarComponent`, `AlbumCommentsComponent`), §4.10.
+> **11/11/2026 — V2, étape 7** : Accueil et Recherche (`HomePageComponent`,
+> `SearchPageComponent`, `DiscoverService`, `CardTileComponent`) ; la page
+> d'attente est supprimée, §4.11.
 
 ## 1. Vue d'ensemble
 
@@ -28,8 +31,9 @@ l'étape 3, elle contient l'authentification, le profil, la navigation, les
 le catalogue, contrôle du thème, photo, classeur 3×3, zoom). Depuis
 l'étape 4, elle gère les **amis** (recherche par pseudo, invitations,
 badge) et, depuis l'étape 5, le **partage** des albums privés avec des
-amis, et depuis l'étape 6 les **likes et commentaires** ; la découverte
-arrive à l'étape 7 (voir
+amis, depuis l'étape 6 les **likes et commentaires**, et depuis l'étape 7
+la **découverte** (Accueil : récents et activité des amis ; Recherche
+d'albums et de cartes) (voir
 §7 "État par rapport aux missions").
 
 ### 1.1 Stack technique
@@ -66,18 +70,19 @@ frontend-starter/
 │   │   │   ├── album-form-dialog/   # création / modification d'un album (étape 2)
 │   │   │   ├── add-card-dialog/     # ajout d'une carte : MatStepper carte -> photo (étape 3)
 │   │   │   ├── card-zoom-dialog/    # zoom : photo + image officielle + infos (étape 3)
+│   │   │   ├── home-page/           # Accueil : dernières cartes, nouveaux albums, activité des amis (étape 7)
+│   │   │   ├── search-page/         # Recherche : texte + filtres, onglets Albums / Cartes (étape 7)
 │   │   │   ├── friends-page/        # Amis : recherche + onglets amis / reçues / envoyées (étape 4)
 │   │   │   ├── share-dialog/        # partage d'un album privé : amis à cocher (étape 5)
 │   │   │   ├── like-bar/            # cœur, nombre de likes, « Aimé par » (étape 6)
 │   │   │   ├── album-comments/      # fil de commentaires d'un album (étape 6)
-│   │   │   └── placeholder-page/    # page d'attente commune (Accueil, Recherche)
 │   │   └── shared/
-│   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button (réutilisables)
+│   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button, card-tile (réutilisables)
 │   │       ├── guards/auth.guard.ts
 │   │       ├── interceptors/auth.interceptor.ts
 │   │       ├── i18n/french-paginator-intl.ts
-│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis, réactions
-│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService, ReactionService (seuls points d'appel HTTP)
+│   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis, réactions, découverte
+│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService, ReactionService, DiscoverService (seuls points d'appel HTTP)
 │   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
@@ -178,21 +183,20 @@ album), ajouté dans `index.html`.
 
 | Path | Composant | Protégée (`authGuard`) |
 |---|---|---|
-| `''` | `PlaceholderPageComponent` (Accueil, rempli à l'étape 7) | oui |
+| `''` | `HomePageComponent` (Accueil, étape 7) | oui |
 | `/albums` | `AlbumsPageComponent` (Mes albums, étape 2) | oui |
 | `/albums/:id` | `AlbumPageComponent` (étape 2) | oui |
-| `/search` | `PlaceholderPageComponent` (Recherche, étape 7) | oui |
+| `/search` | `SearchPageComponent` (Recherche, étape 7) | oui |
 | `/friends` | `FriendsPageComponent` (Amis, étape 4) | oui |
 | `/profile` | `ProfilePageComponent` | oui |
 | `/login` | `LoginPageComponent` | non |
 | `/register` | `RegisterPageComponent` | non |
 | `**` | redirect → `''` (dont l'ancienne URL `/tracks`) | — |
 
-**Page d'attente commune (V2, étape 1).** Plutôt que trois composants
-quasi identiques, une seule `PlaceholderPageComponent` lit son titre, son
-icône, sa description et le numéro d'étape dans la propriété `data` de la
-route (`toSignal(ActivatedRoute.data)`). Chaque route sera remplacée par
-son vrai composant à l'étape indiquée.
+**Page d'attente commune (V2, étapes 1 à 6).** Une seule
+`PlaceholderPageComponent` lisait son titre et sa description dans la
+propriété `data` de la route. Les pages Amis (étape 4), puis Accueil et
+Recherche (étape 7) l'ont remplacée ; elle a été supprimée le 11/11/2026.
 
 `authGuard` (fonctionnel, `CanActivateFn`) vérifie simplement
 `auth.token()` (un Signal) : présent → accès autorisé, absent → redirection
@@ -647,6 +651,40 @@ n'apparaît simplement pas. Elle place :
   identifiant). Les ajouts et suppressions décalent les pages, sans
   doublon ni oubli.
 
+### 4.11 Découverte (`HomePageComponent`, `SearchPageComponent`, étape 7)
+
+**`DiscoverService`** :
+- `recent()`, `activity()` ;
+- `searchAlbums(critères, page)`, `searchCards(critères, page)` : seuls
+  les critères renseignés partent dans l'URL ; la catégorie n'est envoyée
+  qu'à la recherche de cartes.
+
+**`CardTileComponent`** (partagé) : la photo au format carte, le nom, et
+« album · par X », avec un lien vers l'album. Il sert sur l'Accueil et dans
+la Recherche.
+
+**Accueil.** Deux chargements indépendants : l'échec de l'un n'empêche pas
+l'autre de s'afficher.
+- **Dernières cartes** (tuiles) et **Nouveaux albums** (couvertures avec
+  « par X »), dans les albums publics.
+- **Activité de tes amis** : une phrase par événement, avec un lien vers
+  l'album ; vignettes pour les cartes, extrait pour un commentaire.
+  `albumOwnerLabel` écrit « ton album », « son album » ou « l'album de X ».
+  Sans ami, un message et un lien « Trouver des amis » s'affichent.
+
+**Recherche.**
+- **Formulaire** : un `FormGroup` réunit le texte, le type, la série,
+  l'extension (désactivée tant qu'aucune série n'est choisie, et vidée si
+  la série change) et la catégorie.
+- **Déclenchement** : toute modification attend 300 ms
+  (`debounceTime`), puis `distinctUntilChanged` relance une recherche
+  seulement si les critères ont vraiment changé.
+- **Deux onglets**, chacun avec sa page, son total et son état (classe
+  `ResultTab`). Une nouvelle recherche **annule** la requête en cours.
+  Un seul caractère : rien n'est envoyé (« 2 caractères minimum »).
+- **Onglet Albums** : sans critère, il liste tous les albums visibles.
+- **Onglet Cartes** : il attend un texte ou un filtre.
+
 ---
 
 ## 5. Formulaires réactifs — pattern commun
@@ -739,6 +777,7 @@ mini projet.
 | V2 · Étape 4 | Amis : inviter, accepter, refuser, annuler, retirer ; badge | ✅ Fait (02/11/2026) — `FriendService` (Signal `receivedCount`), page Amis (recherche debounce + switchMap, onglets, confirmation de retrait), `FriendButtonComponent` réutilisé sur la page d'album, badge `MatBadge` rechargé à chaque navigation ; 110 tests |
 | V2 · Étape 5 | Partage d'un album privé avec des amis, arrêt du partage | ✅ Fait (02/11/2026) — `ShareDialogComponent` (`MatSelectionList`, enregistrement de la liste complète), « Partager » et en-tête « partagé avec… » sur la page d'album, onglet « Partagés avec moi » (`MatTabGroup`), couverture avec « par X » ; 125 tests |
 | V2 · Étape 6 | Likes et commentaires | ✅ Fait (02/11/2026) — `ReactionService`, `LikeBarComponent` (cœur à affichage immédiat avec retour en arrière, « Aimé par » et retrait par le propriétaire), `AlbumCommentsComponent` (formulaire réactif, compteur 500, « Afficher plus » dédoublonné, suppression confirmée), lecture seule pour un visiteur non ami ; 145 tests |
+| V2 · Étape 7 | Découverte : récents, activité des amis, recherche | ✅ Fait (11/11/2026) — `HomePageComponent` (dernières cartes, nouveaux albums, activité en phrases), `SearchPageComponent` (texte et filtres, onglets Albums / Cartes, annulation, pagination), `DiscoverService`, `CardTileComponent` ; page d'attente supprimée ; 173 tests |
 
 ---
 
@@ -864,3 +903,7 @@ mini projet.
   « Aimé » restait vide (§1.2).
 - **02/11/2026** — V2, étape 6 (correction) : réponses du propriétaire
   (`canReply`, `replies`, formulaire de réponse, badge), 153 tests (§4.10).
+- **11/11/2026** — V2, étape 7 : découverte (`HomePageComponent`,
+  `SearchPageComponent`, `DiscoverService`, `CardTileComponent`),
+  suppression de `PlaceholderPageComponent`, 173 tests (§1, §1.2,
+  §2.2, §4.11, §7).

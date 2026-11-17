@@ -17,8 +17,10 @@ try {
   // Le `then` rend le succès visible dans les logs.
   await mongoose.connect(uri).then(() => {
     console.log("[startup] Connecté à MongoDB Atlas");
+    // Nom lu sur la connexion (celui de MONGODB_URI) plutôt qu'écrit en dur,
+    // pour que le log affiche toujours la base réellement utilisée.
     console.log(
-      "[startup] La base guitar-practice-cloud est prête à recevoir des données",
+      `[startup] La base ${mongoose.connection.name} est prête à recevoir des données`,
     );
     console.log(`[startup] Vérification : http://localhost:${port}/api/health`);
   });

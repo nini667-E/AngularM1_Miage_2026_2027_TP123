@@ -1,0 +1,132 @@
+<section class="cv-page">
+  <header class="page-header">
+    <h1 class="cv-page-title">Recherche</h1>
+    <p class="subtitle">Trouve des albums et des cartes parmi les albums publics, ceux que tes amis partagent avec toi, et les tiens.</p>
+  </header>
+
+  <form class="filters" [formGroup]="form" (submit)="$event.preventDefault()">
+    <mat-form-field appearance="outline" class="query" subscriptSizing="dynamic">
+      <mat-label>Rechercher</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput formControlName="q" placeholder="Titre, collectionneur, nom de carte…" autocomplete="off" />
+      @if (tooShort()) {
+        <mat-hint class="too-short">2 caractères minimum</mat-hint>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Type</mat-label>
+      <mat-select formControlName="type">
+        <mat-option value="">Tous</mat-option>
+        @for (type of types(); track type) {
+          <mat-option [value]="type">{{ type }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Série</mat-label>
+      <mat-select formControlName="serieId">
+        <mat-option value="">Toutes</mat-option>
+        @for (serie of series(); track serie.id) {
+          <mat-option [value]="serie.id">{{ serie.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Extension</mat-label>
+      <mat-select formControlName="setId">
+        <mat-option value="">Toute la série</mat-option>
+        @for (set of sets(); track set.id) {
+          <mat-option [value]="set.id">{{ set.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Catégorie (cartes)</mat-label>
+      <mat-select formControlName="category">
+        <mat-option value="">Toutes</mat-option>
+        @for (category of categories; track category) {
+          <mat-option [value]="category">{{ category }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    @if (hasFilters()) {
+      <button mat-button type="button" class="clear" (click)="clear()">
+        <mat-icon>filter_alt_off</mat-icon>
+        Effacer
+      </button>
+    }
+  </form>
+
+  <mat-tab-group [selectedIndex]="tab()" (selectedIndexChange)="tab.set($event)" mat-stretch-tabs="false" animationDuration="0ms">
+    <mat-tab [label]="'Albums' + (albums.loaded() ? ' (' + albums.total() + ')' : '')">
+      <div class="tab-body albums-tab">
+        @if (albums.loading()) {
+          <mat-progress-bar mode="indeterminate" aria-label="Recherche d’albums" />
+        }
+        @if (albums.error()) {
+          <p class="error albums-error" role="alert">{{ albums.error() }}</p>
+        }
+        @if (tooShort()) {
+          <p class="hint">Continue à taper : 2 caractères minimum.</p>
+        } @else if (albums.loaded() && albums.total() === 0) {
+          <p class="hint no-albums">
+            {{ hasFilters() ? 'Aucun album ne correspond à ta recherche.' : 'Aucun album à afficher pour l’instant.' }}
+          </p>
+        }
+        <ul class="albums">
+          @for (album of albums.items(); track album.id) {
+            <li><app-album-cover [album]="album" [owner]="album.owner" /></li>
+          }
+        </ul>
+        @if (albums.total() > perPage) {
+          <mat-paginator
+            [length]="albums.total()"
+            [pageSize]="perPage"
+            [pageIndex]="albums.page() - 1"
+            [hidePageSize]="true"
+            (page)="onAlbumsPage($event)"
+            aria-label="Pages des albums trouvés"
+          />
+        }
+      </div>
+    </mat-tab>
+
+    <mat-tab [label]="'Cartes' + (cards.loaded() ? ' (' + cards.total() + ')' : '')">
+      <div class="tab-body cards-tab">
+        @if (!cardsAllowed()) {
+          <p class="hint cards-hint">Tape le nom d’une carte (2 caractères minimum) ou choisis un filtre pour chercher parmi les cartes.</p>
+        } @else {
+          @if (cards.loading()) {
+            <mat-progress-bar mode="indeterminate" aria-label="Recherche de cartes" />
+          }
+          @if (cards.error()) {
+            <p class="error cards-error" role="alert">{{ cards.error() }}</p>
+          }
+          @if (cards.loaded() && cards.total() === 0) {
+            <p class="hint no-cards">Aucune carte ne correspond à ta recherche.</p>
+          }
+          <ul class="cards">
+            @for (card of cards.items(); track card.id) {
+              <li><app-card-tile [card]="card" /></li>
+            }
+          </ul>
+          @if (cards.total() > perPage) {
+            <mat-paginator
+              [length]="cards.total()"
+              [pageSize]="perPage"
+              [pageIndex]="cards.page() - 1"
+              [hidePageSize]="true"
+              (page)="onCardsPage($event)"
+              aria-label="Pages des cartes trouvées"
+            />
+          }
+        }
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</section>

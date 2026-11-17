@@ -1,0 +1,34 @@
+:host { display: block; }
+
+.page-header { margin-bottom: 1.25rem; }
+.page-header .cv-page-title { margin: 0; }
+.subtitle { margin: 0.25rem 0 0; color: var(--mat-sys-on-surface-variant); }
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  background: var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 16px;
+}
+.query { grid-column: 1 / -1; }
+.clear { justify-self: start; align-self: center; }
+
+.tab-body { padding-top: 1.25rem; }
+.hint { margin: 0 0 1rem; color: var(--mat-sys-on-surface-variant); }
+
+.albums,
+.cards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.albums { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; }
+.cards { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 1rem; }
+
+mat-paginator { margin-top: 1.25rem; background: transparent; }

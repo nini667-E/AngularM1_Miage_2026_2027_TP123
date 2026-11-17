@@ -841,3 +841,77 @@ emporte ses réponses (compteur −1−n, filtré `$gte`).
 
 **Vérification navigateur** : 14 vérifications, toutes réussies
 (`compte-rendu/V2.md`).
+
+### Étape 7 — Découverte : récents, activité, recherche (11/11/2026)
+
+**Backend — 11 fichiers de test, 131 tests** (+13), sans MongoDB.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `discover.test.js` **(nouveau, 13)** | `textPattern` | sans casse ni accents (« energie » → « Énergie », « éclair » → « Eclair ») ; `.*` et `a+` cherchés tels quels | ✅ |
+| | `visibleAlbumsFilter` | même règle que `canView` (les miens, les publics, ceux partagés avec moi) | ✅ |
+| | récents | albums publics seulement, 8 derniers albums, 12 dernières cartes, album et propriétaire joints, photo signée valide, aucun email | ✅ |
+| | activité sans ami | `hasFriends: false`, aucune autre requête | ✅ |
+| | activité | album créé, cartes regroupées (4, dont 3 vignettes), commentaire tronqué à 140 caractères, like ; rien sur un album privé non partagé ; tri par date ; les deux requêtes d'albums passent par `visibleAlbumsFilter` ; aucun email | ✅ |
+| | activité : regroupement | par album **et par jour** (deux jours = deux événements) | ✅ |
+| | activité : limite | 30 événements au plus, les plus récents | ✅ |
+| | recherche d'albums | `$and` : visibilité, type, série, extension, texte (titre, description, pseudo) ; tri et pagination | ✅ |
+| | recherche d'albums sans critère | tous les albums visibles | ✅ |
+| | critères invalides | un caractère, identifiants de série ou d'extension invalides, type trop long : `400` | ✅ |
+| | recherche de cartes | dans les albums visibles ; nom, type, série, extension, catégorie ; album et propriétaire joints | ✅ |
+| | recherche de cartes refusée | sans critère, catégorie inconnue : `400` sans aucune requête | ✅ |
+| | sans token | `401` sur les 4 routes | ✅ |
+
+**Frontend — 27 fichiers, 173 tests** (+20) :
+- `DiscoverService` **(nouveau, 3)** : seuls les critères renseignés sont
+  envoyés, et la catégorie seulement aux cartes ;
+- `HomePageComponent` **(nouveau, 5)** :
+  - tuiles et couvertures, et titre « Bonjour Sacha » ;
+  - une phrase par type d'événement, « ton album », « son album » ou
+    « l'album de X », pluriel « carte / cartes », vignettes, extrait ;
+  - sans ami ; sans activité ni contenu public ;
+  - les récents en erreur n'empêchent pas l'activité ;
+- `SearchPageComponent` **(nouveau, 11)** :
+  - au départ, albums seulement ; délai de 300 ms et rien pour un seul
+    caractère ;
+  - filtres (la catégorie seulement aux cartes) ; extension dépendante de
+    la série ;
+  - tuiles de cartes et pagination ;
+  - annulation d'une recherche (nouvelle saisie, changement de page,
+    saisie trop courte) ; retour à la page 1 ;
+  - erreur dans un onglet ; bouton « Effacer » ;
+- `routes.spec.ts` (+1) : `''` → `HomePageComponent`, `search` →
+  `SearchPageComponent`.
+
+La page d'attente (`PlaceholderPageComponent`) est supprimée, puisque
+plus aucune route ne l'utilise.
+
+**Vérification croisée (31 bugs introduits volontairement : 18 backend, 13 frontend) :**
+
+| Bug introduit | Résultat |
+|---|---|
+| récents : albums privés inclus ; albums non triés | détectés (`récents : …`) |
+| activité : albums créés ou référencés sans contrôle de visibilité ; carte d'un album invisible gardée | détectés (`activité : …`) |
+| activité : cartes regroupées par album seulement (pas par jour) | **non détecté au premier essai** → test « par album ET par jour » ajouté, qui échoue |
+| activité : plus de 3 vignettes ; extrait non tronqué ; pas de tri ; pas de limite à 30 | détectés |
+| recherche d'albums : sans la règle de visibilité ; pseudo ignoré | détectés |
+| recherche : un caractère accepté ; identifiants non contrôlés | détectés |
+| recherche de cartes : hors des albums visibles ; sans critère acceptée | détectés |
+| texte : accents non gérés ; saisie non échappée | détectés (`textPattern : …`) |
+| Accueil : « ton album » jamais affiché ; message « sans ami » jamais affiché | détectés |
+| Accueil : pluriel « cartes » faux | **non détecté au premier essai** (un seul groupe de 3) → cas d'une carte ajouté |
+| Recherche : un caractère lancé ; cartes cherchées sans critère ; pas de délai | détectés |
+| Recherche : requête précédente non annulée (dans `load`, dans `reset`) | **non détectés au premier essai** → tests « changement de page » et « saisie trop courte » ajoutés |
+| Recherche : page non remise à 1 | **non détecté au premier essai** → test ajouté |
+| Recherche : extension gardée au changement de série ; service qui envoie la catégorie aux albums ; tuile au mauvais lien | détectés |
+| Accueil : activité chargée seulement si les récents n'ont pas échoué | **non détectable (mutant équivalent)** : les deux requêtes partent au démarrage, avant toute réponse, donc la condition est toujours vraie et le comportement identique. Aucun test ne peut le distinguer, et rien n'a été modifié. |
+
+Résultat : 30 bugs détectés sur 30 détectables, le 31e étant équivalent au
+code correct.
+
+**Vérification navigateur** : 21 vérifications, toutes réussies (détail
+dans `compte-rendu/V2.md`, étape 7). **Trouvé uniquement sur capture** :
+l'espace manquant entre « Bonjour » et le pseudo, effacé par le rendu
+CSS (`inline-block`), et le cœur collé au pseudo dans l'activité. jsdom
+lit le texte sans le dessiner : aucun test unitaire ne pouvait voir ces
+défauts.

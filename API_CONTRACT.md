@@ -25,6 +25,8 @@
 > **02/11/2026 — étape 6 (correction)** : le propriétaire ne commente plus
 > son album, il **répond** aux commentaires de ses amis (`parentId`) ;
 > `ReactionSummary.canReply`, `Comment.parentId` et `Comment.replies`.
+> **11/11/2026 — étape 7** : découverte (`/discover/recent`,
+> `/discover/activity`, `/discover/albums`, `/discover/cards`).
 
 Base : `/api`. Sauf santé, inscription et connexion, envoyer
 `Authorization: Bearer <token>` (sinon `401`).
@@ -58,6 +60,10 @@ Le backend utilise Mongoose et MongoDB (base `card-vault`).
 | GET | `/albums/:id/comments?page=1&limit=10` | JWT | `200 Page<Comment>` |
 | POST | `/albums/:id/comments` | `{text, parentId?}` + JWT | `201 Comment` |
 | DELETE | `/comments/:id` | JWT | `204` |
+| GET | `/discover/recent` | JWT | `200 { cards, albums }` |
+| GET | `/discover/activity` | JWT | `200 { hasFriends, items }` |
+| GET | `/discover/albums?q=&type=&serieId=&setId=&page=` | JWT | `200 Page<AlbumWithOwner>` |
+| GET | `/discover/cards?q=&type=&serieId=&setId=&category=&page=` | JWT | `200 Page<DiscoveredCard>` |
 | GET | `/catalog/cards?name=&albumId=` | JWT | `200 CardSearchResult[]` |
 | GET | `/catalog/cards/:id?albumId=` | JWT | `200 CardDetail` |
 | GET | `/albums/:id/cards?page=1&limit=9&category=` | JWT | `200 Page<AlbumCard>` |
@@ -284,3 +290,32 @@ change rien.
 | `GET /albums/:id/comments` | qui voit l'album ; **commentaires principaux**, plus récents d'abord, chacun avec ses `replies` (ordre chronologique) ; `page` ≥ 1, `limit` 1-50 (défaut 10) ; `total` = commentaires principaux ; `canDelete` = auteur ou propriétaire de l'album | `200 Page<Comment>` | `401`, `404` |
 | `POST /albums/:id/comments` | sans `parentId` : commentaire, **ami** du propriétaire ; avec `parentId` : **réponse**, **propriétaire** seulement, à un commentaire principal de cet album ; `text` 1 à 500 caractères (espaces retirés) | `201 Comment` | `400` (vide, trop long, pas une chaîne), `401`, `403` (propriétaire qui commente : « Tu ne peux pas commenter ton propre album : réponds aux commentaires de tes amis » ; non-ami ; ami qui répond), `404` (album invisible ; `parentId` inconnu, invalide, d'un autre album ou déjà une réponse) |
 | `DELETE /comments/:id` | son auteur, ou le propriétaire de l'album ; un commentaire principal **emporte ses réponses** | `204` | `401`, `404` (inexistant, identifiant invalide, ou pas le droit : indiscernables) |
+
+## Découverte (étape 7, 11/11/2026)
+
+```ts
+AlbumWithOwner = Album & { owner: PublicUser }
+DiscoveredCard = AlbumCard & { album: { id, title }, owner: PublicUser }
+ActivityItem = {
+  id, type: 'album' | 'cards' | 'comment' | 'like', date,
+  actor: PublicUser,                                 // l'ami qui a agi
+  album: { id, title, owner: PublicUser },
+  cards?: { count, previews: { id, name, thumb }[] }, // 3 vignettes au plus
+  comment?: { text, isReply: boolean }               // extrait, 140 caractères au plus
+}
+```
+
+**Visibilité.** Tout ce que renvoie la découverte respecte la règle de
+`GET /albums/:id` : mes albums, les albums publics, et ceux partagés avec
+moi. Les « récents » se limitent aux albums **publics**.
+
+| Route | Contenu | Réponses | Erreurs |
+|---|---|---|---|
+| `GET /discover/recent` | les 12 dernières **cartes** ajoutées dans des albums publics (avec photo signée, album, propriétaire) et les 8 derniers **albums** publics créés | `200 { cards: DiscoveredCard[], albums: AlbumWithOwner[] }` | `401` |
+| `GET /discover/activity` | les 30 derniers événements de **mes amis**, du plus récent au plus ancien : album créé, cartes ajoutées (regroupées par album et par jour), commentaire (ou réponse du propriétaire), like ; seulement sur les albums que je peux voir ; calculés à la lecture (aucun journal stocké) | `200 { hasFriends: boolean, items: ActivityItem[] }` (`hasFriends: false` et `items: []` sans ami) | `401` |
+| `GET /discover/albums` | albums visibles ; `q` (2 à 60 caractères) cherché dans le titre, la description et le pseudo du propriétaire ; filtres `type`, `serieId`, `setId` ; sans critère : tous les albums visibles ; plus récemment modifiés d'abord ; `page` ≥ 1, `limit` 1-48 (défaut 12) | `200 Page<AlbumWithOwner>` | `400` (texte d'un seul caractère, identifiant de série ou d'extension invalide, type trop long), `401` |
+| `GET /discover/cards` | cartes des albums visibles ; `q` = nom de la carte ; filtres `type`, `serieId`, `setId`, `category` (`Pokémon`, `Dresseur`, `Énergie`) ; un texte ou un filtre est **obligatoire** ; plus récentes d'abord ; pagination comme ci-dessus | `200 Page<DiscoveredCard>` | `400` (aucun critère, catégorie inconnue, mêmes règles que ci-dessus), `401` |
+
+**Texte cherché.** La saisie est cherchée telle quelle (aucun caractère
+spécial interprété), sans tenir compte de la casse ni des accents :
+« energie » trouve « Énergie », « pokemon » trouve « Pokémon ».

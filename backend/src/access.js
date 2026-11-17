@@ -29,6 +29,16 @@ export function isSharedWith(album, userId) {
 }
 
 /**
+ * La règle de canView sous forme de filtre MongoDB (étape 7), pour chercher
+ * en base les seuls albums que `userId` peut voir : les siens, les albums
+ * publics, et ceux partagés avec lui. Testée contre canView dans
+ * test/access.test.js.
+ */
+export function visibleAlbumsFilter(userId) {
+  return { $or: [{ ownerId: userId }, { visibility: "public" }, { sharedWith: userId }] };
+}
+
+/**
  * Vrai si `userId` peut voir l'album : son propriétaire, tout le monde
  * quand l'album est public, et, quand il est privé, les amis avec qui il
  * est partagé (`sharedWith`, étape 5). Retirer un ami le retire de

@@ -3367,3 +3367,107 @@ dans `compte-rendu/V2.md`.
 - Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
   `compte-rendu/V2.md`, captures `v2-etape6-reponse-*.png` (une capture
   obsolète supprimée), cette entrée.
+
+### Entrée V2.7 — Étape 7 : découverte (récents, activité, recherche) (11/11/2026)
+
+**Objectif.** Couvrir la fin du sujet : rechercher les fichiers publics
+(« search files »), afficher les fichiers récemment ajoutés, voir
+l'activité des amis. Les pages Accueil et Recherche, encore des pages
+d'attente depuis l'étape 1, deviennent de vraies pages.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets).** Entre-temps, l'étape 6 avait été commitée (« fais le git de
+l etape 6 ») et les serveurs arrêtés (« arrete les serveurs pour le
+moment »).
+> Passons à l'étape 7
+>
+> [Récents : Les deux] [Recherche : Albums et cartes]
+> [Activité : Albums créés, Cartes ajoutées, Commentaires, Likes]
+> [Démarrage : Oui, implémente directement]
+
+**Démarche de l'agent.**
+- **Plan** : objectif rattaché aux phrases du sujet, fichiers, routes.
+- **Proposition d'écart** : l'agent a proposé de s'écarter de `REPORT.md`,
+  en calculant l'activité à la lecture au lieu d'un modèle `Activity`, et
+  en a expliqué l'avantage et la limite.
+- **Questions** : quatre, dont la validation du plan.
+
+**Choix techniques.**
+- **Visibilité** : `visibleAlbumsFilter`, la règle de `canView` écrite pour
+  MongoDB, à côté de `canView` dans `access.js`.
+- **Activité** : 100 derniers documents par source, relecture des albums
+  cités avec le filtre de visibilité, regroupement des cartes par album et
+  par jour, tri et limite à 30.
+- **Texte** : `textPattern` cherche sans casse ni accents. Il dérive
+  d'`escapeRegExp`, désormais partagé (`services/text.js`).
+- **Frontend** :
+  - `CardTileComponent` réutilisé par les deux pages ;
+  - une classe `ResultTab` par onglet de recherche, avec annulation des
+    requêtes ;
+  - deux chargements indépendants sur l'Accueil.
+
+**Vérifications réalisées.**
+- Backend 131/131 (+13), frontend 173/173 (+20), build sans avertissement.
+- **Vérification croisée : 31 bugs** (18 backend, 13 frontend).
+  - 26 détectés d'emblée.
+  - 4 non détectés au premier essai (regroupement par jour, pluriel, deux
+    annulations), plus un cinquième (retour à la page 1) : chacun a reçu
+    un test, qui échoue bien avec le bug.
+  - 1 bug **équivalent** au code correct : expliqué, aucune modification.
+- Harnais Playwright, vraie base, trois comptes : 21 vérifications
+  réussies, dont la visibilité vérifiée par l'API. « dracau » trouve 0
+  carte pour Demo et 2 pour l'ami destinataire du partage ; le pseudo
+  « claudetestbot » donne 2 albums contre 3.
+- Relecture de chaque capture.
+
+**Erreurs, bugs et décisions.**
+1. **Espace manquant « BonjourClaudeTestBot2 »** (vu sur capture) : un
+   `inline-block` supprime l'espace placé à son début. Corrigé en sortant
+   l'espace du `<span>`.
+   - **Erreur de l'agent** : il a d'abord écrit, dans un commentaire de
+     test, que ce test avait trouvé le bug. C'était faux : jsdom lit le
+     texte, qui contenait l'espace. Le commentaire a été corrigé avant la
+     fin de l'étape.
+2. **Cœur collé au pseudo** dans l'activité (vu sur capture) : marge
+   ajoutée.
+3. **Erreur de l'agent dans un test** : une première version comparait une
+   phrase à elle-même (assertion qui ne pouvait pas échouer). Repérée en
+   relisant le test et remplacée par la phrase attendue, sans le texte de
+   l'icône.
+4. **Outils** :
+   - une nouvelle version de Playwright, installée dans le nouveau dossier
+     temporaire, attendait un navigateur absent. Plutôt que de télécharger
+     un navigateur, l'agent a installé la version déjà en cache (1.64.1) ;
+   - erreur de typage dans la fonction de chargement générique de la
+     recherche (`Observable<Page<T>>`), corrigée au build.
+5. **Écart avec le plan initial** : pas de modèle `Activity`. Justifié
+   dans `REPORT.md` et `backend/analyse.md`.
+
+**Fichiers effectivement modifiés.**
+- Backend : nouveaux `src/routes/discover.js`, `src/services/text.js`,
+  `test/discover.test.js` ; modifiés `src/access.js`
+  (`visibleAlbumsFilter`), `src/app.js`, `src/routes/friends.js`
+  (`escapeRegExp` partagé), les index de `Album`, `Card`, `Comment` et
+  `Like`, `analyse.md`.
+- Frontend : nouveaux `components/home-page/`, `components/search-page/`,
+  `shared/components/card-tile/`, `shared/models/discover.model.ts`,
+  `shared/services/discover.service.ts`, avec leurs tests ; modifiés
+  `routes.ts`, `routes.spec.ts`, `analyse.md` ; supprimé
+  `components/placeholder-page/`.
+- Racine : `API_CONTRACT.md`, `Tests.md`, `REPORT.md`,
+  `compte-rendu/V2.md`, 6 captures `v2-etape7-*.png`, cette entrée.
+
+**Preuve de fonctionnement.** Sorties de `npm test` (131 et 173) et de
+`npm run build` ; tableau des vérifications dans le navigateur et captures
+dans `compte-rendu/V2.md`.
+
+**Ce que je sais expliquer sans l'agent.**
+- Pourquoi une seule règle de visibilité sert à ouvrir un album **et** à
+  chercher en base.
+- Ce que gagne et ce que perd une activité calculée à la lecture plutôt
+  qu'un journal stocké.
+- Comment on cherche sans tenir compte des accents.
+- Pourquoi on annule une requête de recherche en cours.
+- Pourquoi un bug introduit peut être « équivalent » et donc impossible à
+  détecter.
+- Pourquoi un `inline-block` peut faire disparaître une espace.

@@ -5,12 +5,11 @@ import { Friendship, pairKey } from "../models/Friendship.js";
 import { User } from "../models/User.js";
 import { Album } from "../models/Album.js";
 import { byName, findBetween, publicUsers, relationOf } from "../services/friends.js";
+import { escapeRegExp } from "../services/text.js";
 
 export const SEARCH_MIN = 2;
 export const SEARCH_LIMIT = 20;
 
-/** Échappe les caractères spéciaux : la saisie est cherchée telle quelle. */
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Seules informations d'un autre utilisateur que l'API expose : son

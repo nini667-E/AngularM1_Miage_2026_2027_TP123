@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { routes } from './routes';
 import { FriendsPageComponent } from './components/friends-page/friends-page';
+import { HomePageComponent } from './components/home-page/home-page';
+import { SearchPageComponent } from './components/search-page/search-page';
 import { authGuard } from './shared/guards/auth.guard';
 
 // Protection des pages de Card Vault (V2, étape 1) : toute page de
@@ -25,6 +27,11 @@ describe('routes', () => {
 
   it('la page Amis est la vraie page (étape 4), plus la page d’attente', () => {
     expect(byPath('friends')?.component).toBe(FriendsPageComponent);
+  });
+
+  it('Accueil et Recherche sont les vraies pages (étape 7), plus la page d’attente', () => {
+    expect(byPath('')?.component).toBe(HomePageComponent);
+    expect(byPath('search')?.component).toBe(SearchPageComponent);
   });
 
   it("l'ancienne page audio /tracks n'existe plus", () => {

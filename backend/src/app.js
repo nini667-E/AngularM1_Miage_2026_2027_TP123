@@ -8,6 +8,7 @@ import { albumCardRoutes, cardRoutes, imageRoutes } from "./routes/cards.js";
 import { catalogRoutes } from "./routes/catalog.js";
 import { friendRoutes, userSearchRoutes } from "./routes/friends.js";
 import { albumReactionRoutes, commentRoutes } from "./routes/reactions.js";
+import { discoverRoutes } from "./routes/discover.js";
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -206,6 +207,8 @@ export function createApp() {
   // Likes et commentaires (V2, étape 6).
   app.use("/api/albums", albumReactionRoutes(auth));
   app.use("/api/comments", commentRoutes(auth));
+  // Découverte : récents, activité des amis, recherche (V2, étape 7).
+  app.use("/api/discover", discoverRoutes(auth));
 
   /** Gestionnaire central des erreurs connues de l'application. */
   app.use((error, _req, res, next) => {

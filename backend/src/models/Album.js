@@ -44,6 +44,8 @@ const schema = new mongoose.Schema(
 schema.index({ ownerId: 1, updatedAt: -1 });
 // « Partagés avec moi » (étape 5).
 schema.index({ sharedWith: 1, updatedAt: -1 });
+// Albums publics récents et activité des amis (étape 7).
+schema.index({ visibility: 1, createdAt: -1 });
 
 const publicRef = (ref) => (ref ? { id: ref.id, name: ref.name ?? null, logo: ref.logo ?? null } : null);
 

@@ -16,6 +16,8 @@
 > partages arrêtés au retrait d'un ami), §4.8.
 > **02/11/2026 — V2, étape 6** : likes et commentaires (modèles `Like` et
 > `Comment`, `reactionRights`, routes `routes/reactions.js`), §4.9.
+> **11/11/2026 — V2, étape 7** : découverte (récents, activité des amis,
+> recherche d'albums et de cartes, `visibleAlbumsFilter`, `text.js`), §4.10.
 
 ## 1. Vue d'ensemble
 
@@ -29,8 +31,8 @@ le serveur) et les **cartes** rangées dans les albums, avec leur **photo**
 Depuis l'étape 4, elle gère aussi les **amis** (recherche d'utilisateurs
 par pseudo, invitations, acceptation, refus, retrait), et depuis l'étape 5
 le **partage** des albums privés avec des amis choisis, et depuis l'étape 6
-les **likes et commentaires**. L'activité et la découverte arrivent à
-l'étape 7.
+les **likes et commentaires**, et depuis l'étape 7 la **découverte** :
+récemment ajouté, activité des amis et recherche d'albums et de cartes.
 
 ### 1.1 Stack technique
 
@@ -57,7 +59,7 @@ backend/
 │   ├── server.js         # Point d'entrée : connexion Mongo + écoute HTTP
 │   ├── config.js         # UPLOADS (dossier des photos) et SECRET (JWT + signatures d'images)
 │   ├── errors.js         # HttpError (erreur métier portant son code HTTP)
-│   ├── access.js         # Règles d'accès aux albums : isOwner, isSharedWith, canView, reactionRights
+│   ├── access.js         # Règles d'accès aux albums : isOwner, isSharedWith, canView, visibleAlbumsFilter, reactionRights
 │   ├── models/
 │   │   ├── User.js       # Schéma Mongoose Utilisateur (+ hachage mdp)
 │   │   ├── Album.js      # Album (visibilité, thème, sharedWith, cardCount)
@@ -70,15 +72,17 @@ backend/
 │   │   ├── cards.js      # /api/albums/:id/cards, /api/cards/:id, /api/images
 │   │   ├── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
 │   │   ├── friends.js    # /api/users/search, /api/friends (amis et invitations)
-│   │   └── reactions.js  # /api/albums/:id/reactions|likes|comments, /api/comments (étape 6)
+│   │   ├── reactions.js  # /api/albums/:id/reactions|likes|comments, /api/comments (étape 6)
+│   │   └── discover.js   # /api/discover : récents, activité, recherche (étape 7)
 │   └── services/
 │       ├── tcgdex.js     # Accès à TCGdex (mémoire, Pocket exclue, 502)
 │       ├── theme.js      # Validation du thème d'un album
 │       ├── card-info.js  # Fiche d'une carte, type des Énergies, cohérence avec le thème
-│       ├── friends.js    # relationOf, relationBetween, areFriends, friendIds
+│       ├── friends.js    # relationOf, relationBetween, areFriends, friendIds, publicUsers
+│       ├── text.js       # escapeRegExp, textPattern (sans casse ni accents) (étape 7)
 │       └── images.js     # sharp + URL signées (HMAC-SHA256)
 ├── data/uploads/         # Photos WebP (hors Git), jamais servies directement
-├── test/                 # 116 tests node:test (sans MongoDB ni vrai TCGdex)
+├── test/                 # 131 tests node:test (sans MongoDB ni vrai TCGdex)
 │   ├── helpers.js        # serveur de test, tokens, faux TCGdex (cartes, recherche)
 │   ├── api.test.js, access.test.js, catalog.test.js, albums.test.js
 │   ├── card-info.test.js # type des Énergies, règles de cohérence
@@ -86,7 +90,8 @@ backend/
 │   ├── cards.test.js     # recherche, détail, ajout avec photo, classeur, images, suppressions
 │   ├── friends.test.js   # relations, recherche d'utilisateurs, invitations, amis (étape 4)
 │   ├── shares.test.js    # partage : canView, liste, partager / arrêter, partagés avec moi (étape 5)
-│   └── reactions.test.js # droits, likes, commentaires, suppressions (étape 6)
+│   ├── reactions.test.js # droits, likes, commentaires, suppressions (étape 6)
+│   └── discover.test.js  # textPattern, visibleAlbumsFilter, récents, activité, recherche (étape 7)
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
@@ -366,6 +371,7 @@ quels dans l'album.
 | `isOwner(album, userId)` | `album.ownerId` = identité du token (comparaison en chaîne, ObjectId vs string) | `PUT /albums/:id` |
 | `canView(album, userId)` | propriétaire, **ou** album `public`, **ou** utilisateur présent dans `sharedWith` (étape 5) | `GET /albums/:id`, cartes, URL signées des photos |
 | `isSharedWith(album, userId)` | `userId` figure dans `sharedWith` (étape 5) | `canView` |
+| `visibleAlbumsFilter(userId)` | la règle de `canView` en **filtre MongoDB** : `{ $or: [{ ownerId }, { visibility: 'public' }, { sharedWith }] }` (étape 7) | découverte (activité, recherche) |
 | `reactionRights(album, userId, isFriend)` | `canLike` et `canComment` = ami (jamais le propriétaire) ; `canReply` = propriétaire (étape 6, corrigé le 02/11/2026) ; l'amitié est calculée par l'appelant (`areFriends`), la fonction reste pure | routes des réactions |
 
 `DELETE` applique la même règle directement dans la requête
@@ -643,6 +649,58 @@ flowchart TD
     R -- oui --> G
 ```
 
+### 4.10 Découverte (`routes/discover.js`, étape 7)
+
+**Une seule règle de visibilité, deux formes.** `canView` vérifie un album
+déjà chargé ; `visibleAlbumsFilter` dit à MongoDB de ne chercher que les
+albums visibles. Les deux sont écrites l'une à côté de l'autre dans
+`access.js` et testées ensemble.
+
+**Récemment ajouté.** Seulement dans les albums **publics** : les
+12 dernières cartes (les « fichiers » du sujet sont les photos), avec une
+URL signée, et les 8 derniers albums créés.
+
+**Activité des amis, calculée à la lecture.** Au lieu d'un journal
+d'événements stocké (le modèle `Activity` prévu au départ), la route lit,
+pour mes amis (`friendIds`), les 100 derniers documents de chaque source,
+puis assemble le fil :
+1. albums créés, filtrés par `visibleAlbumsFilter` ;
+2. cartes ajoutées, regroupées par **album et par jour** (« a ajouté
+   3 cartes à… », 3 vignettes au plus) ;
+3. commentaires (extrait de 140 caractères ; `isReply` pour une réponse
+   du propriétaire) ;
+4. likes.
+
+Les albums cités par les cartes, commentaires et likes sont relus **avec
+le filtre de visibilité** : un événement sur un album que je ne peux pas
+voir disparaît. Enfin, tri par date décroissante, limité à 30.
+
+Ce choix a deux conséquences :
+- **avantage** : l'activité suit toujours la visibilité **actuelle** (album
+  repassé en privé, partage arrêté, suppression), sans rien à nettoyer ;
+- **limite** : un élément supprimé ne laisse aucune trace, et le fil ne
+  remonte qu'aux 100 derniers documents par source.
+
+**Recherche.**
+- **Albums** : `$and` entre `visibleAlbumsFilter`, les filtres de thème
+  (`theme.type`, `theme.serie.id`, `theme.set.id`) et, si `q` est donné, un
+  `$or` sur le titre, la description et les propriétaires dont le pseudo
+  correspond (50 au plus).
+- **Cartes** : on lit d'abord les identifiants des albums visibles, puis on
+  cherche les cartes de ces albums (nom, `types`, `serie.id`, `set.id`,
+  `category`). Un texte ou un filtre est obligatoire, pour ne pas renvoyer
+  toutes les cartes.
+
+**Texte.** `textPattern` (`services/text.js`) retire les accents de la
+saisie, échappe chaque caractère et remplace chaque voyelle par la liste de
+ses variantes accentuées. Avec `$options: "i"`, « energie » trouve donc
+« Énergie ». `escapeRegExp`, déplacé dans ce fichier, sert aussi la
+recherche d'utilisateurs (étape 4).
+
+**Index ajoutés** : `Album { visibility, createdAt }`, `Card { ownerId,
+createdAt }`, `Comment { authorId, createdAt }`, `Like { userId,
+createdAt }`.
+
 ---
 
 ## 5. Gestion des erreurs et journalisation
@@ -776,3 +834,7 @@ Les autres flux sociaux (étapes 5 à 7) seront ajoutés au fil des étapes de l
 - **02/11/2026** — V2, étape 6 (correction) : le propriétaire répond
   (`parentId`, `canReply`) au lieu de commenter ; suppression en cascade
   des réponses, 118 tests (§2.1, §4.3, §4.9).
+- **11/11/2026** — V2, étape 7 : découverte (`routes/discover.js`,
+  `visibleAlbumsFilter`, `services/text.js`, quatre index), activité calculée
+  à la lecture plutôt qu'un modèle `Activity`, 131 tests (§1, §1.2, §4.3,
+  §4.10).
