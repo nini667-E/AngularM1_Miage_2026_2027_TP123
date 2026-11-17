@@ -9,6 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Album, AlbumShare } from '../../shared/models/album.model';
 import { AlbumService } from '../../shared/services/album.service';
 import { serverErrorMessage } from '../../shared/utils/http-error';
+import { AvatarComponent } from '../../shared/components/avatar/avatar';
 
 export interface ShareDialogData {
   album: Album;
@@ -20,7 +21,7 @@ export interface ShareDialogData {
  * jour (sharedCount) après l'enregistrement, ou sans valeur si on annule.
  */
 @Component({
-  imports: [RouterLink, MatButtonModule, MatDialogModule, MatIconModule, MatListModule, MatProgressBarModule],
+  imports: [RouterLink, MatButtonModule, MatDialogModule, MatIconModule, MatListModule, MatProgressBarModule, AvatarComponent],
   templateUrl: './share-dialog.html',
   styleUrl: './share-dialog.css',
 })
@@ -77,9 +78,5 @@ export class ShareDialogComponent {
         this.saveError.set(serverErrorMessage(error, 'Impossible d’enregistrer le partage'));
       },
     });
-  }
-
-  initial(name: string): string {
-    return name.trim().charAt(0).toUpperCase() || '?';
   }
 }

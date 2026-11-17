@@ -30,7 +30,7 @@
       @for (share of shares(); track share.user.id) {
         <mat-list-option [value]="share.user.id" [selected]="share.shared" togglePosition="before">
           <span class="person">
-            <span class="avatar" aria-hidden="true">{{ initial(share.user.name) }}</span>
+            <app-avatar [name]="share.user.name" [image]="share.user.avatar" [size]="30" />
             {{ share.user.name }}
           </span>
         </mat-list-option>

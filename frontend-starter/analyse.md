@@ -19,6 +19,9 @@
 > **11/11/2026 — V2, étape 7** : Accueil et Recherche (`HomePageComponent`,
 > `SearchPageComponent`, `DiscoverService`, `CardTileComponent`) ; la page
 > d'attente est supprimée, §4.11.
+> **17/11/2026 — V2, étape 8** : profils (`UserPageComponent`, « Modifier mon
+> profil », `AvatarComponent`), titre de l'onglet (`CardVaultTitleStrategy`),
+> page 404, compteurs sur les couvertures, §4.12.
 
 ## 1. Vue d'ensemble
 
@@ -72,17 +75,19 @@ frontend-starter/
 │   │   │   ├── card-zoom-dialog/    # zoom : photo + image officielle + infos (étape 3)
 │   │   │   ├── home-page/           # Accueil : dernières cartes, nouveaux albums, activité des amis (étape 7)
 │   │   │   ├── search-page/         # Recherche : texte + filtres, onglets Albums / Cartes (étape 7)
+│   │   │   ├── user-page/           # page publique d'un collectionneur /users/:id (étape 8)
+│   │   │   ├── not-found-page/      # « Page introuvable » (étape 8)
 │   │   │   ├── friends-page/        # Amis : recherche + onglets amis / reçues / envoyées (étape 4)
 │   │   │   ├── share-dialog/        # partage d'un album privé : amis à cocher (étape 5)
 │   │   │   ├── like-bar/            # cœur, nombre de likes, « Aimé par » (étape 6)
 │   │   │   ├── album-comments/      # fil de commentaires d'un album (étape 6)
 │   │   └── shared/
-│   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button, card-tile (réutilisables)
+│   │       ├── components/          # album-cover, theme-chips, confirm-dialog, friend-button, card-tile, avatar (réutilisables)
 │   │       ├── guards/auth.guard.ts
 │   │       ├── interceptors/auth.interceptor.ts
 │   │       ├── i18n/french-paginator-intl.ts
 │   │       ├── models/              # User, AuthResponse, Page<T>, Album, catalogue, cartes, amis, réactions, découverte
-│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService, ReactionService, DiscoverService (seuls points d'appel HTTP)
+│   │       ├── services/            # AuthService, AlbumService, CatalogService, CardService, FriendService, ReactionService, DiscoverService, UserService (seuls points d'appel HTTP)
 │   │       └── utils/               # http-error.ts (serverErrorMessage), card-types.ts (couleur/icône des types)
 ```
 
@@ -188,10 +193,11 @@ album), ajouté dans `index.html`.
 | `/albums/:id` | `AlbumPageComponent` (étape 2) | oui |
 | `/search` | `SearchPageComponent` (Recherche, étape 7) | oui |
 | `/friends` | `FriendsPageComponent` (Amis, étape 4) | oui |
-| `/profile` | `ProfilePageComponent` | oui |
+| `/profile` | `ProfilePageComponent` (Modifier mon profil, étape 8) | oui |
+| `/users/:id` | `UserPageComponent` (profil public, étape 8) | oui |
 | `/login` | `LoginPageComponent` | non |
 | `/register` | `RegisterPageComponent` | non |
-| `**` | redirect → `''` (dont l'ancienne URL `/tracks`) | — |
+| `**` | `NotFoundPageComponent` (« Page introuvable », étape 8 ; avant : renvoi vers `''`) | non |
 
 **Page d'attente commune (V2, étapes 1 à 6).** Une seule
 `PlaceholderPageComponent` lisait son titre et sa description dans la
@@ -685,6 +691,51 @@ l'autre de s'afficher.
 - **Onglet Albums** : sans critère, il liste tous les albums visibles.
 - **Onglet Cartes** : il attend un texte ou un filtre.
 
+### 4.12 Profils et finitions (étape 8)
+
+**`AvatarComponent`** (`app-avatar`) :
+- il affiche l'illustration de la carte choisie, recadrée en rond sur le
+  haut de la carte, ou l'initiale sur le fond or ;
+- la taille passe par la variable CSS `--size` ;
+- décoratif (`aria-hidden`) : le pseudo est toujours écrit à côté ;
+- il remplace les 6 copies de l'initiale. Les listes reçoivent l'avatar
+  via `PublicUser.avatar`.
+
+**`UserPageComponent`** (`/users/:id`) :
+- il lit le profil (`UserService.profile`), puis ses albums visibles
+  (paginés) ;
+- il réagit au changement d'identifiant dans l'URL (`paramMap`), par
+  exemple en passant d'un profil à un autre ;
+- il affiche le bouton d'amitié, ou « Modifier mon profil » si
+  `relation === 'self'` ;
+- `404` : « Collectionneur introuvable » ;
+- le titre de l'onglet devient le pseudo.
+
+**`ProfilePageComponent`** (Modifier mon profil) :
+- le formulaire réactif contient le pseudo (2 à 30 caractères) et la bio
+  (300 au plus, avec compteur) ;
+- **avatar** : une recherche dans le catalogue (`CardService.search` sans
+  album, 300 ms d'attente, `switchMap`), dont les cartes sans illustration
+  sont écartées ;
+- le Signal `avatarChoice` vaut « inchangé », « nouvelle carte » ou
+  « retiré », et alimente l'aperçu ;
+- `save()` n'envoie que les champs modifiés (`ProfileChanges`), puis
+  `AuthService.update` met à jour `currentUser` : la barre du haut suit.
+
+**Titre de l'onglet** : `CardVaultTitleStrategy` (fournie dans `main.ts`)
+ajoute « · Card Vault » au `title` de chaque route. Les pages d'album et
+de profil le remplacent par le titre de l'album ou par le pseudo
+(`pageTitle()`).
+
+**Finitions** :
+- **page 404** pour toute adresse inconnue, même sans être connecté ;
+- **compteurs** ♥ et 💬 sur les couvertures quand ils ne sont pas nuls ;
+- **pseudos cliquables** vers `/users/:id` ;
+- sur l'album d'un autre, retour « Profil de X », affiché une fois l'album
+  chargé ;
+- « Mes albums » est en correspondance exacte (`exact: true`) : il n'est
+  plus surligné sur la page d'un album.
+
 ---
 
 ## 5. Formulaires réactifs — pattern commun
@@ -778,6 +829,7 @@ mini projet.
 | V2 · Étape 5 | Partage d'un album privé avec des amis, arrêt du partage | ✅ Fait (02/11/2026) — `ShareDialogComponent` (`MatSelectionList`, enregistrement de la liste complète), « Partager » et en-tête « partagé avec… » sur la page d'album, onglet « Partagés avec moi » (`MatTabGroup`), couverture avec « par X » ; 125 tests |
 | V2 · Étape 6 | Likes et commentaires | ✅ Fait (02/11/2026) — `ReactionService`, `LikeBarComponent` (cœur à affichage immédiat avec retour en arrière, « Aimé par » et retrait par le propriétaire), `AlbumCommentsComponent` (formulaire réactif, compteur 500, « Afficher plus » dédoublonné, suppression confirmée), lecture seule pour un visiteur non ami ; 145 tests |
 | V2 · Étape 7 | Découverte : récents, activité des amis, recherche | ✅ Fait (11/11/2026) — `HomePageComponent` (dernières cartes, nouveaux albums, activité en phrases), `SearchPageComponent` (texte et filtres, onglets Albums / Cartes, annulation, pagination), `DiscoverService`, `CardTileComponent` ; page d'attente supprimée ; 173 tests |
+| V2 · Étape 8 | Profil et finitions | ✅ Fait (17/11/2026) — page publique `/users/:id`, « Modifier mon profil » (bio, carte-avatar), `AvatarComponent`, pseudos cliquables, retour « Profil de X », titre de l'onglet, page 404, compteurs sur les couvertures ; 200 tests |
 
 ---
 
@@ -907,3 +959,8 @@ mini projet.
   `SearchPageComponent`, `DiscoverService`, `CardTileComponent`),
   suppression de `PlaceholderPageComponent`, 173 tests (§1, §1.2,
   §2.2, §4.11, §7).
+- **17/11/2026** — V2, étape 8 : profils (`UserPageComponent`,
+  `ProfilePageComponent` refait, `AvatarComponent`, `UserService`),
+  `CardVaultTitleStrategy`, `NotFoundPageComponent`, liens vers les
+  profils, compteurs sur les couvertures, « Mes albums » en correspondance
+  exacte, 200 tests (§1.2, §2.2, §4.12, §7).

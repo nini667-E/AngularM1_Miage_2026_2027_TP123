@@ -18,6 +18,8 @@
 > `Comment`, `reactionRights`, routes `routes/reactions.js`), §4.9.
 > **11/11/2026 — V2, étape 7** : découverte (récents, activité des amis,
 > recherche d'albums et de cartes, `visibleAlbumsFilter`, `text.js`), §4.10.
+> **17/11/2026 — V2, étape 8** : profils (bio, avatar = une carte du
+> catalogue, page publique avec chiffres), §4.11.
 
 ## 1. Vue d'ensemble
 
@@ -32,7 +34,8 @@ Depuis l'étape 4, elle gère aussi les **amis** (recherche d'utilisateurs
 par pseudo, invitations, acceptation, refus, retrait), et depuis l'étape 5
 le **partage** des albums privés avec des amis choisis, et depuis l'étape 6
 les **likes et commentaires**, et depuis l'étape 7 la **découverte** :
-récemment ajouté, activité des amis et recherche d'albums et de cartes.
+récemment ajouté, activité des amis et recherche d'albums et de cartes ;
+l'étape 8 ajoute les **profils** (bio, avatar, page publique).
 
 ### 1.1 Stack technique
 
@@ -73,7 +76,8 @@ backend/
 │   │   ├── catalog.js    # /api/catalog (types, séries, extensions, recherche et détail de cartes)
 │   │   ├── friends.js    # /api/users/search, /api/friends (amis et invitations)
 │   │   ├── reactions.js  # /api/albums/:id/reactions|likes|comments, /api/comments (étape 6)
-│   │   └── discover.js   # /api/discover : récents, activité, recherche (étape 7)
+│   │   ├── discover.js   # /api/discover : récents, activité, recherche (étape 7)
+│   │   └── profiles.js   # readProfileInput, /api/users/:id et /api/users/:id/albums (étape 8)
 │   └── services/
 │       ├── tcgdex.js     # Accès à TCGdex (mémoire, Pocket exclue, 502)
 │       ├── theme.js      # Validation du thème d'un album
@@ -82,7 +86,7 @@ backend/
 │       ├── text.js       # escapeRegExp, textPattern (sans casse ni accents) (étape 7)
 │       └── images.js     # sharp + URL signées (HMAC-SHA256)
 ├── data/uploads/         # Photos WebP (hors Git), jamais servies directement
-├── test/                 # 131 tests node:test (sans MongoDB ni vrai TCGdex)
+├── test/                 # 142 tests node:test (sans MongoDB ni vrai TCGdex)
 │   ├── helpers.js        # serveur de test, tokens, faux TCGdex (cartes, recherche)
 │   ├── api.test.js, access.test.js, catalog.test.js, albums.test.js
 │   ├── card-info.test.js # type des Énergies, règles de cohérence
@@ -91,7 +95,8 @@ backend/
 │   ├── friends.test.js   # relations, recherche d'utilisateurs, invitations, amis (étape 4)
 │   ├── shares.test.js    # partage : canView, liste, partager / arrêter, partagés avec moi (étape 5)
 │   ├── reactions.test.js # droits, likes, commentaires, suppressions (étape 6)
-│   └── discover.test.js  # textPattern, visibleAlbumsFilter, récents, activité, recherche (étape 7)
+│   ├── discover.test.js  # textPattern, visibleAlbumsFilter, récents, activité, recherche (étape 7)
+│   └── profiles.test.js  # mon profil (bio, avatar), identité publique, profil public (étape 8)
 ├── .env                  # Secrets locaux (MONGODB_URI, JWT_SECRET, PORT) — jamais versionné
 └── package.json
 ```
@@ -151,6 +156,8 @@ erDiagram
         string name
         string email UK "unique, lowercase"
         string passwordHash "select:false"
+        string bio "300 caractères au plus (étape 8)"
+        object avatar "tcgdexId, name, image : une carte du catalogue (étape 8)"
         date createdAt
         date updatedAt
     }
@@ -701,6 +708,38 @@ recherche d'utilisateurs (étape 4).
 createdAt }`, `Comment { authorId, createdAt }`, `Like { userId,
 createdAt }`.
 
+### 4.11 Profils (`routes/profiles.js`, étape 8)
+
+**Mon profil.** `PUT /api/users/me` passe par `readProfileInput`. Seuls
+les champs envoyés sont validés et modifiés :
+- pseudo de 2 à 30 caractères ;
+- bio de 300 caractères au plus ;
+- `avatarId` : `null` retire l'avatar ; un identifiant de carte est
+  vérifié auprès de TCGdex (`getCard`, Pocket exclue) et doit avoir une
+  **illustration**.
+
+Le serveur recopie l'identifiant, le nom et l'adresse de l'image de la
+carte, comme pour les cartes d'un album. L'avatar ne demande donc ni
+fichier, ni stockage, ni URL signée : c'est une image officielle publique.
+
+**Identité publique.** `publicUser(user)` (`services/friends.js`) donne
+`{ id, name }` et, si la personne en a choisi un, `avatar`, l'adresse de
+la vignette. Toutes les listes qui montrent quelqu'un (amis, commentaires,
+likes, activité, propriétaire d'un album, partage) passent par elle ou par
+`publicUsers`, qui lit `"name avatar"` en base. L'email n'en fait jamais
+partie.
+
+**Profil public.** `GET /api/users/:id` donne l'identité, la bio, l'avatar,
+la relation (`relationBetween`) et quatre chiffres :
+- **albums, cartes et likes reçus** : calculés sur ses albums **que je peux
+  voir**, avec `visibleAlbumsFilter` ; un album privé non partagé avec moi
+  n'est pas compté ;
+- **amis** : son nombre d'amis, sans la liste.
+
+`GET /api/users/:id/albums` liste ces mêmes albums, paginés. Cette route
+est montée après `/api/users/search`, et après `/api/users/me` (déclarée
+dans `app.js`), pour qu'aucun des deux ne soit pris pour un identifiant.
+
 ---
 
 ## 5. Gestion des erreurs et journalisation
@@ -838,3 +877,6 @@ Les autres flux sociaux (étapes 5 à 7) seront ajoutés au fil des étapes de l
   `visibleAlbumsFilter`, `services/text.js`, quatre index), activité calculée
   à la lecture plutôt qu'un modèle `Activity`, 131 tests (§1, §1.2, §4.3,
   §4.10).
+- **17/11/2026** — V2, étape 8 : profils (`bio` et `avatar` sur `User`,
+  `readProfileInput`, `publicUser` avec avatar, `GET /api/users/:id` et
+  `/albums`), 142 tests (§1, §1.2, §2.1, §4.11).

@@ -8,6 +8,7 @@ import { AlbumDetail } from '../../shared/models/album.model';
 import { AlbumCard } from '../../shared/models/card.model';
 import { ReactionSummary } from '../../shared/models/reaction.model';
 import { AuthService } from '../../shared/services/auth.service';
+import { Title } from '@angular/platform-browser';
 import { AlbumPageComponent } from './album-page';
 
 const ALBUM: AlbumDetail = {
@@ -94,7 +95,7 @@ describe('AlbumPageComponent', () => {
 
   /** Album affiché pour un utilisateur donné, avec une première page de cartes, ses réactions et ses commentaires. */
   function showAlbum(currentUserId: string, cards: AlbumCard[] = [], album = ALBUM, summary?: ReactionSummary): void {
-    TestBed.inject(AuthService).currentUser.set({ id: currentUserId, name: 'X', email: 'x@x', createdAt: '' });
+    TestBed.inject(AuthService).currentUser.set({ id: currentUserId, name: 'X', email: 'x@x', createdAt: '', bio: '', avatar: null });
     // Comme le backend : relation « self » pour le propriétaire seulement.
     if (currentUserId !== album.ownerId && album.owner.relation === 'self') {
       album = { ...album, owner: { ...album.owner, relation: 'none' } };
@@ -240,7 +241,7 @@ describe('AlbumPageComponent', () => {
   });
 
   it('réactions indisponibles : l’album reste affiché, sans barre de likes', () => {
-    TestBed.inject(AuthService).currentUser.set({ id: 'owner', name: 'X', email: 'x@x', createdAt: '' });
+    TestBed.inject(AuthService).currentUser.set({ id: 'owner', name: 'X', email: 'x@x', createdAt: '', bio: '', avatar: null });
     httpMock.expectOne('/api/albums/a1').flush(ALBUM);
     flushCards([]);
     httpMock.expectOne('/api/albums/a1/reactions').flush({ message: 'x' }, { status: 500, statusText: 'Error' });
@@ -248,6 +249,31 @@ describe('AlbumPageComponent', () => {
 
     expect(text('h1')).toContain('Mes Dracaufeu');
     expect(el.querySelector('app-like-bar')).toBeNull();
+  });
+
+  // ------------------------------------------------ profil et titre (étape 8)
+
+  it('album d’un autre : retour « Profil de X » et nom du propriétaire cliquable ; titre de l’onglet', () => {
+    showAlbum('someone-else');
+
+    const back = el.querySelector('a.back');
+    expect((back?.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe('arrow_back Profil de Sacha');
+    expect(back?.getAttribute('href')).toBe('/users/owner');
+    expect(el.querySelector('.eyebrow a.owner-link')?.getAttribute('href')).toBe('/users/owner');
+    expect(TestBed.inject(Title).getTitle()).toBe('Mes Dracaufeu · Card Vault');
+  });
+
+  it('pendant le chargement : pas de lien de retour (il ne doit pas changer en route) ; 404 : « Mes albums »', () => {
+    fixture.detectChanges();
+    expect(el.querySelector('a.back')).toBeNull();
+    httpMock.expectOne('/api/albums/a1').flush({ message: 'Album inconnu' }, { status: 404, statusText: 'Not Found' });
+    fixture.detectChanges();
+    expect(el.querySelector('a.back')?.getAttribute('href')).toBe('/albums');
+  });
+
+  it('mon album : retour « Mes albums »', () => {
+    showAlbum('owner');
+    expect(el.querySelector('a.back')?.getAttribute('href')).toBe('/albums');
   });
 
   it('404 (inexistant ou privé d’un autre) : « Album introuvable », aucune carte demandée', () => {
@@ -273,7 +299,7 @@ describe('AlbumPageComponent', () => {
   });
 
   it('chargement : 9 emplacements fantômes', () => {
-    TestBed.inject(AuthService).currentUser.set({ id: 'owner', name: 'X', email: 'x@x', createdAt: '' });
+    TestBed.inject(AuthService).currentUser.set({ id: 'owner', name: 'X', email: 'x@x', createdAt: '', bio: '', avatar: null });
     httpMock.expectOne('/api/albums/a1').flush(ALBUM);
     fixture.detectChanges();
 

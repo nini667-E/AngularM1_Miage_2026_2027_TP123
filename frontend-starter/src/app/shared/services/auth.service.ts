@@ -2,7 +2,7 @@ import { inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { tap } from 'rxjs';
 import { AuthResponse } from '../models/auth-response.model';
-import { User } from '../models/user.model';
+import { ProfileChanges, User } from '../models/user.model';
 
 /** Handles authentication and the current user's profile. */
 @Injectable({ providedIn: 'root' })
@@ -30,9 +30,10 @@ export class AuthService {
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 
-  update(name: string) {
+  /** Modifie mon profil : seuls les champs fournis changent (étape 8 : bio, avatar). */
+  update(changes: ProfileChanges) {
     return this.http
-      .put<User>('/api/users/me', { name })
+      .put<User>('/api/users/me', changes)
       .pipe(tap((user) => this.currentUser.set(user)));
   }
 

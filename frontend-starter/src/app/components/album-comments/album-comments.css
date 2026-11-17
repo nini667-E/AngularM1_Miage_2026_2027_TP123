@@ -48,7 +48,6 @@ h2 { margin: 0 0 1rem; font: var(--mat-sys-title-large); }
   border-left: 2px solid rgb(201 162 77 / 0.35);
 }
 .reply .body { background: rgb(201 162 77 / 0.06); }
-.avatar.small { width: 28px; height: 28px; font-size: 0.8rem; }
 .owner-badge {
   padding: 0 0.45rem;
   border-radius: 999px;
@@ -59,19 +58,6 @@ h2 { margin: 0 0 1rem; font: var(--mat-sys-title-large); }
 .reply-button { justify-self: start; margin-left: 2.75rem; }
 .reply-form { margin-left: 3.5rem; }
 .reply-form mat-form-field { width: 100%; }
-
-/* Même avatar que la page Amis : initiale sur fond or métallique. */
-.avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  color: var(--cv-bg);
-  font-weight: 700;
-  background: var(--cv-gold);
-}
 
 .body {
   flex: 1;

@@ -1,0 +1,93 @@
+<section class="cv-page">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Chargement du profil" />
+  }
+
+  @if (notFound()) {
+    <div class="message">
+      <mat-icon aria-hidden="true">person_off</mat-icon>
+      <h1>Collectionneur introuvable</h1>
+      <p>Ce profil n’existe pas.</p>
+      <a mat-stroked-button routerLink="/">Retour à l’accueil</a>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="error profile-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (profile(); as p) {
+    <header class="card">
+      <app-avatar [name]="p.name" [image]="p.avatar?.image" [size]="112" />
+      <div class="identity">
+        <h1 class="cv-gold-text">{{ p.name }}</h1>
+        @if (p.avatar) {
+          <p class="favorite">
+            <mat-icon aria-hidden="true">star</mat-icon>
+            Carte fétiche : {{ p.avatar.name }}
+          </p>
+        }
+        @if (p.bio) {
+          <p class="bio">{{ p.bio }}</p>
+        } @else if (p.relation === 'self') {
+          <p class="bio empty">Tu n’as pas encore écrit de présentation.</p>
+        }
+        <p class="since">Membre depuis le {{ p.createdAt | date: 'dd/MM/yyyy' }}</p>
+        <ul class="stats" aria-label="Chiffres du collectionneur">
+          <li><b>{{ p.stats.albums }}</b> {{ p.stats.albums > 1 ? 'albums' : 'album' }}</li>
+          <li><b>{{ p.stats.cards }}</b> {{ p.stats.cards > 1 ? 'cartes' : 'carte' }}</li>
+          <li><b>{{ p.stats.likes }}</b> {{ p.stats.likes > 1 ? 'likes reçus' : 'like reçu' }}</li>
+          <li><b>{{ p.stats.friends }}</b> {{ p.stats.friends > 1 ? 'amis' : 'ami' }}</li>
+        </ul>
+      </div>
+      <div class="actions">
+        @if (p.relation === 'self') {
+          <a mat-stroked-button routerLink="/profile" class="edit">
+            <mat-icon>edit</mat-icon>
+            Modifier mon profil
+          </a>
+        } @else {
+          <app-friend-button [userId]="p.id" [userName]="p.name" [relation]="p.relation" />
+        }
+      </div>
+    </header>
+
+    <section class="albums-section" aria-labelledby="albums-title">
+      <h2 id="albums-title">
+        {{ p.relation === 'self' ? 'Mes albums' : 'Ses albums' }}
+        @if (total() > 0) {
+          <span class="count">({{ total() }})</span>
+        }
+      </h2>
+      @if (p.relation !== 'self') {
+        <p class="hint">Les albums publics, et ceux que {{ p.name }} partage avec toi.</p>
+      }
+      @if (albumsLoading()) {
+        <mat-progress-bar mode="indeterminate" aria-label="Chargement des albums" />
+      }
+      @if (albumsError()) {
+        <p class="error albums-error" role="alert">{{ albumsError() }}</p>
+      }
+      @if (!albumsLoading() && !albumsError() && albums().length === 0) {
+        <p class="hint empty">
+          {{ p.relation === 'self' ? 'Tu n’as pas encore d’album.' : p.name + ' n’a pas encore d’album que tu peux voir.' }}
+        </p>
+      }
+      <ul class="grid">
+        @for (album of albums(); track album.id) {
+          <li><app-album-cover [album]="album" /></li>
+        }
+      </ul>
+      @if (total() > perPage) {
+        <mat-paginator
+          [length]="total()"
+          [pageSize]="perPage"
+          [pageIndex]="page() - 1"
+          [hidePageSize]="true"
+          (page)="onPage($event)"
+          aria-label="Pages des albums"
+        />
+      }
+    </section>
+  }
+</section>

@@ -64,6 +64,16 @@ npm install
 npm start          # http://localhost:3000/api/health -> {"status":"ok"}
 ```
 
+> **Dépannage (17/11/2026) : `querySrv EBADRESP` au démarrage.** Sur
+> certains réseaux, notamment un partage de connexion depuis un téléphone,
+> le serveur DNS renvoie pour l'adresse `mongodb+srv` d'Atlas une réponse
+> que Node rejette. Windows, lui, la résout correctement. Ce n'est pas un
+> problème du code. Il suffit de changer de réseau, ou de démarrer Node
+> avec des DNS publics :
+> `node --env-file=.env --require ./dns-public.cjs src/server.js`, où le
+> fichier `dns-public.cjs`, à créer **hors du dépôt**, contient
+> `require('dns').setServers(['8.8.8.8', '1.1.1.1']);`.
+
 ### Frontend
 
 Dans un autre terminal :

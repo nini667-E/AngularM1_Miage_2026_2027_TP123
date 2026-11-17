@@ -57,7 +57,7 @@ describe('HomePageComponent (Accueil)', () => {
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     httpMock = TestBed.inject(HttpTestingController);
-    TestBed.inject(AuthService).currentUser.set({ ...ME, email: 'x@x', createdAt: '' });
+    TestBed.inject(AuthService).currentUser.set({ ...ME, email: 'x@x', createdAt: '', bio: '', avatar: null });
     fixture = TestBed.createComponent(HomePageComponent);
     el = fixture.nativeElement;
     fixture.detectChanges();
@@ -116,7 +116,9 @@ describe('HomePageComponent (Accueil)', () => {
     ]);
     expect(el.querySelectorAll('.event[data-type="cards"] .previews img').length).toBe(3);
     expect(text('.event[data-type="comment"] .excerpt')).toBe('Superbe !');
-    expect(el.querySelector('.event[data-type="like"] .sentence a')?.getAttribute('href')).toBe('/albums/a5');
+    expect(el.querySelector('.event[data-type="like"] .sentence a[href^="/albums"]')?.getAttribute('href')).toBe('/albums/a5');
+    // Le nom de l'ami mène à son profil (étape 8).
+    expect(el.querySelector('.event[data-type="like"] .sentence a.actor')?.getAttribute('href')).toBe('/users/u2');
   });
 
   it('sans ami : invitation à en trouver, lien vers la page Amis', () => {

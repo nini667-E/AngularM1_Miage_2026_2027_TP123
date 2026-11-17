@@ -212,7 +212,9 @@ export function albumReactionRoutes(auth) {
       }
 
       const comment = await Comment.create({ albumId: album._id, authorId: me, text, parentId });
-      await bump(album._id, "commentCount", 1);
+      // commentCount compte les commentaires principaux seulement (étape 8),
+      // comme « Commentaires (N) » sur la page : une réponse ne le change pas.
+      if (parentId === null) await bump(album._id, "commentCount", 1);
       const [author] = await publicUsers([String(me)]);
       console.log(`[reactions] Commentaire ${comment.id} de ${me} sur ${album.id}`);
       res.status(201).json(toPublicComment(comment, author, album, me));
@@ -242,8 +244,11 @@ export function commentRoutes(auth) {
       if (!allowed) throw new HttpError(404, "Commentaire inconnu");
 
       await Comment.deleteOne({ _id: comment._id });
-      const replies = comment.parentId ? 0 : (await Comment.deleteMany({ parentId: comment._id })).deletedCount;
-      await bump(comment.albumId, "commentCount", -(1 + replies));
+      // Un commentaire principal emporte ses réponses ; seul lui est compté.
+      if (!comment.parentId) {
+        await Comment.deleteMany({ parentId: comment._id });
+        await bump(comment.albumId, "commentCount", -1);
+      }
       console.log(`[reactions] Commentaire ${req.params.id} supprimé par ${me}`);
       res.status(204).end();
     } catch (error) {

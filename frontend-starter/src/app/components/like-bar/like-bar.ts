@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import { PublicUser } from '../../shared/models/friend.model';
 import { ReactionSummary } from '../../shared/models/reaction.model';
 import { ReactionService } from '../../shared/services/reaction.service';
@@ -18,7 +19,7 @@ import { serverErrorMessage } from '../../shared/utils/http-error';
  */
 @Component({
   selector: 'app-like-bar',
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, RouterLink],
   templateUrl: './like-bar.html',
   styleUrl: './like-bar.css',
 })

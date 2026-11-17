@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatBadgeModule } from '@angular/material/badge';
@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter } from 'rxjs';
+import { AvatarComponent } from '../../shared/components/avatar/avatar';
 import { AuthService } from '../../shared/services/auth.service';
 import { FriendService } from '../../shared/services/friend.service';
 
@@ -23,6 +24,7 @@ import { FriendService } from '../../shared/services/friend.service';
     MatMenuModule,
     MatDividerModule,
     MatBadgeModule,
+    AvatarComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -39,15 +41,11 @@ export class AppComponent {
   // large) et le menu « burger » (mobile) pour ne les écrire qu'une fois.
   protected readonly links = [
     { path: '/', label: 'Accueil', icon: 'home', exact: true },
-    { path: '/albums', label: 'Mes albums', icon: 'collections_bookmark', exact: false },
+    // exact : sur l'album d'un autre, « Mes albums » n'est pas surligné (étape 8).
+    { path: '/albums', label: 'Mes albums', icon: 'collections_bookmark', exact: true },
     { path: '/search', label: 'Recherche', icon: 'search', exact: false },
     { path: '/friends', label: 'Amis', icon: 'group', exact: false },
   ];
-
-  // Initiale affichée dans l'avatar du menu profil.
-  protected readonly initial = computed(
-    () => this.auth.currentUser()?.name.trim().charAt(0).toUpperCase() || '?',
-  );
 
   constructor() {
     if (this.auth.token()) {

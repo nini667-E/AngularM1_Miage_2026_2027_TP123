@@ -37,11 +37,11 @@ describe('AlbumCoverComponent', () => {
 
   it('nombre de cartes accordé : aucune / 1 carte / N cartes', () => {
     render({ cardCount: 0 });
-    expect(text('.count')).toBe('Aucune carte');
+    expect(text('.count').trim()).toBe('Aucune carte');
     render({ cardCount: 1 });
-    expect(text('.count')).toBe('1 carte');
+    expect(text('.count').trim()).toBe('1 carte');
     render({ cardCount: 12 });
-    expect(text('.count')).toBe('12 cartes');
+    expect(text('.count').trim()).toBe('12 cartes');
   });
 
   it('visibilité annoncée aux lecteurs d’écran (pas seulement par une icône)', () => {
@@ -91,5 +91,14 @@ describe('AlbumCoverComponent', () => {
     render({ visibility: 'private', sharedCount: null });
     expect(text('.owner')).toBe('par Ondine');
     expect(text('.visibility .sr-only')).toBe('Album privé, partagé avec toi');
+  });
+
+  it('compteurs de réactions (étape 8) : affichés seulement s’ils ne sont pas nuls, annoncés aux lecteurs d’écran', () => {
+    render({ likeCount: 0, commentCount: 0 });
+    expect(el.querySelector('.reaction')).toBeNull();
+    render({ likeCount: 3, commentCount: 1 });
+    expect(el.querySelector('.likes')?.getAttribute('aria-label')).toBe('3 j’aime');
+    expect(el.querySelector('.comments')?.getAttribute('aria-label')).toBe('1 commentaire');
+    expect((el.querySelector('.likes')?.textContent ?? '').trim()).toContain('3');
   });
 });

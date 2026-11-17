@@ -24,7 +24,7 @@
       <p class="menu-title">Aimé par</p>
       @for (liker of s.likers; track liker.id) {
         <div class="liker">
-          <span class="name">{{ liker.name }}</span>
+          <a class="name" [routerLink]="['/users', liker.id]">{{ liker.name }}</a>
           @if (s.canRemoveLikes) {
             <button
               mat-icon-button

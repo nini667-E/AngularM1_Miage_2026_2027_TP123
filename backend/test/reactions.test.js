@@ -273,7 +273,8 @@ test("répondre : propriétaire seulement, à un commentaire principal de cet al
   const reply = await r.json();
   assert.deepEqual([reply.text, reply.parentId, reply.author.name], ["Merci !", parent.id, "Alice"]);
   assert.deepEqual(create.mock.calls[0].arguments[0], { albumId: album._id, authorId: alice, text: "Merci !", parentId: parent.id });
-  assert.equal(bump.mock.callCount(), 1);
+  // Une réponse ne compte pas comme un commentaire (compteur de la couverture = « Commentaires (N) »).
+  assert.equal(bump.mock.callCount(), 0);
 
   // Un ami ne répond pas (il commente) ; un non-ami non plus.
   for (const user of [bob, carol]) {
@@ -299,7 +300,7 @@ test("commenter : texte vide, trop long ou absent 400 ; album invisible 404", as
   assert.equal(create.mock.callCount(), 1);
 });
 
-test("supprimer un commentaire : auteur ou propriétaire ; ses réponses partent avec lui (compteur -1-n) ; sinon 404", async () => {
+test("supprimer un commentaire : auteur ou propriétaire ; ses réponses partent avec lui (compteur -1) ; sinon 404", async () => {
   const { album, bump } = setup();
   const comment = new Comment({ albumId: album._id, authorId: bob, text: "Superbe" });
   const reply = new Comment({ albumId: album._id, authorId: alice, text: "Merci", parentId: comment._id });
@@ -313,12 +314,12 @@ test("supprimer un commentaire : auteur ou propriétaire ; ses réponses partent
   assert.equal((await call("DELETE", `/api/comments/${comment.id}`, bob)).status, 204);
   assert.deepEqual(remove.mock.calls[0].arguments[0], { _id: comment._id });
   assert.deepEqual(removeReplies.mock.calls[0].arguments[0], { parentId: comment._id });
-  assert.deepEqual(bump.mock.calls[0].arguments, [{ _id: album._id, commentCount: { $gte: 3 } }, { $inc: { commentCount: -3 } }]);
+  assert.deepEqual(bump.mock.calls[0].arguments, [{ _id: album._id, commentCount: { $gte: 1 } }, { $inc: { commentCount: -1 } }]);
 
-  // Une réponse se supprime seule (pas de recherche de sous-réponses).
+  // Une réponse se supprime seule : ni sous-réponses, ni compteur.
   assert.equal((await call("DELETE", `/api/comments/${reply.id}`, alice)).status, 204);
   assert.equal(removeReplies.mock.callCount(), 1);
-  assert.deepEqual(bump.mock.calls[1].arguments, [{ _id: album._id, commentCount: { $gte: 1 } }, { $inc: { commentCount: -1 } }]);
+  assert.equal(bump.mock.callCount(), 1);
   // Le propriétaire supprime aussi un commentaire reçu.
   assert.equal((await call("DELETE", `/api/comments/${comment.id}`, alice)).status, 204);
 

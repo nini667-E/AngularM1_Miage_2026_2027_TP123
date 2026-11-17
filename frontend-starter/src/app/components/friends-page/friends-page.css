@@ -37,19 +37,6 @@ mat-tab-group .people { padding-top: 1rem; }
   background: rgb(255 255 255 / 0.02);
 }
 
-/* Même avatar que le menu profil : initiale sur fond or métallique. */
-.avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  color: var(--cv-bg);
-  font-weight: 700;
-  background: var(--cv-gold);
-}
-
 .name {
   display: grid;
   flex: 1;

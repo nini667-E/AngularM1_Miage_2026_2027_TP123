@@ -24,8 +24,8 @@
         <ul class="people results" aria-label="Résultats de la recherche">
           @for (result of results; track result.id) {
             <li class="person">
-              <span class="avatar" aria-hidden="true">{{ initial(result.name) }}</span>
-              <span class="name">{{ result.name }}</span>
+              <app-avatar [name]="result.name" [image]="result.avatar" [size]="38" />
+              <span class="name"><a [routerLink]="['/users', result.id]">{{ result.name }}</a></span>
               <app-friend-button
                 [userId]="result.id"
                 [userName]="result.name"
@@ -59,9 +59,9 @@
       <ul class="people friends">
         @for (friend of friends(); track friend.user.id) {
           <li class="person">
-            <span class="avatar" aria-hidden="true">{{ initial(friend.user.name) }}</span>
+            <app-avatar [name]="friend.user.name" [image]="friend.user.avatar" [size]="38" />
             <span class="name">
-              {{ friend.user.name }}
+              <a [routerLink]="['/users', friend.user.id]">{{ friend.user.name }}</a>
               <small>Amis depuis le {{ friend.since | date: 'dd/MM/yyyy' }}</small>
             </span>
             <button
@@ -86,9 +86,9 @@
       <ul class="people received">
         @for (request of received(); track request.user.id) {
           <li class="person">
-            <span class="avatar" aria-hidden="true">{{ initial(request.user.name) }}</span>
+            <app-avatar [name]="request.user.name" [image]="request.user.avatar" [size]="38" />
             <span class="name">
-              {{ request.user.name }}
+              <a [routerLink]="['/users', request.user.id]">{{ request.user.name }}</a>
               <small>Invitation du {{ request.createdAt | date: 'dd/MM/yyyy' }}</small>
             </span>
             <span class="actions">
@@ -112,9 +112,9 @@
       <ul class="people sent">
         @for (request of sent(); track request.user.id) {
           <li class="person">
-            <span class="avatar" aria-hidden="true">{{ initial(request.user.name) }}</span>
+            <app-avatar [name]="request.user.name" [image]="request.user.avatar" [size]="38" />
             <span class="name">
-              {{ request.user.name }}
+              <a [routerLink]="['/users', request.user.id]">{{ request.user.name }}</a>
               <small>Invité le {{ request.createdAt | date: 'dd/MM/yyyy' }}</small>
             </span>
             <button mat-button class="cancel" (click)="cancel(request)" [disabled]="isBusy(request.user.id)">

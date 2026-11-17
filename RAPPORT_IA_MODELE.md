@@ -3471,3 +3471,106 @@ dans `compte-rendu/V2.md`.
 - Pourquoi un bug introduit peut être « équivalent » et donc impossible à
   détecter.
 - Pourquoi un `inline-block` peut faire disparaître une espace.
+
+### Entrée V2.8 — Étape 7 commitée, étape 8 (partie 1) : profil et finitions (17/11/2026)
+
+**Objectif.** Donner à chaque collectionneur une page publique (avatar,
+présentation, chiffres, albums visibles), lui permettre de modifier son
+profil, et corriger les défauts notés en route. Le check-up final et la
+livraison `v2.0` sont traités à part.
+
+**Prompts principaux (recopiés tels quels, réponses à choix entre
+crochets).** Entre-temps : « renvoie moi les logs des comptes de test »,
+« ferme serveurs », « tu peux commit l'étape 7 ».
+> on peut commencer l'étape 8 le profil et les finitions
+>
+> [Avatar : Une carte du catalogue]
+> [Chiffres : Albums visibles, Amis, Cartes, Likes reçus]
+> [Finitions : Compteurs sur les couvertures, Titre de l'onglet, Page 404 dédiée]
+> [Démarrage : Oui, implémente directement]
+
+**Démarche de l'agent.**
+- **Commit de l'étape 7** : l'agent a signalé qu'un fichier qu'il n'avait
+  pas modifié (`backend/src/server.js`, modifié par l'utilisateur) était
+  parti dans le commit.
+- **Plan** : relevé de l'existant (profil réduit au pseudo, noms nulle
+  part cliquables, défaut du lien « Mes albums »), puis quatre questions.
+  La livraison a été mise à part pour une validation séparée.
+
+**Choix techniques.**
+- **Avatar** : une carte TCGdex dont le serveur recopie le nom et l'image.
+  Ni fichier, ni stockage, ni URL signée.
+- **Profil public** : chiffres calculés sur les albums visibles par le
+  lecteur (`visibleAlbumsFilter`), pour qu'un profil ne révèle pas
+  l'existence d'albums privés.
+- **Identité publique** : l'avatar fait partie de `PublicUser`, donc toutes
+  les listes en profitent.
+- **Frontend** : un seul `AvatarComponent`, une `TitleStrategy` pour les
+  titres d'onglet, une page 404.
+
+**Vérifications réalisées.**
+- Backend 142/142 (+11), frontend 200/200 (+27), build sans avertissement.
+- **Vérification croisée : 32 bugs**. 26 ont été détectés d'emblée, et
+  5 ont demandé un test de plus (voir ci-dessous).
+- **Bug mal posé** : un des bugs introduits ne compilait pas. L'agent
+  l'a repéré (aucun test nommé dans la sortie) et l'a réécrit en version
+  qui compile.
+- Harnais Playwright, vraie base, trois comptes : 27 vérifications
+  réussies.
+
+**Erreurs, bugs et décisions.**
+1. **Compteurs incohérents** (vu sur capture) : 💬 2 sur la couverture,
+   « Commentaires (1) » sur la page. Depuis l'étape 6, le compteur comptait
+   les réponses. Le compteur ne compte plus que les commentaires
+   principaux. Deux bugs réintroduits sont détectés par les tests mis à
+   jour. Les albums existants ont été recalculés par un script hors dépôt.
+   - Ce script a dû être copié quelques instants dans `backend/` pour
+     trouver `mongoose`, puis supprimé.
+2. **Lien de retour qui changeait en route** : « Mes albums » pendant le
+   chargement, puis « Profil de X ». Révélé par le harnais, qui lisait trop
+   tôt. Le lien n'apparaît plus qu'une fois l'album chargé, et un test le
+   vérifie.
+3. **5 tests manquants** (vérification croisée), ajoutés : lecture de
+   l'avatar en base, avatar de la barre du haut, surlignage de « Mes
+   albums », pseudos cliquables dans les commentaires et dans la page
+   Amis.
+   - **Erreur de l'agent** : une première assertion visait l'onglet
+     « Reçues », qui n'était pas affiché ; elle a été retirée.
+4. **Réseau** : le backend ne démarrait plus (`querySrv EBADRESP`).
+   - Diagnostic pas à pas : Windows résout l'adresse SRV d'Atlas, Node
+     non. Node utilise le DNS du partage de connexion (`172.20.10.1`).
+     Avec `8.8.8.8`, Node résout.
+   - Contournement **hors dépôt** pour les vérifications (préchargement
+     `dns.setServers`), et note de dépannage dans le README. L'URI de
+     `.env` n'a jamais été affichée : les journaux ont été filtrés.
+5. **Instabilités** : un test de recadrage a échoué une fois, et des
+   captures et tests ont dépassé leur temps quand la machine était
+   chargée. Rien n'a été modifié pour eux ; c'est noté dans `Tests.md`.
+
+**Fichiers effectivement modifiés.**
+- Backend : nouveaux `src/routes/profiles.js`, `test/profiles.test.js` ;
+  modifiés `src/app.js`, `src/models/User.js` (`bio`, `avatar`,
+  `publicAvatar`), `src/services/friends.js` (`publicUser`),
+  `src/routes/friends.js`, `src/routes/albums.js`,
+  `src/routes/reactions.js` (compteur), des tests existants, `analyse.md`.
+- Frontend : nouveaux `components/user-page/`,
+  `components/not-found-page/`, `shared/components/avatar/`,
+  `shared/services/user.service.ts`, `shared/utils/page-title.ts`, avec
+  leurs tests ; refaits `components/profile-page/` (+ test) ; modifiés
+  `main.ts`, `routes.ts`, la barre du haut, la page d'album, les
+  commentaires, la barre de likes, Amis, l'Accueil, le partage, la
+  couverture, les modèles, `AuthService`, `CardService`, des tests
+  existants, `analyse.md`.
+- Racine : `README.md` (dépannage DNS), `API_CONTRACT.md`, `Tests.md`,
+  `REPORT.md`, `compte-rendu/V2.md`, 7 captures `v2-etape8-*.png`, cette
+  entrée.
+
+**Ce que je sais expliquer sans l'agent.**
+- Pourquoi l'avatar peut être une carte du catalogue sans rien stocker.
+- Pourquoi les chiffres d'un profil dépendent de qui le regarde.
+- À quoi sert une `TitleStrategy`.
+- Pourquoi un lien qui change pendant le chargement est un défaut.
+- Pourquoi deux compteurs doivent compter la même chose.
+- Pourquoi un bug qui ne compile pas ne prouve rien.
+- D'où venait l'erreur `querySrv EBADRESP`, et comment la contourner
+  sans toucher au code.

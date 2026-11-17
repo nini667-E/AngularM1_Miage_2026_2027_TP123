@@ -9,18 +9,6 @@
 
 .person { display: inline-flex; align-items: center; gap: 0.75rem; }
 
-/* Même avatar que la page Amis : initiale sur fond or métallique. */
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  color: var(--cv-bg);
-  font-weight: 700;
-  background: var(--cv-gold);
-}
-
 .summary { margin: 0.75rem 0 0; color: var(--mat-sys-on-surface-variant); }
 
 .no-friends {

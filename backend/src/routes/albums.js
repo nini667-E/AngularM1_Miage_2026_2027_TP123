@@ -8,7 +8,7 @@ import { Like } from "../models/Like.js";
 import { checkTheme } from "../services/card-info.js";
 import { deletePhotoFiles } from "../services/images.js";
 import { User } from "../models/User.js";
-import { byName, friendIds, publicUsers, relationBetween } from "../services/friends.js";
+import { byName, friendIds, publicUser, publicUsers, relationBetween } from "../services/friends.js";
 import { resolveTheme } from "../services/theme.js";
 
 // Réponse unique pour « n'existe pas » et « pas le droit » : un 403
@@ -177,7 +177,9 @@ export function albumRoutes(auth) {
       res.json({
         ...album.toPublic(req.auth.sub),
         // relation : bouton « Inviter en ami » de la page d'album (étape 4).
-        owner: { id: String(album.ownerId), name: owner?.name ?? "Utilisateur supprimé", relation },
+        owner: owner
+          ? { ...publicUser(owner), id: String(album.ownerId), relation }
+          : { id: String(album.ownerId), name: "Utilisateur supprimé", relation },
       });
     } catch (error) {
       next(error);

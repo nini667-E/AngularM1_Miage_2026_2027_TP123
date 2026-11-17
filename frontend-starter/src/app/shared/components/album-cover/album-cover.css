@@ -84,3 +84,10 @@ h3 {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+/* Compteurs de réactions (étape 8). */
+.count { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.reaction { display: inline-flex; align-items: center; gap: 0.2rem; font: var(--mat-sys-label-large); }
+.reaction mat-icon { width: 16px; height: 16px; font-size: 16px; font-variation-settings: 'FILL' 1; }
+.likes mat-icon { color: #ff6b8b; }
+.comments mat-icon { color: var(--mat-sys-primary); }

@@ -71,10 +71,10 @@
         <ul class="activity">
           @for (item of a.items; track item.id) {
             <li class="event" [attr.data-type]="item.type">
-              <span class="avatar" aria-hidden="true">{{ initial(item.actor.name) }}</span>
+              <app-avatar [name]="item.actor.name" [image]="item.actor.avatar" [size]="36" />
               <div class="body">
                 <p class="sentence">
-                  <b>{{ item.actor.name }}</b>
+                  <a class="actor" [routerLink]="['/users', item.actor.id]">{{ item.actor.name }}</a>
                   @switch (item.type) {
                     @case ('album') {
                       a créé l’album <a [routerLink]="['/albums', item.album.id]">{{ item.album.title }}</a>

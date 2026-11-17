@@ -51,7 +51,7 @@
       [matMenuTriggerFor]="profileMenu"
       [attr.aria-label]="'Menu du profil de ' + (auth.currentUser()?.name ?? 'l’utilisateur')"
     >
-      <span class="avatar" aria-hidden="true">{{ initial() }}</span>
+      <app-avatar [name]="auth.currentUser()?.name ?? '?'" [image]="auth.currentUser()?.avatar?.image" [size]="34" />
     </button>
     <mat-menu #profileMenu="matMenu" xPosition="before">
       @if (auth.currentUser(); as user) {
@@ -61,9 +61,15 @@
         </div>
         <mat-divider />
       }
+      @if (auth.currentUser(); as user) {
+        <a mat-menu-item [routerLink]="['/users', user.id]">
+          <mat-icon>person</mat-icon>
+          <span>Ma page de collectionneur</span>
+        </a>
+      }
       <a mat-menu-item routerLink="/profile">
-        <mat-icon>person</mat-icon>
-        <span>Mon profil</span>
+        <mat-icon>edit</mat-icon>
+        <span>Modifier mon profil</span>
       </a>
       <button mat-menu-item (click)="logout()">
         <mat-icon>logout</mat-icon>

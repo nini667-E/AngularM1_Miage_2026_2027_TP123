@@ -5,6 +5,10 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter, Router } from '@angular/router';
 import { AppComponent } from './app';
 import { AuthService } from '../../shared/services/auth.service';
+import { Component } from '@angular/core';
+
+@Component({ template: '' })
+class EmptyComponent {}
 
 // Barre de navigation de Card Vault (V2, étape 1).
 describe('AppComponent (barre du haut)', () => {
@@ -59,7 +63,7 @@ describe('AppComponent (barre du haut)', () => {
       expect.stringContaining('Amis'),
     ]);
     // Initiale en majuscule, même si le pseudo est en minuscules.
-    expect(el.querySelector('.avatar')?.textContent?.trim()).toBe('S');
+    expect(el.querySelector('.avatar-button app-avatar')?.textContent?.trim()).toBe('S');
   });
 
   it('badge d’invitations : rechargé à chaque page, affiché sur « Amis » seulement s’il y en a', async () => {
@@ -120,5 +124,42 @@ describe('AppComponent (barre du haut)', () => {
     expect(auth.currentUser()).toBeNull();
     expect(localStorage.getItem('gpc_token')).toBeNull();
     expect(navigate).toHaveBeenCalledWith('/login');
+  });
+
+  it('avatar de la barre : la carte choisie si le profil en a une (étape 8)', () => {
+    localStorage.setItem('gpc_token', 'jwt-de-test');
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    httpMock.expectOne('/api/users/me').flush({
+      id: 'u1', name: 'Sacha', email: 's@x', bio: '', createdAt: '',
+      avatar: { tcgdexId: 'sv03.5-006', name: 'Dracaufeu-ex', image: '/dracaufeu/low.webp' },
+    });
+    fixture.detectChanges();
+    const img = (fixture.nativeElement as HTMLElement).querySelector('.avatar-button app-avatar img');
+    expect(img?.getAttribute('src')).toBe('/dracaufeu/low.webp');
+  });
+
+  it('« Mes albums » surligné sur la liste, pas sur la page d’un album (souvent celui d’un autre)', async () => {
+    localStorage.setItem('gpc_token', 'jwt-de-test');
+    const router = TestBed.inject(Router);
+    router.resetConfig([
+      { path: 'albums', component: EmptyComponent },
+      { path: 'albums/:id', component: EmptyComponent },
+    ]);
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    httpMock.expectOne('/api/users/me').flush({ id: 'u1', name: 'Sacha', email: 's@x', bio: '', avatar: null, createdAt: '' });
+    const albumsLink = () =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('nav.links a')).find((a) => (a.textContent ?? '').includes('Mes albums'))!;
+
+    await router.navigateByUrl('/albums');
+    httpMock.match('/api/friends/requests');
+    fixture.detectChanges();
+    expect(albumsLink().classList.contains('active')).toBe(true);
+
+    await router.navigateByUrl('/albums/a1');
+    httpMock.match('/api/friends/requests');
+    fixture.detectChanges();
+    expect(albumsLink().classList.contains('active')).toBe(false);
   });
 });

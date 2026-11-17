@@ -31,17 +31,6 @@
 
 .spacer { flex: 1; }
 
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  color: var(--cv-bg);
-  font-weight: 700;
-  background: var(--cv-gold);
-}
-
 .menu-header {
   display: grid;
   padding: 0.75rem 1rem;

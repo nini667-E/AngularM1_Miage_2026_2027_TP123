@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { Friend, FriendRequest, FriendRequests } from '../../shared/models/friend.model';
 import { FriendsPageComponent } from './friends-page';
@@ -19,7 +20,7 @@ describe('FriendsPageComponent (Amis)', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [FriendsPageComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(FriendsPageComponent);
@@ -61,6 +62,8 @@ describe('FriendsPageComponent (Amis)', () => {
     });
 
     expect(names('.friends')).toEqual(['Ondine', 'Pierre']);
+    // Chaque nom mène au profil (étape 8).
+    expect(el.querySelector('.friends .name a')?.getAttribute('href')).toBe('/users/u2');
     const labels = Array.from(el.querySelectorAll('[role="tab"]')).map((t) => (t.textContent ?? '').trim());
     expect(labels).toEqual(['Amis (2)', 'Reçues (1)', 'Envoyées (2)']);
   });

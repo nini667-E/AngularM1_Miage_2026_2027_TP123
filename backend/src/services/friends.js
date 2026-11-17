@@ -1,5 +1,5 @@
 import { Friendship, pairKey } from "../models/Friendship.js";
-import { User } from "../models/User.js";
+import { publicAvatar, User } from "../models/User.js";
 
 /*
  * Relations d'amitié (V2, étape 4), réutilisées par le partage (étape 5),
@@ -42,13 +42,22 @@ export async function friendIds(userId) {
 }
 
 /**
- * Identité publique ({ id, name }, jamais l'email) des utilisateurs `ids`,
- * dans le même ordre.
+ * Identité publique d'un utilisateur : { id, name } et, s'il en a choisi un,
+ * `avatar` (URL de la vignette de sa carte, étape 8). Jamais l'email.
  */
+export function publicUser(user) {
+  const avatar = publicAvatar(user.avatar)?.image;
+  return avatar ? { id: String(user._id), name: user.name, avatar } : { id: String(user._id), name: user.name };
+}
+
+/** Identité publique des utilisateurs `ids`, dans le même ordre. */
 export async function publicUsers(ids) {
-  const users = await User.find({ _id: { $in: ids } }, "name");
-  const names = new Map(users.map((user) => [String(user._id), user.name]));
-  return ids.map((id) => ({ id: String(id), name: names.get(String(id)) ?? "Utilisateur supprimé" }));
+  const users = await User.find({ _id: { $in: ids } }, "name avatar");
+  const byId = new Map(users.map((user) => [String(user._id), user]));
+  return ids.map((id) => {
+    const user = byId.get(String(id));
+    return user ? publicUser(user) : { id: String(id), name: "Utilisateur supprimé" };
+  });
 }
 
 /** Tri alphabétique d'éléments { user: { name } }. */

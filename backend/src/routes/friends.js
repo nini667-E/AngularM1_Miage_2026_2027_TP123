@@ -4,18 +4,13 @@ import { HttpError } from "../errors.js";
 import { Friendship, pairKey } from "../models/Friendship.js";
 import { User } from "../models/User.js";
 import { Album } from "../models/Album.js";
-import { byName, findBetween, publicUsers, relationOf } from "../services/friends.js";
+import { byName, findBetween, publicUser, publicUsers, relationOf } from "../services/friends.js";
 import { escapeRegExp } from "../services/text.js";
 
 export const SEARCH_MIN = 2;
 export const SEARCH_LIMIT = 20;
 
 
-/**
- * Seules informations d'un autre utilisateur que l'API expose : son
- * identifiant et son pseudo (jamais son email).
- */
-const publicUser = (user) => ({ id: String(user._id), name: user.name });
 
 async function findUser(id) {
   const user = mongoose.isValidObjectId(id) ? await User.findById(id) : null;
@@ -52,7 +47,7 @@ export function userSearchRoutes(auth) {
 
       const users = await User.find(
         { _id: { $ne: me }, name: { $regex: escapeRegExp(q), $options: "i" } },
-        "name",
+        "name avatar",
         { sort: { name: 1 }, limit: SEARCH_LIMIT },
       );
       const links = await Friendship.find({ pair: { $in: users.map((user) => pairKey(me, user._id)) } });

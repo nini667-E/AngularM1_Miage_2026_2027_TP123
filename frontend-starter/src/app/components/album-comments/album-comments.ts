@@ -13,7 +13,9 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AlbumComment } from '../../shared/models/reaction.model';
 import { ReactionService } from '../../shared/services/reaction.service';
+import { RouterLink } from '@angular/router';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/components/confirm-dialog/confirm-dialog';
+import { AvatarComponent } from '../../shared/components/avatar/avatar';
 import { serverErrorMessage } from '../../shared/utils/http-error';
 
 export const COMMENT_MAX = 500;
@@ -30,7 +32,9 @@ export const COMMENTS_PER_PAGE = 10;
   selector: 'app-album-comments',
   imports: [
     DatePipe,
+    RouterLink,
     ReactiveFormsModule,
+    AvatarComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatIconModule,
@@ -204,9 +208,5 @@ export class AlbumCommentsComponent implements OnInit {
           },
         });
       });
-  }
-
-  initial(name: string): string {
-    return name.trim().charAt(0).toUpperCase() || '?';
   }
 }

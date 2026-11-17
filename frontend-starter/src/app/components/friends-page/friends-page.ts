@@ -16,7 +16,9 @@ import { catchError, debounceTime, distinctUntilChanged, EMPTY, forkJoin, map, O
 import { Friend, FriendRequest, Relation, UserSearchResult } from '../../shared/models/friend.model';
 import { FriendService } from '../../shared/services/friend.service';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/components/confirm-dialog/confirm-dialog';
+import { RouterLink } from '@angular/router';
 import { FriendButtonComponent } from '../../shared/components/friend-button/friend-button';
+import { AvatarComponent } from '../../shared/components/avatar/avatar';
 import { serverErrorMessage } from '../../shared/utils/http-error';
 
 /** Délai de frappe avant de lancer une recherche (comme l'ajout de carte). */
@@ -38,6 +40,8 @@ export const SEARCH_DEBOUNCE_MS = 300;
     MatTabsModule,
     MatTooltipModule,
     FriendButtonComponent,
+    AvatarComponent,
+    RouterLink,
   ],
   templateUrl: './friends-page.html',
   styleUrl: './friends-page.css',
@@ -198,9 +202,5 @@ export class FriendsPageComponent {
     if (busy) next.add(userId);
     else next.delete(userId);
     this.busy.set(next);
-  }
-
-  initial(name: string): string {
-    return name.trim().charAt(0).toUpperCase() || '?';
   }
 }

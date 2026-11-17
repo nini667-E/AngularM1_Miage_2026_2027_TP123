@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { AlbumComment } from '../../shared/models/reaction.model';
 import { AlbumCommentsComponent } from './album-comments';
@@ -27,7 +28,7 @@ describe('AlbumCommentsComponent', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [AlbumCommentsComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     httpMock = TestBed.inject(HttpTestingController);
   });
@@ -62,6 +63,8 @@ describe('AlbumCommentsComponent', () => {
     expect(text('.comment .meta')).toContain('02/11/2026');
     expect(el.querySelectorAll('.comment .delete').length).toBe(1);
     expect(el.querySelector('form')).toBeNull();
+    // Le nom de l'auteur mène à son profil (étape 8).
+    expect(el.querySelector('.comment a.author')?.getAttribute('href')).toBe('/users/u-Ondine');
     expect(text('h2')).toContain('(2)');
   });
 

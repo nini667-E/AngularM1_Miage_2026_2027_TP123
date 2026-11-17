@@ -1,0 +1,69 @@
+:host { display: block; }
+
+.card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 15% 20%, rgb(201 162 77 / 0.12), transparent 55%),
+    var(--cv-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: 18px;
+}
+.identity { flex: 1; min-width: 220px; }
+.identity h1 { margin: 0 0 0.25rem; font: var(--mat-sys-headline-medium); }
+.favorite {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.5rem;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-large);
+}
+.favorite mat-icon { width: 18px; height: 18px; font-size: 18px; font-variation-settings: 'FILL' 1; }
+.bio { margin: 0 0 0.5rem; white-space: pre-line; overflow-wrap: anywhere; }
+.bio.empty, .since, .hint { color: var(--mat-sys-on-surface-variant); }
+.since { margin: 0 0 0.75rem; font: var(--mat-sys-body-small); }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stats li {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid rgb(201 162 77 / 0.35);
+  border-radius: 999px;
+  font: var(--mat-sys-label-large);
+}
+.stats b { color: var(--mat-sys-primary); }
+.actions { align-self: center; }
+
+.albums-section h2 { margin: 0 0 0.25rem; font: var(--mat-sys-title-large); }
+.albums-section .count { color: var(--mat-sys-on-surface-variant); }
+.hint { margin: 0 0 1rem; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+mat-paginator { margin-top: 1.25rem; background: transparent; }
+
+.message { display: grid; justify-items: center; gap: 0.5rem; padding: 3rem 1rem; text-align: center; }
+.message mat-icon { width: 48px; height: 48px; font-size: 48px; color: var(--mat-sys-primary); }
+.message h1 { margin: 0; font: var(--mat-sys-headline-small); }
+.message p { margin: 0 0 0.5rem; color: var(--mat-sys-on-surface-variant); }
+
+@media (max-width: 560px) {
+  .card { flex-direction: column; align-items: center; text-align: center; }
+  .favorite, .stats { justify-content: center; }
+}

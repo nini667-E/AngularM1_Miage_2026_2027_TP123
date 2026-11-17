@@ -915,3 +915,72 @@ l'espace manquant entre « Bonjour » et le pseudo, effacé par le rendu
 CSS (`inline-block`), et le cœur collé au pseudo dans l'activité. jsdom
 lit le texte sans le dessiner : aucun test unitaire ne pouvait voir ces
 défauts.
+
+### Étape 8 — Profil et finitions (17/11/2026)
+
+**Backend — 12 fichiers de test, 142 tests** (+11), sans MongoDB ni vrai TCGdex.
+
+| Fichier | Cas | Attendu | Observé |
+|---|---|---|---|
+| `profiles.test.js` **(nouveau, 11)** | `readProfileInput` | seuls les champs envoyés ; pseudo 2-30, bio ≤ 300 ; `avatarId: null` | ✅ |
+| | avatar | carte avec illustration recopiée ; sans illustration, inconnue, Pocket, pas une chaîne : `400` | ✅ |
+| | `PUT /users/me` | identité du token, avatar exposé en vignette ; données invalides : `400`, rien enregistré | ✅ |
+| | identité publique | avatar seulement s'il existe, jamais d'email ; `publicUsers` lit `"name avatar"`, dans l'ordre | ✅ |
+| | profil public | relation, chiffres sur les albums **visibles par moi** (`visibleAlbumsFilter`), amis acceptés seulement, aucun email ; `self` ; inconnu ou invalide `404` | ✅ |
+| | albums d'un collectionneur | ses albums visibles, paginés, sans `sharedCount` ; invalide `404` | ✅ |
+| | `/users/me` et `/users/search` | toujours servis par leurs routes (pas pris pour un identifiant) ; `401` sans token | ✅ |
+| | modèle | pseudo 30 caractères, bio 300 caractères au plus | ✅ |
+| `reactions.test.js` (modifié) | compteur de commentaires | une réponse ne le change pas ; supprimer un commentaire retire 1 (réponses supprimées, non comptées) | ✅ |
+| `albums.test.js`, `friends.test.js` (modifiés) | propriétaire et recherche d'amis | avatar compris dans l'identité publique | ✅ |
+
+**Frontend — 32 fichiers, 200 tests** (+27) :
+- `AvatarComponent` **(nouveau, 2)** ;
+- `UserService` / `AuthService.update` **(nouveau, 2)** ;
+- `UserPageComponent` **(nouveau, 6)** : en-tête et chiffres accordés,
+  titre ; ses albums ; ma page ; aucun album visible ; `404` ; changement
+  d'identifiant ;
+- `ProfilePageComponent` **(nouveau, 6)** : chargement ; champs modifiés
+  seulement ; rien à enregistrer ; pseudo trop court ; recherche, choix et
+  envoi de l'avatar ; retrait ; erreur et double envoi ;
+- titre de l'onglet et page 404 **(nouveau, 3)** ;
+- couverture (compteurs) ;
+- page d'album (retour « Profil de X », lien du propriétaire, titre ; pas
+  de lien pendant le chargement ; mon album) ;
+- barre du haut (avatar-carte, « Mes albums » surligné seulement sur la
+  liste) ;
+- routes (`/users/:id`, 404, titres) ;
+- liens vers les profils dans les commentaires, la page Amis et
+  l'Accueil.
+
+Les utilisateurs fictifs des tests ont reçu `bio` et `avatar`. Les tests
+des composants qui ont maintenant des liens fournissent le routeur
+(`provideRouter`).
+
+**Vérification croisée (32 bugs introduits volontairement : 14 backend, 18 frontend) :**
+
+| Bug introduit | Résultat |
+|---|---|
+| profil public : email exposé ; relation non calculée | détectés |
+| chiffres : albums invisibles comptés ; likes = cartes ; invitations comptées comme amis | détectés |
+| albums du profil sans la règle de visibilité | détecté |
+| bio ou pseudo : longueur non contrôlée ; carte sans illustration acceptée ; retrait de l'avatar ignoré | détectés |
+| identité publique : avatar même absent | détecté |
+| `publicUsers` ne lit pas l'avatar en base | **non détecté au premier essai** (les utilisateurs simulés ignorent la projection) → test ajouté |
+| compteur : une réponse compte ; supprimer une réponse décompte | détectés |
+| avatar : toujours l'initiale | **première version invalide** : elle cassait la compilation, ce qui n'est pas une détection par un test. Refaite en version qui compile : détectée par 3 tests |
+| barre du haut : avatar sans la carte ; « Mes albums » surligné sur l'album d'un autre | **non détectés au premier essai** → 2 tests ajoutés |
+| commentaires : auteur non cliquable ; amis : nom non cliquable | **non détectés au premier essai** → assertions ajoutées. La première est vérifiée sur son seul fichier de test, car le passage complet avait été brouillé par des dépassements de temps |
+| Modifier mon profil : bio envoyée inchangée ; cartes sans illustration proposées ; retrait non envoyé ; double envoi ; mauvais identifiant de carte | détectés |
+| profil public : bouton d'amitié sur ma page ; titre non mis | détectés |
+| album : retour toujours « Mes albums » ; titre non mis ; titre sans le nom de l'application | détectés |
+| couverture : compteurs affichés à 0 ; adresse inconnue renvoyée à l'accueil ; Accueil : auteur non cliquable | détectés |
+
+Résultat : 32 bugs sur 32 détectés, après l'ajout de 5 tests.
+
+**Instabilités observées** : un test de recadrage (`images.test.js`) a
+échoué une fois puis réussi deux fois de suite, et des tests de la
+Recherche ont dépassé leur temps quand la machine était chargée. Rien n'a
+été modifié pour eux.
+
+**Vérification navigateur** : 27 vérifications, toutes réussies (détail
+dans `compte-rendu/V2.md`, étape 8).

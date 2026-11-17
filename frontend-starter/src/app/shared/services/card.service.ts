@@ -8,9 +8,10 @@ import { Page } from '../models/page.model';
 export class CardService {
   private readonly http = inject(HttpClient);
 
-  /** Recherche dans le catalogue, avec la compatibilité pour l'album. */
-  search(name: string, albumId: string) {
-    const params = new HttpParams().set('name', name).set('albumId', albumId);
+  /** Recherche dans le catalogue, avec la compatibilité pour l'album s'il est donné (sans album : choix de l'avatar). */
+  search(name: string, albumId?: string) {
+    let params = new HttpParams().set('name', name);
+    if (albumId) params = params.set('albumId', albumId);
     return this.http.get<CardSearchResult[]>('/api/catalog/cards', { params });
   }
 

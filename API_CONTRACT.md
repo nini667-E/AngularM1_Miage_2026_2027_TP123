@@ -27,6 +27,9 @@
 > `ReactionSummary.canReply`, `Comment.parentId` et `Comment.replies`.
 > **11/11/2026 — étape 7** : découverte (`/discover/recent`,
 > `/discover/activity`, `/discover/albums`, `/discover/cards`).
+> **17/11/2026 — étape 8** : profils (`GET /users/:id`, `GET /users/:id/albums`) ;
+> `PUT /users/me` accepte aussi `bio` et `avatarId` ; `User` gagne `bio`
+> et `avatar` ; `PublicUser` gagne `avatar` (facultatif).
 
 Base : `/api`. Sauf santé, inscription et connexion, envoyer
 `Authorization: Bearer <token>` (sinon `401`).
@@ -41,7 +44,9 @@ Le backend utilise Mongoose et MongoDB (base `card-vault`).
 | POST | `/auth/register` | `{name,email,password}` | `201 {token,user}` |
 | POST | `/auth/login` | `{email,password}` | `200 {token,user}` |
 | GET | `/users/me` | JWT | `200 User` |
-| PUT | `/users/me` | `{name}` + JWT | `200 User` |
+| PUT | `/users/me` | `{name?, bio?, avatarId?}` + JWT | `200 User` |
+| GET | `/users/:id` | JWT | `200 UserProfile` |
+| GET | `/users/:id/albums?page=1&limit=12` | JWT | `200 Page<Album>` |
 | GET | `/catalog/types` | JWT | `200 string[]` |
 | GET | `/catalog/series` | JWT | `200 Serie[]` |
 | GET | `/catalog/series/:id/sets` | JWT | `200 Set[]` |
@@ -192,7 +197,8 @@ délivrée reste valable jusqu'à son échéance (1 à 2 h).
 ## Amis (étape 4, 02/11/2026)
 
 ```ts
-PublicUser = { id, name }            // jamais l'email d'un autre utilisateur
+PublicUser = { id, name, avatar? }   // jamais l'email d'un autre utilisateur ;
+                                     // avatar (étape 8) : URL de la vignette de sa carte, s'il en a une
 Relation = 'none' | 'sent' | 'received' | 'friend'   // (+ 'self' sur un album)
 UserSearchResult = PublicUser & { relation: Relation }
 Friend = { user: PublicUser, since }               // since = date d'acceptation
@@ -319,3 +325,34 @@ moi. Les « récents » se limitent aux albums **publics**.
 **Texte cherché.** La saisie est cherchée telle quelle (aucun caractère
 spécial interprété), sans tenir compte de la casse ni des accents :
 « energie » trouve « Énergie », « pokemon » trouve « Pokémon ».
+
+## Profils (étape 8, 17/11/2026)
+
+```ts
+UserAvatar = { tcgdexId, name, image }   // une carte du catalogue ; image = vignette officielle
+User = { id, name, email, bio, avatar: UserAvatar | null, createdAt }   // moi seulement (/users/me)
+UserProfile = {
+  id, name, bio, avatar: UserAvatar | null, createdAt,
+  relation: 'self' | 'none' | 'sent' | 'received' | 'friend',
+  stats: { albums, cards, likes, friends }   // albums, cartes, likes : sur ses albums que JE peux voir
+}
+```
+
+**Compteur de commentaires (17/11/2026).** `Album.commentCount` compte
+les **commentaires principaux** seulement, comme « Commentaires (N) » sur
+la page de l'album. Une réponse du propriétaire ne le modifie pas.
+Supprimer un commentaire supprime ses réponses et retire 1 au compteur.
+
+**Avatar.** C'est une **carte du catalogue TCGdex** choisie par le
+collectionneur, sa « carte fétiche ». Le serveur recopie son nom et
+l'adresse de son illustration officielle : aucun fichier n'est envoyé ni
+stocké. Sans avatar, les pages affichent l'initiale du pseudo.
+
+| Route | Accès | Réponses | Erreurs |
+|---|---|---|---|
+| `PUT /users/me` | utilisateur du token ; seuls les champs envoyés changent : `name` (2 à 30 caractères), `bio` (300 au plus, `""` pour l'effacer), `avatarId` (identifiant d'une carte TCGdex **avec illustration**, ou `null` pour retirer l'avatar) | `200 User` | `400` (pseudo, bio, carte inconnue ou Pocket, carte sans illustration), `401`, `502` (catalogue injoignable) |
+| `GET /users/:id` | utilisateur connecté ; **jamais l'email** ; les chiffres `albums`, `cards` et `likes` portent sur ses albums que je peux voir, `friends` est son nombre d'amis | `200 UserProfile` | `401`, `404 Utilisateur inconnu` (inexistant ou identifiant invalide) |
+| `GET /users/:id/albums` | ses albums que je peux voir (publics, partagés avec moi, ou tous si c'est moi), plus récemment modifiés d'abord ; `page` ≥ 1, `limit` 1-48 (défaut 12) | `200 Page<Album>` (`sharedCount` seulement pour le propriétaire) | `401`, `404` (identifiant invalide) |
+
+`/users/me` et `/users/search` restent servis par leurs propres routes,
+déclarées avant `/users/:id`.

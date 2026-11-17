@@ -103,7 +103,7 @@ test("recherche : pseudo partiel insensible à la casse, sans moi, relation join
   ]);
   const [filter, projection, options] = findUsers.mock.calls[0].arguments;
   assert.deepEqual(filter, { _id: { $ne: alice }, name: { $regex: "bo", $options: "i" } });
-  assert.equal(projection, "name");
+  assert.equal(projection, "name avatar");
   assert.deepEqual(options, { sort: { name: 1 }, limit: 20 });
   assert.deepEqual(findLinks.mock.calls[0].arguments[0], { pair: { $in: [pairKey(alice, bob), pairKey(alice, carol)] } });
 });

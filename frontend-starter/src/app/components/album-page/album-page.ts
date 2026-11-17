@@ -29,6 +29,8 @@ import { AlbumCommentsComponent } from '../album-comments/album-comments';
 import { LikeBarComponent } from '../like-bar/like-bar';
 import { ReactionSummary } from '../../shared/models/reaction.model';
 import { ReactionService } from '../../shared/services/reaction.service';
+import { Title } from '@angular/platform-browser';
+import { pageTitle } from '../../shared/utils/page-title';
 
 /** Une page de classeur = 9 pochettes, comme un vrai classeur de collection. */
 export const CARDS_PER_PAGE = 9;
@@ -56,6 +58,7 @@ export class AlbumPageComponent {
   private readonly albumService = inject(AlbumService);
   private readonly cardService = inject(CardService);
   private readonly reactionService = inject(ReactionService);
+  private readonly title = inject(Title);
   private readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -122,6 +125,7 @@ export class AlbumPageComponent {
     this.albumService.get(id).subscribe({
       next: (album) => {
         this.album.set(album);
+        this.title.setTitle(pageTitle(album.title));
         this.loading.set(false);
         this.page.set(1);
         this.loadCards();

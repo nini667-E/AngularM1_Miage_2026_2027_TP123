@@ -9,6 +9,7 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { friendRoutes, userSearchRoutes } from "./routes/friends.js";
 import { albumReactionRoutes, commentRoutes } from "./routes/reactions.js";
 import { discoverRoutes } from "./routes/discover.js";
+import { profileRoutes, readProfileInput } from "./routes/profiles.js";
 
 /**
  * Crée un jeton JWT contenant uniquement l'identité nécessaire à l'API.
@@ -172,21 +173,21 @@ export function createApp() {
     }
   });
 
-  /** Modifie uniquement le nom de l'utilisateur connecté. */
+  /**
+   * Modifie le profil de l'utilisateur connecté : pseudo, et depuis l'étape 8
+   * bio et avatar (une carte du catalogue). Seuls les champs envoyés changent.
+   */
   app.put("/api/users/me", auth, async (req, res, next) => {
     try {
-      const user = await User.findByIdAndUpdate(
-        req.auth.sub,
-        { $set: { name: req.body?.name } },
-        { new: true, runValidators: true },
-      );
+      const values = await readProfileInput(req.body);
+      const user = await User.findByIdAndUpdate(req.auth.sub, { $set: values }, { new: true, runValidators: true });
 
       if (!user) {
         console.warn(`[user] Mise à jour impossible : ${req.auth.sub}`);
         return res.status(404).json({ message: "Utilisateur inconnu" });
       }
 
-      console.log(`[user] Nom mis à jour : ${user.id}`);
+      console.log(`[user] Profil mis à jour : ${user.id} (${Object.keys(values).join(", ") || "rien"})`);
       res.json(user.toPublic());
     } catch (error) {
       console.error("[user] Erreur de mise à jour du profil", error);
@@ -203,6 +204,8 @@ export function createApp() {
   app.use("/api/images", imageRoutes());
   // Recherche d'utilisateurs, amis et invitations (V2, étape 4).
   app.use("/api/users", userSearchRoutes(auth));
+  // Profil public d'un collectionneur (V2, étape 8). Après /search et /me.
+  app.use("/api/users", profileRoutes(auth));
   app.use("/api/friends", friendRoutes(auth));
   // Likes et commentaires (V2, étape 6).
   app.use("/api/albums", albumReactionRoutes(auth));

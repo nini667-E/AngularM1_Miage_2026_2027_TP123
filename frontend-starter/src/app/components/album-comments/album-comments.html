@@ -52,10 +52,10 @@
     @for (comment of comments(); track comment.id) {
       <li class="thread">
         <div class="comment">
-          <span class="avatar" aria-hidden="true">{{ initial(comment.author.name) }}</span>
+          <app-avatar [name]="comment.author.name" [image]="comment.author.avatar" [size]="34" />
           <div class="body">
             <p class="meta">
-              <b>{{ comment.author.name }}</b>
+              <a class="author" [routerLink]="['/users', comment.author.id]">{{ comment.author.name }}</a>
               <time [attr.datetime]="comment.createdAt">{{ comment.createdAt | date: 'dd/MM/yyyy à HH:mm' }}</time>
             </p>
             <p class="text">{{ comment.text }}</p>
@@ -78,10 +78,10 @@
           <ul class="replies" [attr.aria-label]="'Réponses au commentaire de ' + comment.author.name">
             @for (reply of comment.replies; track reply.id) {
               <li class="comment reply">
-                <span class="avatar small" aria-hidden="true">{{ initial(reply.author.name) }}</span>
+                <app-avatar [name]="reply.author.name" [image]="reply.author.avatar" [size]="28" />
                 <div class="body">
                   <p class="meta">
-                    <b>{{ reply.author.name }}</b>
+                    <a class="author" [routerLink]="['/users', reply.author.id]">{{ reply.author.name }}</a>
                     <span class="owner-badge">propriétaire</span>
                     <time [attr.datetime]="reply.createdAt">{{ reply.createdAt | date: 'dd/MM/yyyy à HH:mm' }}</time>
                   </p>

@@ -2,6 +2,8 @@
 export interface PublicUser {
   id: string;
   name: string;
+  /** Vignette de sa carte-avatar, s'il en a choisi une (étape 8). */
+  avatar?: string;
 }
 
 /**

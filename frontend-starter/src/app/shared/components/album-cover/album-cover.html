@@ -16,7 +16,19 @@
     @if (owner(); as owner) {
       <p class="owner">par {{ owner.name }}</p>
     }
-    <p class="count">{{ cardLabel() }}</p>
+    <p class="count">
+      {{ cardLabel() }}
+      @if (album().likeCount > 0) {
+        <span class="reaction likes" [attr.aria-label]="album().likeCount + ' j’aime'">
+          <mat-icon aria-hidden="true">favorite</mat-icon>{{ album().likeCount }}
+        </span>
+      }
+      @if (album().commentCount > 0) {
+        <span class="reaction comments" [attr.aria-label]="album().commentCount + ' commentaire' + (album().commentCount > 1 ? 's' : '')">
+          <mat-icon aria-hidden="true">chat_bubble</mat-icon>{{ album().commentCount }}
+        </span>
+      }
+    </p>
     <app-theme-chips [theme]="album().theme" />
   </div>
 </a>

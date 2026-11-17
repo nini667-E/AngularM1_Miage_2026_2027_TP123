@@ -58,17 +58,6 @@
   border: 1px solid var(--cv-border);
   border-radius: 14px;
 }
-.avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  color: var(--cv-bg);
-  font-weight: 700;
-  background: var(--cv-gold);
-}
 .body { flex: 1; min-width: 0; }
 .sentence { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .sentence a { font-weight: 600; text-decoration: none; }

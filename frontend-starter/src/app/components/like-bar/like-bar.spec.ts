@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { ReactionSummary } from '../../shared/models/reaction.model';
 import { LikeBarComponent } from './like-bar';
 
@@ -27,7 +28,7 @@ describe('LikeBarComponent', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [LikeBarComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     httpMock = TestBed.inject(HttpTestingController);
   });

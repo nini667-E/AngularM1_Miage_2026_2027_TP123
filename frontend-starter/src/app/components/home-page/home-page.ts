@@ -10,6 +10,7 @@ import { AuthService } from '../../shared/services/auth.service';
 import { DiscoverService } from '../../shared/services/discover.service';
 import { AlbumCoverComponent } from '../../shared/components/album-cover/album-cover';
 import { CardTileComponent } from '../../shared/components/card-tile/card-tile';
+import { AvatarComponent } from '../../shared/components/avatar/avatar';
 import { serverErrorMessage } from '../../shared/utils/http-error';
 
 /**
@@ -19,7 +20,7 @@ import { serverErrorMessage } from '../../shared/utils/http-error';
  * l'autre de s'afficher.
  */
 @Component({
-  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, AlbumCoverComponent, CardTileComponent],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, AlbumCoverComponent, CardTileComponent, AvatarComponent],
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
 })
@@ -55,9 +56,5 @@ export class HomePageComponent {
     if (owner.id === this.auth.currentUser()?.id) return 'ton album';
     if (owner.id === item.actor.id) return 'son album';
     return `l’album de ${owner.name}`;
-  }
-
-  initial(name: string): string {
-    return name.trim().charAt(0).toUpperCase() || '?';
   }
 }
